@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from src.cache import cache_get, cache_set, get_redis, _key
 from src.constants import RECENT_DAYS
+from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
 from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one
@@ -82,7 +83,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
             result = scrape_linkedin(kw, loc, since_seconds=since_seconds)
         else:
             result = fn(kw, loc)
-        print(f"[warmup][{kw}][{loc}][{site}] {len(result)} jobs in {time.perf_counter()-t0:.1f}s")
+        log_app(f"[warmup][{kw}][{loc}][{site}] {len(result)} jobs in {time.perf_counter()-t0:.1f}s")
         return result
 
     scrape_keywords = [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, [])
@@ -95,7 +96,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
                 results.append(result)
             except Exception as e:
-                print(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
+                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
                 results.append([])
 
     jobs: list[dict] = []
@@ -103,7 +104,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     topcv_jobs: list[dict] = []
     for result in results:
         if isinstance(result, Exception):
-            print(f"[warmup][{kw}][{loc}] scraper error: {result}")
+            log_app(f"[warmup][{kw}][{loc}] scraper error: {result}")
         elif isinstance(result, list):
             for j in result:
                 if title_matches(j.get("title", ""), kw):
@@ -115,7 +116,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                         topcv_jobs.append(j)
 
     if linkedin_jobs:
-        print(f"[warmup][{kw}][{loc}] enriching {len(linkedin_jobs)} LinkedIn jobs...")
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(linkedin_jobs)} LinkedIn jobs...")
         await asyncio.sleep(10.0)
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         for i, job in enumerate(linkedin_jobs[:30]):
@@ -123,17 +124,17 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
             try:
                 await loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown)
             except Exception as e:
-                print(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
+                log_app(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
 
     if topcv_jobs:
-        print(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
         topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         for i, job in enumerate(topcv_jobs):
             cooldown = 2.0 if i > 0 else 0.0
             try:
                 await loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown)
             except Exception as e:
-                print(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
+                log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
 
     for j in jobs:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
@@ -157,7 +158,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
 
     await cache_set(kw, loc, merged, time.time())
-    print(f"[warmup] {kw!r}/{loc!r} done — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total ({time.perf_counter()-t0:.1f}s)")
+    log_app(f"[warmup] {kw!r}/{loc!r} done — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total ({time.perf_counter()-t0:.1f}s)")
 
 
 async def _cleanup_stale_keys() -> None:
@@ -176,11 +177,11 @@ async def _cleanup_stale_keys() -> None:
                 kw_part = key[len("jobs:"):-len(f":{loc_key}")]
                 if kw_part not in canonical:
                     await redis.delete(key)
-                    print(f"[warmup] deleted stale key: {key!r}")
+                    log_app(f"[warmup] deleted stale key: {key!r}")
                     deleted += 1
-        print(f"[warmup] cleanup done — {deleted} stale key(s) removed")
+        log_app(f"[warmup] cleanup done — {deleted} stale key(s) removed")
     except Exception as e:
-        print(f"[warmup] cleanup error: {e}")
+        log_app(f"[warmup] cleanup error: {e}")
 
 
 async def _cleanup_old_jobs() -> None:
@@ -197,11 +198,11 @@ async def _cleanup_old_jobs() -> None:
                 fresh = [j for j in jobs if j.get("posted_ts", 0.0) > cutoff_ts]
                 if len(fresh) < len(jobs):
                     await cache_set(kw, loc, fresh, fetched_ts)
-                    print(f"[warmup] cleanup: dropped {len(jobs)-len(fresh)} old jobs from {_key(kw, loc)!r}")
+                    log_app(f"[warmup] cleanup: dropped {len(jobs)-len(fresh)} old jobs from {_key(kw, loc)!r}")
                     cleaned += len(jobs) - len(fresh)
             except Exception as e:
-                print(f"[warmup] cleanup error for {kw!r}/{loc!r}: {e}")
-    print(f"[warmup] daily cleanup done — {cleaned} old job(s) removed")
+                log_app(f"[warmup] cleanup error for {kw!r}/{loc!r}: {e}")
+    log_app(f"[warmup] daily cleanup done — {cleaned} old job(s) removed")
 
 
 async def warmup(get_sem, executor, scrapers: dict) -> None:
@@ -218,7 +219,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
 
-    print("[warmup] startup pass — checking for missing keys...")
+    log_app(f"[warmup] startup pass — checking for missing keys...")
     warmup_kws = await get_warmup_keywords()
     startup_tasks = [
         (kw, loc)
@@ -228,19 +229,19 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     ]
 
     if startup_tasks:
-        print(f"[warmup] startup pass: scraping {len(startup_tasks)} missing entries...")
+        log_app(f"[warmup] startup pass: scraping {len(startup_tasks)} missing entries...")
 
         async def _startup_scrape(kw: str, loc: str) -> None:
             try:
                 async with get_sem():
                     await _scrape_keyword(kw, loc, loop, executor, scrapers)
             except Exception as e:
-                print(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
+                log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
 
         await asyncio.gather(*[_startup_scrape(kw, loc) for kw, loc in startup_tasks])
-        print("[warmup] startup pass done")
+        log_app(f"[warmup] startup pass done")
     else:
-        print("[warmup] startup pass: all keys present, skipping")
+        log_app(f"[warmup] startup pass: all keys present, skipping")
 
     _last_cleanup_ts = 0.0
     _CLEANUP_INTERVAL = 86400
@@ -249,13 +250,13 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
         sleep_secs = _seconds_until_active()
         if sleep_secs > 0:
             wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
-            print(f"[warmup] quiet hours ��� sleeping until {wake.strftime('%H:%M')} ICT ({sleep_secs/3600:.1f}h)")
+            log_app(f"[warmup] quiet hours ��� sleeping until {wake.strftime('%H:%M')} ICT ({sleep_secs/3600:.1f}h)")
             while True:
                 remaining = _seconds_until_active()
                 if remaining <= 0:
                     break
                 await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
-            print("[warmup] quiet hours over — resuming")
+            log_app(f"[warmup] quiet hours over — resuming")
 
         now = time.time()
         tasks = []
@@ -263,7 +264,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
             for loc in _WARMUP_LOCATIONS:
                 existing = await cache_get(kw, loc)
                 if existing is None:
-                    print(f"[warmup] URGENT: {_key(kw, loc)!r} missing — scraping immediately")
+                    log_app(f"[warmup] URGENT: {_key(kw, loc)!r} missing — scraping immediately")
                     tasks.append((kw, loc, 0.0))
                 else:
                     _, fetched_ts = existing
@@ -272,20 +273,20 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
 
         if tasks:
             missing_count = sum(1 for _, _, ft in tasks if ft == 0.0)
-            print(f"[warmup] cycle: {len(tasks)} keys need refresh ({missing_count} missing)")
+            log_app(f"[warmup] cycle: {len(tasks)} keys need refresh ({missing_count} missing)")
 
             async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
                 age = "missing" if fetched_ts == 0.0 else f"age={int(now - fetched_ts)}s"
                 try:
-                    print(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
+                    log_app(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
                     async with get_sem():
                         await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
                 except Exception as e:
-                    print(f"[warmup] error for {kw!r}/{loc!r}: {e}")
+                    log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 
             await asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks])
         else:
-            print("[warmup] cycle: all keys fresh, nothing to scrape")
+            log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 
         if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
             await _cleanup_old_jobs()

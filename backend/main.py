@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from src.cache import cache_get, cache_set, cache_fuzzy_get
 from src.constants import MAX_CONCURRENT
-from src.logger import log_search
+from src.logger import log_search, log_app
 from src.matching import title_matches, extract_skills, posted_ts
 from src.models import Job, ScrapeRequest
 from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
@@ -23,8 +23,11 @@ from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_ke
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start the background warmup task on application startup."""
+    log_app("Application starting...")
     asyncio.create_task(warmup(_get_sem, _executor, _SCRAPERS))
+    log_app("Warmup task scheduled")
     yield
+    log_app("Application shutting down")
 
 
 app = FastAPI(title="Job Scraper API", lifespan=lifespan)
@@ -102,7 +105,7 @@ async def cache_status():
                     async with _get_sem():
                         await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS)
                 except Exception as e:
-                    print(f"[warmup/status] error for {kw!r}/{loc!r}: {e}")
+                    log_app(f"warmup/status error for {kw!r}/{loc!r}: {e}", "ERROR")
         asyncio.create_task(_scrape_missing())
 
     return {
@@ -135,7 +138,7 @@ async def add_keyword(req: ScrapeRequest):
                 async with _get_sem():
                     await _scrape_keyword(keyword, loc, loop, _executor, _SCRAPERS)
             except Exception as e:
-                print(f"[warmup/add] error for {keyword!r}/{loc!r}: {e}")
+                log_app(f"warmup/add error for {keyword!r}/{loc!r}: {e}", "ERROR")
     asyncio.create_task(_scrape_new())
 
     return {"keyword": keyword, "added": added, "scraping": True, "locations": _WARMUP_LOCATIONS}
@@ -163,17 +166,17 @@ async def scrape(req: ScrapeRequest, request: Request):
     cached = await cache_get(cache_keyword, req.location)
     if cached:
         cached_jobs, _ = cached
-        print(f"[cache] hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
+        log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
         return cached_jobs
 
     loop = asyncio.get_event_loop()
 
     def _timed(site: str, fn, kw: str, loc: str):
-        print(f"[{site}] starting")
+        log_app(f"{site} scraper starting")
         t0 = time.perf_counter()
         result = fn(kw, loc)
         elapsed = time.perf_counter() - t0
-        print(f"[{site}] done in {elapsed:.1f}s — {len(result)} jobs")
+        log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result)} jobs")
         return result
 
     tasks = [
@@ -187,7 +190,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     linkedin_jobs: list[dict] = []
     for result in results:
         if isinstance(result, Exception):
-            print(f"Scraper error: {result}")
+            log_app(f"Scraper error: {result}", "ERROR")
         elif isinstance(result, list):
             for j in result:
                 if title_matches(j.get("title", ""), keyword):
@@ -239,11 +242,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         return filtered
 
     def _timed(site: str, fn, kw: str, loc: str):
-        print(f"[{site}] starting")
+        log_app(f"{site} scraper starting")
         t0 = time.perf_counter()
         result = fn(kw, loc)
         elapsed = time.perf_counter() - t0
-        print(f"[{site}] done in {elapsed:.1f}s — {len(result)} jobs")
+        log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result)} jobs")
         return result
 
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -254,7 +257,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             cached = await cache_get(cache_keyword, req.location)
             if cached:
                 cached_jobs, cache_fetched_ts = cached
-                print(f"[cache] hit — {len(cached_jobs)} jobs for {cache_keyword!r}, returning immediately")
+                log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r}")
                 yield f"event: cached\ndata: {json.dumps({'jobs': cached_jobs, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
                 return
@@ -264,10 +267,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 fuzzy_jobs, fuzzy_fetched_ts = fuzzy
                 refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
                 if refiltered:
-                    print(f"[cache] fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
+                    log_app(f"cache fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
                     yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
                 else:
-                    print(f"[cache] fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")
+                    log_app(f"cache fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")
 
             if sem._value == 0:  # noqa: SLF001
                 _queue_count += 1
@@ -306,7 +309,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 async def _phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
                     count = len(jobs)
-                    print(f"[linkedin] fetching descriptions for {count} jobs (streaming, newest first)...")
+                    log_app(f"linkedin: fetching descriptions for {count} jobs (streaming, newest first)...")
                     await asyncio.sleep(10.0)
                     for i, job in enumerate(jobs[:30]):
                         cooldown = 3.0 if i > 0 else 0.0
@@ -315,22 +318,22 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                                 _executor, scrape_linkedin_detail_one, job, cooldown
                             )
                         except Exception as e:
-                            print(f"[linkedin] detail error job {i}: {e}")
+                            log_app(f"linkedin detail error job {i}: {e}", "ERROR")
                             ok = True
                         job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
                         await enrich_queue.put(job)
                         if not ok:
-                            print("[linkedin] rate-limited — stopping detail fetch")
+                            log_app("linkedin: rate-limited — stopping detail fetch")
                             for remaining in jobs[i + 1:30]:
                                 remaining["skills"] = extract_skills(remaining.get("title", ""), remaining.get("description", ""))
                                 await enrich_queue.put(remaining)
                             break
                     await enrich_queue.put(None)
-                    print("[linkedin] finished streaming descriptions")
+                    log_app("linkedin: finished streaming descriptions")
 
                 async def _topcv_phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-                    print(f"[topcv] fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    log_app(f"topcv: fetching details for {len(jobs)} jobs (streaming, newest first)...")
                     for i, job in enumerate(jobs):
                         cooldown = 2.0 if i > 0 else 0.0
                         try:
@@ -338,11 +341,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                                 _executor, scrape_topcv_detail_one, job, cooldown
                             )
                         except Exception as e:
-                            print(f"[topcv] detail error job {i}: {e}")
+                            log_app(f"topcv detail error job {i}: {e}", "ERROR")
                         job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
                         await topcv_enrich_queue.put(job)
                     await topcv_enrich_queue.put(None)
-                    print("[topcv] finished streaming details")
+                    log_app("topcv: finished streaming details")
 
                 while pending:
                     time_left = max(0.1, deadline - loop.time())
@@ -353,7 +356,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         if loop.time() >= deadline:
                             for fut in pending:
                                 fut.cancel()
-                            print(f"[stream] timeout — cancelling {len(pending)} scraper(s)")
+                            log_app(f"stream timeout — cancelling {len(pending)} scraper(s)")
                             break
                         yield ": keepalive\n\n"
                         continue
@@ -363,7 +366,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         try:
                             result = fut.result()
                         except Exception as e:
-                            print(f"[{site}] scraper error: {e}")
+                            log_app(f"{site} scraper error: {e}", "ERROR")
                             result = []
                         filtered = _process(result)
                         all_jobs.extend(filtered)

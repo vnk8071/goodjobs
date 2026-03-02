@@ -4,6 +4,7 @@ from difflib import SequenceMatcher
 from redis.asyncio import Redis
 
 from .constants import REDIS_URL
+from .logger import log_app
 
 _redis: Redis | None = None
 
@@ -30,7 +31,7 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
         data = json.loads(raw)
         return data["jobs"], float(data["fetched_ts"])
     except Exception as e:
-        print(f"[cache] get error: {e}")
+        log_app(f"cache get error: {e}", "ERROR")
         return None
 
 
@@ -39,9 +40,9 @@ async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: f
     try:
         payload = json.dumps({"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False)
         await get_redis().set(_key(keyword, location), payload)
-        print(f"[cache] stored {len(jobs)} jobs for {keyword!r}")
+        log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
     except Exception as e:
-        print(f"[cache] set error: {e}")
+        log_app(f"cache set error: {e}", "ERROR")
 
 
 async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.6) -> tuple[list[dict], float] | None:
@@ -79,10 +80,10 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.6) -
         jobs = data["jobs"]
         if not jobs:
             return None
-        print(f"[cache] fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)")
+        log_app(f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)")
         return jobs, float(data["fetched_ts"])
     except Exception as e:
-        print(f"[cache] fuzzy_get error: {e}")
+        log_app(f"cache fuzzy_get error: {e}", "ERROR")
         return None
 
 
@@ -91,7 +92,7 @@ async def cache_ttl(keyword: str, location: str) -> int:
     try:
         return await get_redis().ttl(_key(keyword, location))
     except Exception as e:
-        print(f"[cache] ttl error: {e}")
+        log_app(f"cache ttl error: {e}", "ERROR")
         return -2
 
 
@@ -107,6 +108,6 @@ async def cache_merge(keyword: str, location: str, new_jobs: list[dict], fetched
                 seen.add(j["link"])
                 deduped.append(j)
         await cache_set(keyword, location, deduped, fetched_ts)
-        print(f"[cache] merged {len(new_jobs)} new + {len(existing[0]) if existing else 0} cached = {len(deduped)} total")
+        log_app(f"cache merged {len(new_jobs)} new + {len(existing[0]) if existing else 0} cached = {len(deduped)} total")
     except Exception as e:
-        print(f"[cache] merge error: {e}")
+        log_app(f"cache merge error: {e}", "ERROR")

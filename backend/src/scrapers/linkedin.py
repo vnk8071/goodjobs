@@ -8,6 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS, session
+from ..logger import log_app
 from ..utils import _parse_iso_date, _relative_display, _clean_html, _extract_html, _truncate, _fmt_num
 
 _LINKEDIN_GEO_IDS: dict[str, list[str]] = {
@@ -70,7 +71,7 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                 page_jobs = _linkedin_requests(url, _LINKEDIN_PAGE_SIZE * 2)
                 if not page_jobs:
                     if start == 0:
-                        print(f"[LinkedIn] requests blocked for geoId={geo_id} — trying Playwright")
+                        log_app(f"[LinkedIn] requests blocked for geoId={geo_id} — trying Playwright")
                         page_jobs = _linkedin_playwright(url, _LINKEDIN_PAGE_SIZE * 2)
                     if not page_jobs:
                         break
@@ -84,7 +85,7 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                     break
                 start += _LINKEDIN_PAGE_SIZE
             pages = start // _LINKEDIN_PAGE_SIZE + 1
-            print(f"[LinkedIn] '{kw}' geoId={geo_id} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
+            log_app(f"[LinkedIn] '{kw}' geoId={geo_id} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
         return all_jobs
 
     all_jobs: list[dict] = _fetch_all_pages(keyword)
