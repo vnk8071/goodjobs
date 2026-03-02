@@ -9,7 +9,6 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "mobile developer":     "Flutter Developer",
     "ios developer":        "Flutter Developer",
     "android developer":    "Flutter Developer",
-    "react native developer": "Flutter Developer",
     "project manager":      "Product Manager",
     "product owner":        "Product Manager",
     "scrum master":         "Product Manager",
@@ -24,6 +23,10 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "test engineer":        "QA Engineer",
     "automation engineer":  "QA Engineer",
 }
+
+_KEYWORD_ALIAS_VARIANTS: dict[str, list[str]] = {}
+for _variant, _canonical in _KEYWORD_ALIASES.items():
+    _KEYWORD_ALIAS_VARIANTS.setdefault(_canonical, []).append(_variant)
 
 _RATE_LIMIT_WINDOW  = 60
 _RATE_LIMIT_MAX     = 2

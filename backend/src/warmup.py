@@ -5,6 +5,7 @@ from datetime import datetime, timezone, timedelta
 from src.cache import cache_get, cache_set, get_redis, _key
 from src.constants import RECENT_DAYS
 from src.matching import title_matches, extract_skills, posted_ts
+from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one
 
 _WARMUP_KEYWORDS = [
@@ -20,6 +21,32 @@ _WARMUP_KEYWORDS = [
     "QA Engineer",
 ]
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi", "Da Nang"]
+
+_WARMUP_KEYWORDS_KEY = "warmup:keywords"
+
+
+async def get_warmup_keywords() -> list[str]:
+    """Return current warmup keywords from Redis, seeding defaults on first call."""
+    redis = get_redis()
+    members = await redis.smembers(_WARMUP_KEYWORDS_KEY)
+    if not members:
+        await redis.sadd(_WARMUP_KEYWORDS_KEY, *_WARMUP_KEYWORDS)
+        return list(_WARMUP_KEYWORDS)
+    return sorted(members)
+
+
+async def add_warmup_keyword(keyword: str) -> bool:
+    """Add a keyword to the warmup set. Returns True if it was new."""
+    redis = get_redis()
+    added = await redis.sadd(_WARMUP_KEYWORDS_KEY, keyword)
+    return bool(added)
+
+
+async def remove_warmup_keyword(keyword: str) -> bool:
+    """Remove a keyword from the warmup set. Returns True if it existed."""
+    redis = get_redis()
+    removed = await redis.srem(_WARMUP_KEYWORDS_KEY, keyword)
+    return bool(removed)
 
 _TZ_ICT = timezone(timedelta(hours=7))
 _QUIET_START = 20
@@ -47,7 +74,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     """
     from src.scrapers.linkedin import scrape_linkedin
 
-    since_seconds = 7200 if last_fetched_ts > 0 else None
+    since_seconds = 43200 if last_fetched_ts > 0 else None
 
     def _timed(site: str, fn, kw: str, loc: str):
         t0 = time.perf_counter()
@@ -58,15 +85,18 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         print(f"[warmup][{kw}][{loc}][{site}] {len(result)} jobs in {time.perf_counter()-t0:.1f}s")
         return result
 
+    scrape_keywords = [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, [])
+
     t0 = time.perf_counter()
     results = []
-    for site, fn in scrapers.items():
-        try:
-            result = await loop.run_in_executor(executor, _timed, site, fn, kw, loc)
-            results.append(result)
-        except Exception as e:
-            print(f"[warmup][{kw}][{loc}][{site}] error: {e}")
-            results.append([])
+    for scrape_kw in scrape_keywords:
+        for site, fn in scrapers.items():
+            try:
+                result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
+                results.append(result)
+            except Exception as e:
+                print(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
+                results.append([])
 
     jobs: list[dict] = []
     linkedin_jobs: list[dict] = []
@@ -137,7 +167,7 @@ async def _cleanup_stale_keys() -> None:
     """
     try:
         redis = get_redis()
-        canonical = {kw.lower().strip() for kw in _WARMUP_KEYWORDS}
+        canonical = {kw.lower().strip() for kw in await get_warmup_keywords()}
         deleted = 0
         for loc in _WARMUP_LOCATIONS:
             loc_key = loc.lower().strip()
@@ -157,7 +187,7 @@ async def _cleanup_old_jobs() -> None:
     """Drop jobs older than RECENT_DAYS from every warmup key. Runs once daily."""
     cutoff_ts = time.time() - RECENT_DAYS * 86400
     cleaned = 0
-    for kw in _WARMUP_KEYWORDS:
+    for kw in await get_warmup_keywords():
         for loc in _WARMUP_LOCATIONS:
             try:
                 existing = await cache_get(kw, loc)
@@ -189,9 +219,10 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     await _cleanup_stale_keys()
 
     print("[warmup] startup pass — checking for missing keys...")
+    warmup_kws = await get_warmup_keywords()
     startup_tasks = [
         (kw, loc)
-        for kw in _WARMUP_KEYWORDS
+        for kw in warmup_kws
         for loc in _WARMUP_LOCATIONS
         if await cache_get(kw, loc) is None
     ]
@@ -228,7 +259,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
 
         now = time.time()
         tasks = []
-        for kw in _WARMUP_KEYWORDS:
+        for kw in await get_warmup_keywords():
             for loc in _WARMUP_LOCATIONS:
                 existing = await cache_get(kw, loc)
                 if existing is None:

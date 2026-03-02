@@ -17,7 +17,7 @@ from src.matching import title_matches, extract_skills, posted_ts
 from src.models import Job, ScrapeRequest
 from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
-from src.warmup import warmup, _WARMUP_KEYWORDS, _WARMUP_LOCATIONS, _scrape_keyword
+from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
 
 @asynccontextmanager
@@ -74,7 +74,7 @@ async def cache_status():
     loop = asyncio.get_event_loop()
     keys = []
     missing = []
-    for kw in _WARMUP_KEYWORDS:
+    for kw in await get_warmup_keywords():
         for loc in _WARMUP_LOCATIONS:
             existing = await cache_get(kw, loc)
             is_missing = existing is None
@@ -113,6 +113,43 @@ async def cache_status():
     }
 
 
+@app.get("/warmup/keywords")
+async def list_warmup_keywords():
+    """List all current warmup keywords."""
+    keywords = await get_warmup_keywords()
+    return {"keywords": keywords, "count": len(keywords)}
+
+
+@app.post("/warmup/keywords")
+async def add_keyword(req: ScrapeRequest):
+    """Add a keyword to the warmup set and immediately scrape all locations for it."""
+    keyword = req.keyword.strip()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="keyword is required")
+    loop = asyncio.get_event_loop()
+    added = await add_warmup_keyword(keyword)
+
+    async def _scrape_new() -> None:
+        for loc in _WARMUP_LOCATIONS:
+            try:
+                async with _get_sem():
+                    await _scrape_keyword(keyword, loc, loop, _executor, _SCRAPERS)
+            except Exception as e:
+                print(f"[warmup/add] error for {keyword!r}/{loc!r}: {e}")
+    asyncio.create_task(_scrape_new())
+
+    return {"keyword": keyword, "added": added, "scraping": True, "locations": _WARMUP_LOCATIONS}
+
+
+@app.delete("/warmup/keywords/{keyword}")
+async def delete_keyword(keyword: str):
+    """Remove a keyword from the warmup set (does not delete cached jobs)."""
+    removed = await remove_warmup_keyword(keyword)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"{keyword!r} not found in warmup keywords")
+    return {"keyword": keyword, "removed": True}
+
+
 @app.post("/scrape", response_model=list[Job])
 async def scrape(req: ScrapeRequest, request: Request):
     """Scrape jobs for a keyword and location, returning all results as a JSON array."""
@@ -140,7 +177,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         return result
 
     tasks = [
-        loop.run_in_executor(_executor, _timed, site, fn, keyword, req.location)
+        loop.run_in_executor(_executor, _timed, site, fn, cache_keyword, req.location)
         for site, fn in _SCRAPERS.items()
     ]
 
@@ -244,13 +281,14 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
                 fetch_ts = time.time()
 
+                scrape_kw = cache_keyword
                 other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
                 futures: dict = {
-                    loop.run_in_executor(_executor, _timed, site, fn, keyword, req.location): site
+                    loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location): site
                     for site, fn in other_scrapers.items()
                 }
                 linkedin_fut = loop.run_in_executor(
-                    _executor, _timed, "linkedin", scrape_linkedin, keyword, req.location
+                    _executor, _timed, "linkedin", scrape_linkedin, scrape_kw, req.location
                 )
                 futures[linkedin_fut] = "linkedin"
 
