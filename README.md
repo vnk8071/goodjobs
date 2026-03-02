@@ -27,8 +27,6 @@ docker compose up
 - Frontend: http://localhost
 - Backend API: http://localhost:8000
 
-> Set `CLOUDFLARE_TUNNEL_TOKEN` in a `.env` file if you want the tunnel to run locally too.
-
 ## Production Deployment
 
 Triggered automatically by GitHub Actions on push to `main` (backend or server config changes).
@@ -73,10 +71,12 @@ Phase 2 ── LinkedIn + TopCV description enrichment
 
 ### Caching (Redis)
 
-- Results cached by `(keyword, location)` for **1 hour** (configurable via `CACHE_TTL_SECONDS`)
-- On cache hit: cached jobs stream instantly; scrapers still run to find jobs newer than `cache_ts`
+- Results cached permanently by `(keyword, location)` — no TTL, jobs are retained for **8 days** (`RECENT_DAYS`)
+- On cache hit: cached jobs stream instantly
 - On cache miss: full scrape runs, result stored in Redis
-- **Background warmup**: on server startup, all suggestion keywords are pre-scraped and cached automatically (including LinkedIn/TopCV descriptions). Cache is refreshed in the background before TTL expires so suggestion chips always respond instantly.
+- **Background warmup**: scrapes all 30 keyword×location pairs every **2 hours** (`SCRAPE_INTERVAL=7200`). Check runs every 10 minutes; a scrape is triggered only when `now - fetched_ts >= 7200s`. LinkedIn uses `f_TPR=r7200` to fetch only jobs from the last 2 hours incrementally; other scrapers always fetch the full `RECENT_DAYS` window.
+- New jobs are **merged** into existing cache (deduplicated by link). Jobs older than 8 days are pruned daily by `_cleanup_old_jobs()`.
+- Cache status: `GET /cache/status` — shows all 30 keys with `fetched_ago` and `job_count`
 - Redis connection: `REDIS_URL` env var (default: `redis://redis:6379`)
 
 
@@ -108,7 +108,7 @@ goodjobs/
 │       ├── api.ts           # SSE stream parser, cached event, LinkedIn fallback
 │       ├── ui.ts            # Table rendering, modal, progress pills, queue banner
 │       └── types.ts         # Shared TypeScript interfaces
-├── docker-compose.yml         # Local development (redis + backend + frontend + cloudflared)
+├── docker-compose.yml         # Local development (redis + backend + frontend)
 ├── docker-compose.server.yml  # Production (redis + backend + cloudflared)
 └── .github/workflows/
     ├── backend.yml          # Build Docker image → push → deploy via SSH
