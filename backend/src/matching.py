@@ -34,39 +34,47 @@ def _normalize(text: str) -> str:
 def title_matches(title: str, keyword: str) -> bool:
     """Return True if the job title is relevant to the keyword phrase.
 
-    Strategy: exact phrase match, then synonym-expanded per-word AND match,
-    then Jaccard similarity >= 0.5 as fallback.
+    Strategy: match primarily against the core title (text before any parenthetical).
+    A keyword word found only inside parentheses does not count as a primary match.
+    Falls back to exact phrase match and Jaccard similarity on the core title only.
     """
-    title_lower = _normalize(title.strip().lower())
-    kw_phrase   = _normalize(keyword.strip().lower())
+    kw_phrase  = _normalize(keyword.strip().lower())
 
-    if kw_phrase in title_lower:
+    # Split off parenthetical qualifiers — use only the core title for matching.
+    # e.g. "Data Engineer (AI Platform)" → core = "data engineer"
+    core_title = _normalize(re.split(r"\s*[\(\[]", title.strip().lower())[0].strip())
+
+    if kw_phrase in core_title:
         return True
 
     kw_words    = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
-    title_words = re.split(r"[\s/\(\)\-,\.]+", title_lower)
-    title_words = [w for w in title_words if w]
+    core_words  = re.split(r"[\s/\-,\.]+", core_title)
+    core_words  = [w for w in core_words if w]
 
     if not kw_words:
         return True
 
-    def _word_matches(kw: str) -> bool:
+    def _match_index(kw: str) -> int:
+        """Return the earliest core_words index that matches kw, or -1 if none."""
         kw_variants = _expand(kw)
-        for variant in kw_variants:
-            if variant in title_lower:
-                return True
-            if len(variant) >= 3 and any(tw.startswith(variant) for tw in title_words):
-                return True
-        if any(_word_similarity(kw, tw) > 0.6 for tw in title_words if abs(len(tw) - len(kw)) <= 2):
-            return True
-        return False
+        for i, tw in enumerate(core_words):
+            for variant in kw_variants:
+                if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
+                    return i
+            if _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
+                return i
+        return -1
 
-    if all(_word_matches(kw) for kw in kw_words):
+    # All keyword words must match AND appear in order (subsequence) in the core title.
+    # e.g. "AI Engineer" requires "ai" to appear before "engineer" in core_words.
+    # This prevents "Engineer AI" from matching "AI Engineer".
+    indices = [_match_index(kw) for kw in kw_words]
+    if all(idx >= 0 for idx in indices) and indices == sorted(indices):
         return True
 
-    kw_set    = set(kw_words)
-    title_set = set(title_words)
-    overlap   = len(kw_set & title_set) / len(kw_set | title_set)
+    kw_set   = set(kw_words)
+    core_set = set(core_words)
+    overlap  = len(kw_set & core_set) / len(kw_set | core_set)
     return overlap >= 0.5
 
 

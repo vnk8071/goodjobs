@@ -31,7 +31,6 @@ _LINKEDIN_LOCATION_MAP: dict[str, str] = {
 
 _LINKEDIN_PAGE_SIZE   = 25
 _LINKEDIN_MAX_RESULTS = 75
-_LINKEDIN_DETAIL_LIMIT = 30
 
 _LINKEDIN_BOILERPLATE = re.compile(
     r"Applicants:.*$|To all Staffing and Recruiting Agencies.*$"
@@ -106,7 +105,7 @@ def scrape_linkedin_details(jobs: list[dict]) -> None:
     Call after scrape_linkedin() to enrich results without blocking listing.
     """
     _time.sleep(5.0)
-    for i, job in enumerate(jobs[:_LINKEDIN_DETAIL_LIMIT]):
+    for i, job in enumerate(jobs[:_LINKEDIN_MAX_RESULTS]):
         if i > 0:
             _time.sleep(2.0)
         desc, salary = _linkedin_fetch_detail(job["link"])
