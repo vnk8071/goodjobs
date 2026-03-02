@@ -1,0 +1,393 @@
+import asyncio
+import json
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+
+from src.cache import cache_get, cache_set, cache_fuzzy_get
+from src.constants import MAX_CONCURRENT
+from src.logger import log_search
+from src.matching import title_matches, extract_skills, posted_ts
+from src.models import Job, ScrapeRequest
+from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
+from src.scrapers import *
+from src.warmup import warmup, _WARMUP_KEYWORDS, _WARMUP_LOCATIONS, _scrape_keyword
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start the background warmup task on application startup."""
+    asyncio.create_task(warmup(_get_sem, _executor, _SCRAPERS))
+    yield
+
+
+app = FastAPI(title="Job Scraper API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+_executor = ThreadPoolExecutor(max_workers=4)
+
+_MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_SCRAPES", str(MAX_CONCURRENT)))
+_scrape_sem: asyncio.Semaphore | None = None
+_queue_count = 0
+
+
+def _get_sem() -> asyncio.Semaphore:
+    """Return the global scrape semaphore, creating it on first call."""
+    global _scrape_sem
+    if _scrape_sem is None:
+        _scrape_sem = asyncio.Semaphore(_MAX_CONCURRENT)
+    return _scrape_sem
+
+
+_SCRAPERS = {
+    "linkedin":     scrape_linkedin,
+    "itviec":       scrape_itviec,
+    "topcv":        scrape_topcv,
+    "vietnamworks": scrape_vietnamworks,
+    # "topdev":       scrape_topdev,
+    # "indeed":       scrape_indeed,
+    "careerviet":   scrape_careerviet,
+}
+
+
+@app.get("/")
+def health():
+    """Health check endpoint."""
+    return {"status": "ok", "service": "good jobs"}
+
+
+@app.get("/cache/status")
+async def cache_status():
+    """Report status of all 30 cache keys and trigger scraping for any that are missing."""
+    loop = asyncio.get_event_loop()
+    keys = []
+    missing = []
+    for kw in _WARMUP_KEYWORDS:
+        for loc in _WARMUP_LOCATIONS:
+            existing = await cache_get(kw, loc)
+            is_missing = existing is None
+            fetched_ts = existing[1] if existing else 0.0
+            job_count = len(existing[0]) if existing else 0
+            if fetched_ts:
+                age = int(time.time() - fetched_ts)
+                if age < 3600:
+                    fetched_ago = f"{age // 60}m ago"
+                elif age < 86400:
+                    fetched_ago = f"{age // 3600}h {(age % 3600) // 60}m ago"
+                else:
+                    fetched_ago = f"{age // 86400}d ago"
+            else:
+                fetched_ago = "never"
+            keys.append({"keyword": kw, "location": loc, "missing": is_missing,
+                         "fetched_ago": fetched_ago, "job_count": job_count})
+            if is_missing:
+                missing.append((kw, loc))
+
+    if missing:
+        async def _scrape_missing() -> None:
+            for kw, loc in missing:
+                try:
+                    async with _get_sem():
+                        await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS)
+                except Exception as e:
+                    print(f"[warmup/status] error for {kw!r}/{loc!r}: {e}")
+        asyncio.create_task(_scrape_missing())
+
+    return {
+        "total": len(keys),
+        "missing": len(missing),
+        "triggered_scrape": len(missing) > 0,
+        "keys": keys,
+    }
+
+
+@app.post("/scrape", response_model=list[Job])
+async def scrape(req: ScrapeRequest, request: Request):
+    """Scrape jobs for a keyword and location, returning all results as a JSON array."""
+    keyword = req.keyword.strip()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="keyword is required")
+    log_search(request, keyword, req.location)
+
+    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), keyword)
+
+    cached = await cache_get(cache_keyword, req.location)
+    if cached:
+        cached_jobs, _ = cached
+        print(f"[cache] hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
+        return cached_jobs
+
+    loop = asyncio.get_event_loop()
+
+    def _timed(site: str, fn, kw: str, loc: str):
+        print(f"[{site}] starting")
+        t0 = time.perf_counter()
+        result = fn(kw, loc)
+        elapsed = time.perf_counter() - t0
+        print(f"[{site}] done in {elapsed:.1f}s — {len(result)} jobs")
+        return result
+
+    tasks = [
+        loop.run_in_executor(_executor, _timed, site, fn, keyword, req.location)
+        for site, fn in _SCRAPERS.items()
+    ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    jobs: list[dict] = []
+    linkedin_jobs: list[dict] = []
+    for result in results:
+        if isinstance(result, Exception):
+            print(f"Scraper error: {result}")
+        elif isinstance(result, list):
+            for j in result:
+                if title_matches(j.get("title", ""), keyword):
+                    j["posted_ts"] = posted_ts(j)
+                    jobs.append(j)
+                    if j.get("source") == "LinkedIn":
+                        linkedin_jobs.append(j)
+
+    if linkedin_jobs:
+        await loop.run_in_executor(_executor, scrape_linkedin_details, linkedin_jobs)
+
+    for j in jobs:
+        j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+
+    await cache_set(cache_keyword, req.location, jobs, time.time())
+    return jobs
+
+
+@app.post("/scrape-stream")
+async def scrape_stream(req: ScrapeRequest, request: Request):
+    """Stream job results via SSE as each scraper finishes.
+
+    On cache hit: emits cached jobs immediately then closes.
+    On cache miss: runs all scrapers in parallel, streams results per site.
+    LinkedIn and TopCV descriptions are enriched in Phase 2 and streamed job-by-job.
+    """
+    keyword = req.keyword.strip()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="keyword is required")
+
+    ip = request.client.host if request.client else "unknown"
+    rate_err = check_rate_limit(ip)
+    if rate_err:
+        raise HTTPException(status_code=429, detail=rate_err)
+
+    log_search(request, keyword, req.location)
+
+    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), keyword)
+
+    loop = asyncio.get_event_loop()
+
+    def _process(jobs: list[dict]) -> list[dict]:
+        filtered = []
+        for j in jobs:
+            if title_matches(j.get("title", ""), keyword):
+                j["posted_ts"] = posted_ts(j)
+                j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+                filtered.append(j)
+        return filtered
+
+    def _timed(site: str, fn, kw: str, loc: str):
+        print(f"[{site}] starting")
+        t0 = time.perf_counter()
+        result = fn(kw, loc)
+        elapsed = time.perf_counter() - t0
+        print(f"[{site}] done in {elapsed:.1f}s — {len(result)} jobs")
+        return result
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        global _queue_count
+        sem = _get_sem()
+        ip_active_inc(ip)
+        try:
+            cached = await cache_get(cache_keyword, req.location)
+            if cached:
+                cached_jobs, cache_fetched_ts = cached
+                print(f"[cache] hit — {len(cached_jobs)} jobs for {cache_keyword!r}, returning immediately")
+                yield f"event: cached\ndata: {json.dumps({'jobs': cached_jobs, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
+                yield "event: done\ndata: {}\n\n"
+                return
+
+            fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
+            if fuzzy:
+                fuzzy_jobs, fuzzy_fetched_ts = fuzzy
+                refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
+                if refiltered:
+                    print(f"[cache] fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
+                    yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
+                else:
+                    print(f"[cache] fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")
+
+            if sem._value == 0:  # noqa: SLF001
+                _queue_count += 1
+                pos = _queue_count
+                yield f"event: queued\ndata: {json.dumps({'position': pos})}\n\n"
+
+            async with sem:
+                if _queue_count > 0:
+                    _queue_count -= 1
+                yield "event: started\ndata: {}\n\n"
+
+                fetch_ts = time.time()
+
+                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
+                futures: dict = {
+                    loop.run_in_executor(_executor, _timed, site, fn, keyword, req.location): site
+                    for site, fn in other_scrapers.items()
+                }
+                linkedin_fut = loop.run_in_executor(
+                    _executor, _timed, "linkedin", scrape_linkedin, keyword, req.location
+                )
+                futures[linkedin_fut] = "linkedin"
+
+                linkedin_jobs: list[dict] = []
+                topcv_jobs: list[dict] = []
+                all_jobs: list[dict] = []
+                pending = set(futures.keys())
+                deadline = loop.time() + 120.0
+
+                enrich_queue: asyncio.Queue = asyncio.Queue()
+                enrich_task: asyncio.Task | None = None
+                topcv_enrich_queue: asyncio.Queue = asyncio.Queue()
+                topcv_enrich_task: asyncio.Task | None = None
+
+                async def _phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    count = len(jobs)
+                    print(f"[linkedin] fetching descriptions for {count} jobs (streaming, newest first)...")
+                    await asyncio.sleep(10.0)
+                    for i, job in enumerate(jobs[:30]):
+                        cooldown = 3.0 if i > 0 else 0.0
+                        try:
+                            ok = await loop.run_in_executor(
+                                _executor, scrape_linkedin_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            print(f"[linkedin] detail error job {i}: {e}")
+                            ok = True
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await enrich_queue.put(job)
+                        if not ok:
+                            print("[linkedin] rate-limited — stopping detail fetch")
+                            for remaining in jobs[i + 1:30]:
+                                remaining["skills"] = extract_skills(remaining.get("title", ""), remaining.get("description", ""))
+                                await enrich_queue.put(remaining)
+                            break
+                    await enrich_queue.put(None)
+                    print("[linkedin] finished streaming descriptions")
+
+                async def _topcv_phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    print(f"[topcv] fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    for i, job in enumerate(jobs):
+                        cooldown = 2.0 if i > 0 else 0.0
+                        try:
+                            await loop.run_in_executor(
+                                _executor, scrape_topcv_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            print(f"[topcv] detail error job {i}: {e}")
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await topcv_enrich_queue.put(job)
+                    await topcv_enrich_queue.put(None)
+                    print("[topcv] finished streaming details")
+
+                while pending:
+                    time_left = max(0.1, deadline - loop.time())
+                    done, pending = await asyncio.wait(
+                        pending, return_when=asyncio.FIRST_COMPLETED, timeout=min(15.0, time_left)
+                    )
+                    if not done:
+                        if loop.time() >= deadline:
+                            for fut in pending:
+                                fut.cancel()
+                            print(f"[stream] timeout — cancelling {len(pending)} scraper(s)")
+                            break
+                        yield ": keepalive\n\n"
+                        continue
+
+                    for fut in done:
+                        site = futures[fut]
+                        try:
+                            result = fut.result()
+                        except Exception as e:
+                            print(f"[{site}] scraper error: {e}")
+                            result = []
+                        filtered = _process(result)
+                        all_jobs.extend(filtered)
+                        if site == "linkedin":
+                            linkedin_jobs = filtered
+                            yield f"event: linkedin-enriching\ndata: {json.dumps({'count': len(linkedin_jobs)})}\n\n"
+                            enrich_task = asyncio.create_task(_phase2(linkedin_jobs))
+                        if site == "topcv":
+                            topcv_jobs = filtered
+                            yield f"event: topcv-enriching\ndata: {json.dumps({'count': len(topcv_jobs)})}\n\n"
+                            topcv_enrich_task = asyncio.create_task(_topcv_phase2(topcv_jobs))
+                        if filtered:
+                            yield f"data: {json.dumps(filtered, ensure_ascii=False)}\n\n"
+
+                    while not enrich_queue.empty():
+                        item = enrich_queue.get_nowait()
+                        if item is None:
+                            enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if enrich_task is None:
+                            break
+                    while not topcv_enrich_queue.empty():
+                        item = topcv_enrich_queue.get_nowait()
+                        if item is None:
+                            topcv_enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if topcv_enrich_task is None:
+                            break
+
+                yield "event: done\ndata: {}\n\n"
+
+                if enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: linkedin-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                if topcv_enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await topcv_enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: topcv-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
+        finally:
+            ip_active_dec(ip)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --appendonly yes --appendfsync everysec
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+
+  backend:
+    image: ${IMAGE_NAME}:latest
+    restart: unless-stopped
+    expose:
+      - "8000"
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 1.5g
+    networks:
+      - internal
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+volumes:
+  redis_data:
+
+networks:
+  internal:
+    driver: bridge

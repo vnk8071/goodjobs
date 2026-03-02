@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Good Jobs</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%232563eb'/><text x='3' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'>G</text><text x='16' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white' opacity='0.75'>J</text></svg>" />
+    <style>
+      :root {
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --success-bg: #dcfce7;
+        --success-text: #15803d;
+        --error-bg: #fee2e2;
+        --error-text: #b91c1c;
+        --loading-bg: #dbeafe;
+        --loading-text: #1d4ed8;
+        --bg: #f1f5f9;
+        --card: #ffffff;
+        --border: #e2e8f0;
+        --text: #1e293b;
+        --muted: #64748b;
+        --radius: 10px;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 2rem 1rem 4rem;
+      }
+
+      .container {
+        max-width: 1600px;
+        margin: 0 auto;
+      }
+
+      /* Header */
+      header {
+        margin-bottom: 1.75rem;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+        gap: 1rem;
+      }
+
+      .logo {
+        flex-shrink: 0;
+        width: 48px;
+        height: 48px;
+        background: var(--primary);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+      }
+
+      .logo svg {
+        width: 30px;
+        height: 30px;
+      }
+
+      .header-text h1 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        display: flex;
+        align-items: baseline;
+        gap: 0.6rem;
+        line-height: 1.1;
+      }
+
+      .header-text h1 .subtitle {
+        font-size: 1rem;
+        font-weight: 400;
+        color: var(--muted);
+      }
+
+      .header-text p {
+        margin-top: 0.2rem;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      /* Card */
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.75rem 2rem 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      }
+
+      /* Search form */
+      .search-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 1rem;
+        align-items: end;
+      }
+
+      .search-grid .suggestions {
+        grid-column: 1 / -1;
+        margin-top: 0;
+      }
+
+      @media (max-width: 640px) {
+        .search-grid {
+          grid-template-columns: 1fr;
+        }
+
+        /* Reorder on mobile: keyword → chips → location → button */
+        .search-grid .keyword-field  { order: 1; }
+        .search-grid .suggestions    { order: 2; }
+        .search-grid .location-field { order: 3; }
+        .search-grid .button-field   { order: 4; }
+
+        /* Table: show only #, Title, Logo, Posted, Source — hide everything else */
+        thead th:nth-child(4),  /* Location */
+        thead th:nth-child(6),  /* Skills */
+        thead th:nth-child(7),  /* Description */
+        thead th:nth-child(9),  /* Link */
+        tbody td:nth-child(4),
+        tbody td:nth-child(6),
+        tbody td:nth-child(7),
+        tbody td:nth-child(9) {
+          display: none;
+        }
+
+        /* Posted column: compact, centered */
+        thead th:nth-child(5) { text-align: center; }
+        tbody td:nth-child(5) {
+          font-size: 0.68rem;
+          color: var(--muted);
+          white-space: nowrap;
+          padding: 0.5rem 0.2rem;
+          text-align: center;
+          vertical-align: middle;
+        }
+
+        /* Company col: show logo only, no text — keep th visible for fixed-width sizing */
+        thead th:nth-child(3) { width: 2.4rem; font-size: 0; }
+        tbody td:nth-child(3) {
+          padding: 0.3rem 0.25rem;
+          vertical-align: middle;
+          text-align: center;
+        }
+        tbody td:nth-child(3) .company-cell span { display: none; }
+        tbody td:nth-child(3) .company-logo,
+        tbody td:nth-child(3) .company-avatar {
+          width: 26px;
+          height: 26px;
+          font-size: 0.7rem;
+        }
+
+        td.title {
+          font-size: 0.82rem;
+          word-break: break-word;
+          max-height: 4rem;
+          overflow: hidden;
+        }
+        /* Company name under title */
+        td.title::after {
+          content: attr(data-company);
+          display: block;
+          font-size: 0.7rem;
+          color: var(--muted);
+          font-weight: 400;
+          margin-top: 0.15rem;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        td.num { width: 1.4rem; font-size: 0.72rem; }
+
+        /* Fixed layout so columns don't overflow */
+        .table-wrapper { overflow-x: hidden; }
+        table { table-layout: fixed; width: 100%; }
+        thead th:nth-child(1) { width: 1.4rem; }   /* # */
+        thead th:nth-child(5) { width: 4.5rem; }   /* Posted */
+        thead th:nth-child(8) { width: 4.5rem; }   /* Source — wide enough for badge */
+
+        /* Source header: hide text, show nothing (badge in body makes it clear) */
+        thead th:nth-child(8) { font-size: 0; }
+
+        /* Source badge: smaller font, allow wrapping text */
+        tbody td:nth-child(8) {
+          text-align: center;
+          vertical-align: middle;
+          padding: 0.3rem 0.2rem;
+        }
+        tbody td:nth-child(8) .badge {
+          font-size: 0.65rem;
+          padding: 0.15rem 0.35rem;
+          white-space: normal;
+          text-align: center;
+          line-height: 1.2;
+          display: inline-block;
+          max-width: 4.2rem;
+        }
+      }
+
+      .field label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        margin-bottom: 0.45rem;
+        color: var(--muted);
+      }
+
+      .field input[type="text"],
+      .field select {
+        width: 100%;
+        padding: 0.7rem 1rem;
+        font-size: 0.97rem;
+        border: 1.5px solid var(--border);
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        background: #fff;
+        color: var(--text);
+      }
+
+      .field input[type="text"]:focus,
+      .field select:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .field select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.85rem center;
+        padding-right: 2.2rem;
+        cursor: pointer;
+      }
+
+      #locationCustom {
+        margin-top: 0.4rem;
+      }
+
+      .suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        margin-top: 0.75rem;
+        padding-top: 0.65rem;
+        border-top: 1px solid var(--border);
+      }
+
+      @media (max-width: 640px) {
+        .suggestions {
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          padding-bottom: 0.25rem;
+        }
+        .suggestions::-webkit-scrollbar { display: none; }
+        .suggestion-chip { flex-shrink: 0; }
+      }
+
+      .suggestion-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.78rem;
+        font-weight: 500;
+        border-radius: 999px;
+        background: #f1f5f9;
+        color: var(--muted);
+        cursor: pointer;
+        border: 1.5px solid var(--border);
+        transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+        user-select: none;
+      }
+
+      .suggestion-chip:hover {
+        background: #e0e7ff;
+        border-color: #a5b4fc;
+        color: #3730a3;
+        transform: translateY(-1px);
+      }
+
+      .suggestion-chip.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.65rem 1.4rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+        white-space: nowrap;
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .btn-primary {
+        background: var(--primary);
+        color: #fff;
+      }
+
+      .btn-primary:hover:not(:disabled) {
+        background: var(--primary-hover);
+      }
+
+      /* Status bar */
+      .status {
+        padding: 0.75rem 1.1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .status-loading {
+        background: var(--loading-bg);
+        color: var(--loading-text);
+      }
+
+      .status-loading::before {
+        content: "";
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--loading-text);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+
+      .status-success {
+        background: var(--success-bg);
+        color: var(--success-text);
+      }
+
+      .status-error {
+        background: var(--error-bg);
+        color: var(--error-text);
+      }
+
+      .status a {
+        color: inherit;
+        font-weight: 600;
+        text-underline-offset: 2px;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Results table */
+      .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.85rem;
+      }
+
+
+      .results-header h2 {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      #jobCount {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-left: 0.5rem;
+        font-weight: 400;
+      }
+
+      .table-wrapper {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+
+      thead th {
+        background: #f8fafc;
+        padding: 0.7rem 1rem;
+        text-align: left;
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+
+      tbody td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+
+      tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      td.num {
+        color: var(--muted);
+        font-size: 0.8rem;
+        width: 2.5rem;
+        text-align: center;
+      }
+
+      td.title {
+        max-width: 320px;
+        font-weight: 500;
+        color: var(--primary);
+      }
+
+      td.title a {
+        color: var(--text);
+        text-decoration: none;
+      }
+
+      td.title a:hover {
+        color: var(--primary);
+        text-decoration: underline;
+      }
+
+      tbody tr {
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+
+      tbody tr:hover td {
+        background: #eef2ff;
+      }
+
+      td.posted {
+        color: var(--muted);
+        font-size: 0.82rem;
+        white-space: nowrap;
+      }
+
+      td.desc {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.45;
+        max-width: 360px;
+        min-width: 180px;
+      }
+
+      .view-link {
+        color: var(--primary);
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 500;
+      }
+
+      .view-link:hover {
+        text-decoration: underline;
+      }
+
+      td.empty {
+        text-align: center;
+        color: var(--muted);
+        padding: 2rem;
+      }
+
+      /* Badges */
+      .badge {
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+        border-radius: 99px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+
+      .badge-linkedin {
+        background: #dbeafe;
+        color: #1e40af;
+      }
+
+      .badge-itviec {
+        background: #fee2e2;
+        color: #b91c1c;
+      }
+
+      .badge-topcv {
+        background: #dcfce7;
+        color: #15803d;
+      }
+
+      .badge-vietnamworks {
+        background: #fef9c3;
+        color: #854d0e;
+      }
+
+      .badge-topdev {
+        background: #ede9fe;
+        color: #5b21b6;
+      }
+
+      .badge-indeed {
+        background: #cffafe;
+        color: #0e7490;
+      }
+
+      .badge-careerviet {
+        background: #ffedd5;
+        color: #c2410c;
+      }
+
+      /* Source filter bar */
+      .filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.75rem;
+      }
+
+      .filter-bar span.filter-label {
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 500;
+        white-space: nowrap;
+      }
+
+      .badge-filter {
+        cursor: pointer;
+        opacity: 0.35;
+        transition: opacity 0.15s, transform 0.1s;
+        user-select: none;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.78rem;
+      }
+
+      .badge-filter.active {
+        opacity: 1;
+      }
+
+      .badge-filter:hover {
+        transform: scale(1.07);
+      }
+
+      /* Actions row */
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 1rem;
+      }
+
+      /* Utility */
+      .hidden {
+        display: none !important;
+      }
+
+      /* Job detail modal */
+      .job-modal {
+        max-width: 1400px !important;
+        width: 96vw !important;
+        height: 90vh;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        padding: 2rem 2.5rem !important;
+      }
+
+      .job-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 0;
+      }
+
+      .job-modal-header h3 {
+        margin: 0;
+        font-size: 1.4rem;
+        line-height: 1.4;
+      }
+
+      /* Sticky company strip below the title */
+      .job-modal-company-strip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 0 0.8rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+        color: var(--text);
+      }
+
+
+      .job-modal-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--muted);
+        padding: 0.25rem;
+        border-radius: 6px;
+        flex-shrink: 0;
+        transition: background 0.15s, color 0.15s;
+      }
+
+      .job-modal-close:hover {
+        background: #f1f5f9;
+        color: var(--text);
+      }
+
+      .job-modal-body {
+        overflow-y: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        padding-right: 0.5rem;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .job-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        margin-bottom: 1.1rem;
+      }
+
+      .job-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        color: var(--text);
+      }
+
+      .job-meta-row svg {
+        flex-shrink: 0;
+        color: var(--muted);
+      }
+
+      .job-meta-row .meta-label {
+        color: var(--muted);
+        min-width: 4.5rem;
+        font-size: 0.82rem;
+      }
+
+      .job-desc-full {
+        font-size: 0.92rem;
+        color: var(--text);
+        line-height: 1.75;
+        padding: 1.5rem;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        margin-bottom: 1.1rem;
+        word-break: break-word;
+      }
+
+      .job-desc-full h1, .job-desc-full h2, .job-desc-full h3, .job-desc-full h4 {
+        margin: 1rem 0 0.5rem;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+
+      .job-desc-full p {
+        margin: 0.4rem 0;
+      }
+
+      .job-desc-full ul, .job-desc-full ol {
+        padding-left: 1.5rem;
+        margin: 0.4rem 0;
+      }
+
+      .job-desc-full li {
+        margin: 0.25rem 0;
+      }
+
+      .job-desc-full strong, .job-desc-full b {
+        font-weight: 600;
+      }
+
+      .job-desc-full a {
+        color: var(--primary);
+        text-decoration: underline;
+      }
+
+      .job-desc-full br {
+        content: "";
+        display: block;
+        margin-top: 0.3rem;
+      }
+
+      .job-desc-full:empty {
+        display: none;
+      }
+
+      .desc-loading {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: #64748b;
+        font-style: italic;
+        font-size: 0.9rem;
+        animation: pill-pulse 1.4s ease-in-out infinite;
+      }
+      .desc-loading::before {
+        content: "";
+        display: inline-block;
+        width: 0.75rem;
+        height: 0.75rem;
+        border: 2px solid #cbd5e1;
+        border-top-color: #3b82f6;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      .job-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      @media (max-width: 640px) {
+        .job-modal-footer {
+          justify-content: center;
+        }
+        .job-modal-footer .btn {
+          flex: 1;
+          justify-content: center;
+        }
+      }
+
+      /* Modal overlay */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(2px);
+      }
+
+      .modal {
+        background: var(--card);
+        border-radius: var(--radius);
+        padding: 1.75rem;
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+        animation: modalIn 0.2s ease-out;
+      }
+
+      @keyframes modalIn {
+        from { opacity: 0; transform: scale(0.95) translateY(8px); }
+        to   { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      .modal h3 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-bottom: 0.3rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .modal p {
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-bottom: 1rem;
+        line-height: 1.5;
+      }
+
+      .modal .field {
+        margin-bottom: 1rem;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1.25rem;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--muted);
+        border: 1.5px solid var(--border);
+      }
+
+      .btn-ghost:hover:not(:disabled) {
+        background: #f1f5f9;
+        color: var(--text);
+      }
+
+      /* Company logo / avatar */
+      .company-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .company-logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        object-fit: contain;
+        flex-shrink: 0;
+        background: #f8fafc;
+        border: 1px solid var(--border);
+      }
+
+      .company-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        user-select: none;
+      }
+
+      /* Skill tags */
+      .skill-tag {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 500;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        white-space: nowrap;
+        transition: background 0.12s, transform 0.1s;
+      }
+
+      .skill-tag:hover {
+        background: #dbeafe;
+        transform: scale(1.05);
+      }
+
+      td.skills-cell {
+        min-width: 160px;
+        max-width: 300px;
+        vertical-align: middle;
+      }
+
+      td.skills-cell > span {
+        display: inline-block;
+        margin: 0.15rem 0.2rem 0.15rem 0;
+      }
+
+      .modal-skills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-bottom: 1rem;
+      }
+
+      .modal-skills .skill-tag {
+        font-size: 0.8rem;
+        padding: 0.2rem 0.6rem;
+      }
+
+      .no-skills {
+        color: var(--muted);
+        font-size: 0.8rem;
+      }
+
+      .skill-tag-more {
+        background: #f1f5f9;
+        color: var(--muted);
+        border-color: var(--border);
+      }
+
+      /* Queue banner */
+      .queue-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.55rem 0.9rem;
+        background: #fef9c3;
+        border: 1px solid #fde047;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: #854d0e;
+        margin-bottom: 0.6rem;
+        animation: pill-pulse 1.6s ease-in-out infinite;
+      }
+      .queue-banner.hidden { display: none; }
+
+      /* Progress pills */
+      .progress-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        padding: 0.6rem 0.9rem;
+        background: var(--loading-bg);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.8rem;
+        color: var(--loading-text);
+      }
+
+      .progress-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--loading-text);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+
+      .progress-count {
+        font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .progress-label {
+        font-weight: 600;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .progress-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        flex: 1;
+      }
+
+      .progress-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 99px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        white-space: nowrap;
+        transition: background 0.2s, color 0.2s;
+      }
+
+      .progress-pill-loading {
+        background: #bfdbfe;
+        color: #1e40af;
+        animation: pill-pulse 1.4s ease-in-out infinite;
+      }
+
+      .progress-pill-done {
+        background: #bbf7d0;
+        color: #15803d;
+        animation: none;
+      }
+
+      .progress-pill-skip {
+        background: #e2e8f0;
+        color: #94a3b8;
+        animation: none;
+        text-decoration: line-through;
+      }
+
+      @keyframes pill-pulse {
+        0%, 100% { opacity: 1; }
+        50%       { opacity: 0.5; }
+      }
+
+      .progress-timer {
+        font-style: italic;
+        margin-left: auto;
+        flex-shrink: 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+
+
+      /* Row highlight pulse on hover */
+      tbody tr {
+        transition: background 0.1s, transform 0.1s;
+      }
+
+      tbody tr:hover {
+        transform: translateX(3px);
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <text x="8" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
+            <text x="22" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
+          </svg>
+        </div>
+        <div class="header-text">
+          <h1>Good Jobs</h1>
+          <p>Search recently posted jobs in Vietnam 🇻🇳</p>
+        </div>
+      </header>
+
+      <!-- Search Card -->
+      <div class="card">
+        <div class="search-grid">
+          <div class="field keyword-field">
+            <label for="keyword">Job Title</label>
+            <input
+              id="keyword"
+              type="text"
+              placeholder="Job title or role…"
+              value=""
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="field location-field">
+            <label for="locationSelect">Location</label>
+            <select id="locationSelect">
+              <option value="Ho Chi Minh City">Ho Chi Minh City</option>
+              <option value="Ha Noi">Ha Noi</option>
+              <option value="Da Nang">Da Nang</option>
+              <option value="_custom">Other…</option>
+            </select>
+            <input
+              id="locationCustom"
+              type="text"
+              placeholder="Enter city name"
+              class="hidden"
+              autocomplete="off"
+            />
+          </div>
+
+          <div class="field button-field">
+            <label>&nbsp;</label>
+            <button id="fetchBtn" class="btn btn-primary">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              Scrape Jobs
+            </button>
+          </div>
+
+          <div class="suggestions">
+            <span class="suggestion-chip" data-kw="AI Engineer">AI Engineer</span>
+            <span class="suggestion-chip" data-kw="Product Manager">Product Manager</span>
+            <span class="suggestion-chip" data-kw="Business Analyst">Business Analyst</span>
+            <span class="suggestion-chip" data-kw="Backend Engineer">Backend Engineer</span>
+            <span class="suggestion-chip" data-kw="Frontend Engineer">Frontend Engineer</span>
+            <span class="suggestion-chip" data-kw="Fullstack Engineer">Fullstack Engineer</span>
+            <span class="suggestion-chip" data-kw="Data Engineer">Data Engineer</span>
+            <span class="suggestion-chip" data-kw="DevOps Engineer">DevOps Engineer</span>
+            <span class="suggestion-chip" data-kw="Flutter Developer">Flutter Developer</span>
+            <span class="suggestion-chip" data-kw="QA Engineer">QA Engineer</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div id="status" class="status hidden"></div>
+
+      <!-- Queue banner — shown when server is busy -->
+      <div id="queueBanner" class="queue-banner hidden"></div>
+
+      <!-- Per-site progress bar (spinner + count + pills + timer on one line) -->
+      <div id="progressBar" class="progress-bar hidden">
+        <span id="progressSpinner" class="progress-spinner"></span>
+        <span id="progressCount" class="progress-count"></span>
+        <div id="progressPills" class="progress-pills"></div>
+        <span id="progressTimer" class="progress-timer">0s</span>
+      </div>
+
+      <!-- Results -->
+      <div id="results" class="hidden">
+        <div class="results-header">
+          <h2>Results <span id="jobCount"></span></h2>
+        </div>
+
+        <div id="filterBar" class="filter-bar hidden">
+          <span class="filter-label">Filter:</span>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Job Title</th>
+                <th>Company</th>
+                <th>Location</th>
+                <th>Posted</th>
+                <th>Skills</th>
+                <th>Description</th>
+                <th>Source</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="jobsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="actions">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Job Detail Modal -->
+    <div id="jobModal" class="modal-overlay hidden">
+      <div class="modal job-modal">
+        <div class="job-modal-header">
+          <h3 id="jobModalTitle"></h3>
+          <button id="jobModalClose" class="job-modal-close" aria-label="Close">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M18 6 6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <!-- Sticky company strip (outside scroll area) -->
+        <div class="job-modal-company-strip">
+          <span id="jobModalCompany"></span>
+        </div>
+        <div class="job-modal-body">
+          <div class="job-meta">
+            <div class="job-meta-row">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10c0 6-9 13-9 13s-9-7-9-13a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span id="jobModalLocation"></span>
+            </div>
+            <div class="job-meta-row">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span id="jobModalPosted"></span>
+            </div>
+            <div class="job-meta-row">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span id="jobModalSource"></span>
+            </div>
+          </div>
+          <div id="jobModalSkills" class="modal-skills"></div>
+          <div id="jobModalDesc" class="job-desc-full"></div>
+        </div>
+        <div class="job-modal-footer">
+          <button id="jobModalCloseBtn" class="btn btn-ghost">Close</button>
+          <a id="jobModalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">
+            View on Site ↗
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <footer style="text-align:center;margin-top:3rem;padding:1.25rem 1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.8rem;">
+      &copy; 2026 Good Jobs | Scrape every 2 hours
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      document.addEventListener("contextmenu", (e) => e.preventDefault());
+      // Prevent background page scroll when modal overlay is touched on mobile
+      document.getElementById("jobModal").addEventListener("touchmove", (e) => {
+        if (!e.target.closest(".job-modal-body")) e.preventDefault();
+      }, { passive: false });
+    </script>
+  </body>
+</html>
