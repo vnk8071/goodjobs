@@ -24,27 +24,16 @@ services:
     networks:
       - internal
 
-  # frontend:
-  #   build:
-  #     context: ./frontend
-  #     args:
-  #       VITE_API_URL: http://localhost:8000
-  #   ports:
-  #     - "80:80"
-  #   depends_on:
-  #     - backend
-  #   restart: unless-stopped
-  #   networks:
-  #     - internal
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "80:80"
     depends_on:
       - backend
+    restart: unless-stopped
     networks:
       - internal
 
