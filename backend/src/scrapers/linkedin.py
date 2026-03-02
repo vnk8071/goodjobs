@@ -10,11 +10,11 @@ from bs4 import BeautifulSoup
 from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS, session
 from ..utils import _parse_iso_date, _relative_display, _clean_html, _extract_html, _truncate, _fmt_num
 
-_LINKEDIN_GEO_IDS: dict[str, str] = {
-    "Ho Chi Minh City": "103697962",
-    "Hanoi":            "105790653",
-    "Da Nang":          "115237480",
-    "Vietnam":          "104195383",
+_LINKEDIN_GEO_IDS: dict[str, list[str]] = {
+    "Ho Chi Minh City": ["103697962", "102267004", "90010187", "109912426", "100126839"],
+    "Hanoi":            ["105790653", "90010186", ],
+    "Da Nang":          ["115237480", "102868289", "105668258", "90010189"],
+    "Vietnam":          ["104195383"],
 }
 
 _LINKEDIN_LOCATION_MAP: dict[str, str] = {
@@ -49,41 +49,42 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
     since_seconds: when set, adds f_TPR=r{since_seconds} to only fetch jobs posted in that window.
     """
     mapped_location = _linkedin_location(location or "Ho Chi Minh City")
-    geo_id          = _LINKEDIN_GEO_IDS.get(mapped_location, _LINKEDIN_GEO_IDS["Ho Chi Minh City"])
+    geo_ids         = _LINKEDIN_GEO_IDS.get(mapped_location, _LINKEDIN_GEO_IDS["Ho Chi Minh City"])
     tpr_param       = f"&f_TPR=r{since_seconds}" if since_seconds else ""
 
     def _fetch_all_pages(kw: str) -> list[dict]:
-        kw_enc   = quote_plus(kw)
+        kw_enc    = quote_plus(kw)
         all_jobs: list[dict] = []
         seen: set[str] = set()
-        start = 0
-        while len(all_jobs) < _LINKEDIN_MAX_RESULTS:
-            url = (
-                f"https://www.linkedin.com/jobs/search/"
-                f"?keywords={kw_enc}"
-                f"&geoId={geo_id}"
-                f"&sortBy=DD"
-                f"{tpr_param}"
-                f"&start={start}"
-            )
-            page_jobs = _linkedin_requests(url, _LINKEDIN_PAGE_SIZE * 2)
-            if not page_jobs:
-                if start == 0:
-                    print(f"[LinkedIn] requests blocked for geoId={geo_id} — trying Playwright")
-                    page_jobs = _linkedin_playwright(url, _LINKEDIN_PAGE_SIZE * 2)
+        for geo_id in geo_ids:
+            start = 0
+            while len(all_jobs) < _LINKEDIN_MAX_RESULTS:
+                url = (
+                    f"https://www.linkedin.com/jobs/search/"
+                    f"?keywords={kw_enc}"
+                    f"&geoId={geo_id}"
+                    f"&sortBy=DD"
+                    f"{tpr_param}"
+                    f"&start={start}"
+                )
+                page_jobs = _linkedin_requests(url, _LINKEDIN_PAGE_SIZE * 2)
                 if not page_jobs:
+                    if start == 0:
+                        print(f"[LinkedIn] requests blocked for geoId={geo_id} — trying Playwright")
+                        page_jobs = _linkedin_playwright(url, _LINKEDIN_PAGE_SIZE * 2)
+                    if not page_jobs:
+                        break
+                added = 0
+                for j in page_jobs:
+                    if j["link"] not in seen:
+                        seen.add(j["link"])
+                        all_jobs.append(j)
+                        added += 1
+                if added == 0 or len(page_jobs) < _LINKEDIN_PAGE_SIZE:
                     break
-            added = 0
-            for j in page_jobs:
-                if j["link"] not in seen:
-                    seen.add(j["link"])
-                    all_jobs.append(j)
-                    added += 1
-            if added == 0 or len(page_jobs) < _LINKEDIN_PAGE_SIZE:
-                break
-            start += _LINKEDIN_PAGE_SIZE
-        pages = start // _LINKEDIN_PAGE_SIZE + 1
-        print(f"[LinkedIn] '{kw}' → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
+                start += _LINKEDIN_PAGE_SIZE
+            pages = start // _LINKEDIN_PAGE_SIZE + 1
+            print(f"[LinkedIn] '{kw}' geoId={geo_id} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
         return all_jobs
 
     all_jobs: list[dict] = _fetch_all_pages(keyword)
