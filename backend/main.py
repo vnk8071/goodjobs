@@ -15,7 +15,7 @@ from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
 from src.matching import title_matches, extract_skills, posted_ts, posted_relative
 from src.models import Job, ScrapeRequest
-from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
+from src.ratelimit import _KEYWORD_ALIASES, _KEYWORD_ALIAS_VARIANTS, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
 from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
@@ -59,6 +59,14 @@ def _refresh_posted_times(jobs: list[dict]) -> None:
     for j in jobs:
         if "posted_ts" in j:
             j["posted"] = posted_relative(j["posted_ts"])
+
+
+def _get_related_keywords(cache_keyword: str) -> list[str]:
+    """Return all keyword aliases for a canonical keyword."""
+    related = [cache_keyword]
+    if cache_keyword in _KEYWORD_ALIAS_VARIANTS:
+        related.extend(_KEYWORD_ALIAS_VARIANTS[cache_keyword])
+    return related
 
 
 _SCRAPERS = {
@@ -170,13 +178,20 @@ async def scrape(req: ScrapeRequest, request: Request):
 
     cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), keyword)
 
-    cached = await cache_get(cache_keyword, req.location)
-    if cached:
-        cached_jobs, _ = cached
-        log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
-        refiltered = [j for j in cached_jobs if title_matches(j.get("title", ""), cache_keyword)]
-        _refresh_posted_times(refiltered)
-        return refiltered
+    all_cached_jobs: list[dict] = []
+    related_keywords = _get_related_keywords(cache_keyword)
+    for related_kw in related_keywords:
+        cached = await cache_get(related_kw, req.location)
+        if cached:
+            cached_jobs, _ = cached
+            all_cached_jobs.extend(cached_jobs)
+
+    if all_cached_jobs:
+        log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords (/scrape)")
+        all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
+        unique_jobs = list(all_cached_jobs_by_link.values())
+        _refresh_posted_times(unique_jobs)
+        return unique_jobs
 
     loop = asyncio.get_event_loop()
 
@@ -265,13 +280,23 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         sem = _get_sem()
         ip_active_inc(ip)
         try:
-            cached = await cache_get(cache_keyword, req.location)
-            if cached:
-                cached_jobs, cache_fetched_ts = cached
-                log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r}")
-                refiltered = [j for j in cached_jobs if title_matches(j.get("title", ""), cache_keyword)]
-                _refresh_posted_times(refiltered)
-                yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
+            all_cached_jobs: list[dict] = []
+            cache_fetched_ts_list = []
+            related_keywords = _get_related_keywords(cache_keyword)
+            for related_kw in related_keywords:
+                cached = await cache_get(related_kw, req.location)
+                if cached:
+                    cached_jobs, cache_fetched_ts = cached
+                    all_cached_jobs.extend(cached_jobs)
+                    cache_fetched_ts_list.append(cache_fetched_ts)
+
+            if all_cached_jobs:
+                log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords")
+                all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
+                unique_jobs = list(all_cached_jobs_by_link.values())
+                _refresh_posted_times(unique_jobs)
+                latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
+                yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
                 return
 
