@@ -98,7 +98,11 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                             )
                         except Exception:
                             pass
-                        detail_soup = BeautifulSoup(page.content(), "html.parser")
+                        detail_html = page.content()
+                        if "This website uses a security service" in detail_html:
+                            job["description"] = ""
+                            continue
+                        detail_soup = BeautifulSoup(detail_html, "html.parser")
 
                         salary_text = ""
                         for sal_sel in (

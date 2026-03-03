@@ -43,37 +43,6 @@ keywordEl.addEventListener("input", () => {
   });
 });
 
-const _KW_CORRECTIONS: [RegExp, string][] = [
-  [/\bfe\b/i,                                        "Frontend Engineer"],
-  [/\bbe\b/i,                                        "Backend Engineer"],
-  [/\bfs\b/i,                                        "Fullstack Engineer"],
-  [/\bfull.?stack(\s+(engineer|developer))?\b/i,     "Fullstack Engineer"],
-  [/\bfront.?end(\s+(engineer|developer))?\b/i,      "Frontend Engineer"],
-  [/\bback.?end(\s+(engineer|developer))?\b/i,       "Backend Engineer"],
-  [/\bml\b/i,                                        "Machine Learning"],
-  [/\bai\/ml\b/i,                                    "AI Engineer"],
-  [/\bqa(\s+engineer)?\b/i,                          "QA Engineer"],
-  [/\bba\b/i,                                        "Business Analyst"],
-  [/\bda\b/i,                                        "Data Analyst"],
-  [/\bpm\b/i,                                        "Product Manager"],
-  [/\bpo\b/i,                                        "Product Owner"],
-  [/\bsre\b/i,                                       "Site Reliability Engineer"],
-  [/\bdev\s*ops(\s+engineer)?\b/i,                   "DevOps Engineer"],
-  [/\binfra(\s+engineer)?\b/i,                       "Infrastructure Engineer"],
-  [/\bsec\s*ops(\s+engineer)?\b/i,                   "Security Engineer"],
-  [/\(?\bios\b\)?/i,                                 "iOS Developer"],
-  [/\bandroid\s+dev\b/i,                             "Android Developer"],
-  [/\bui\s*\/?\s*ux\b/i,                             "UI/UX Designer"],
-];
-
-/** Apply keyword corrections from _KW_CORRECTIONS, returning the canonical form. */
-function _normalizeKeyword(kw: string): string {
-  const trimmed = kw.trim();
-  for (const [pattern, replacement] of _KW_CORRECTIONS) {
-    if (pattern.test(trimmed)) return trimmed.replace(pattern, replacement);
-  }
-  return trimmed;
-}
 
 keywordEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") fetchBtn.click();
@@ -82,8 +51,7 @@ keywordEl.addEventListener("keydown", (e) => {
 let abortController: AbortController | null = null;
 
 fetchBtn.addEventListener("click", async () => {
-  const raw = keywordEl.value;
-  const keyword = _normalizeKeyword(raw);
+  const keyword = keywordEl.value.trim();
   if (!keyword) {
     setStatus("Please enter a job title.", "error");
     return;

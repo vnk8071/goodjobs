@@ -62,10 +62,19 @@ def _refresh_posted_times(jobs: list[dict]) -> None:
 
 
 def _get_related_keywords(cache_keyword: str) -> list[str]:
-    """Return all keyword aliases for a canonical keyword."""
-    related = [cache_keyword]
+    """Return all keywords to fetch: the canonical keyword and its aliases.
+
+    Cache keys are stored in lowercase, so we convert all to lowercase.
+    Returns both the canonical form and its aliases (e.g., 'product manager',
+    'product owner', 'scrum master') so searches return jobs from all related
+    job titles.
+    """
+    related = [cache_keyword.lower()]
     if cache_keyword in _KEYWORD_ALIAS_VARIANTS:
-        related.extend(_KEYWORD_ALIAS_VARIANTS[cache_keyword])
+        aliases = _KEYWORD_ALIAS_VARIANTS[cache_keyword]
+        for alias in aliases:
+            if alias.lower() not in related:
+                related.append(alias.lower())
     return related
 
 
