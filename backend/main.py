@@ -174,8 +174,9 @@ async def scrape(req: ScrapeRequest, request: Request):
     if cached:
         cached_jobs, _ = cached
         log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
-        _refresh_posted_times(cached_jobs)
-        return cached_jobs
+        refiltered = [j for j in cached_jobs if title_matches(j.get("title", ""), cache_keyword)]
+        _refresh_posted_times(refiltered)
+        return refiltered
 
     loop = asyncio.get_event_loop()
 
@@ -268,8 +269,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             if cached:
                 cached_jobs, cache_fetched_ts = cached
                 log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r}")
-                _refresh_posted_times(cached_jobs)
-                yield f"event: cached\ndata: {json.dumps({'jobs': cached_jobs, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
+                refiltered = [j for j in cached_jobs if title_matches(j.get("title", ""), cache_keyword)]
+                _refresh_posted_times(refiltered)
+                yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
                 return
 

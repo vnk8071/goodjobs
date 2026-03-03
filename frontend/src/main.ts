@@ -88,7 +88,6 @@ fetchBtn.addEventListener("click", async () => {
     setStatus("Please enter a job title.", "error");
     return;
   }
-  keywordEl.value = keyword; // reflect normalization to user
 
   abortController?.abort();
   abortController = new AbortController();
