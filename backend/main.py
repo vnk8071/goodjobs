@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from src.cache import cache_get, cache_set, cache_fuzzy_get
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
-from src.matching import title_matches, extract_skills, posted_ts
+from src.matching import title_matches, extract_skills, posted_ts, posted_relative
 from src.models import Job, ScrapeRequest
 from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
@@ -52,6 +52,13 @@ def _get_sem() -> asyncio.Semaphore:
     if _scrape_sem is None:
         _scrape_sem = asyncio.Semaphore(_MAX_CONCURRENT)
     return _scrape_sem
+
+
+def _refresh_posted_times(jobs: list[dict]) -> None:
+    """Recalculate the 'posted' relative time string for all jobs from their posted_ts."""
+    for j in jobs:
+        if "posted_ts" in j:
+            j["posted"] = posted_relative(j["posted_ts"])
 
 
 _SCRAPERS = {
@@ -167,6 +174,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     if cached:
         cached_jobs, _ = cached
         log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r} (/scrape)")
+        _refresh_posted_times(cached_jobs)
         return cached_jobs
 
     loop = asyncio.get_event_loop()
@@ -206,6 +214,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
     await cache_set(cache_keyword, req.location, jobs, time.time())
+    _refresh_posted_times(jobs)
     return jobs
 
 
@@ -237,6 +246,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         for j in jobs:
             if title_matches(j.get("title", ""), keyword):
                 j["posted_ts"] = posted_ts(j)
+                j["posted"] = posted_relative(j["posted_ts"])
                 j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
                 filtered.append(j)
         return filtered
@@ -258,6 +268,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             if cached:
                 cached_jobs, cache_fetched_ts = cached
                 log_app(f"cache hit — {len(cached_jobs)} jobs for {cache_keyword!r}")
+                _refresh_posted_times(cached_jobs)
                 yield f"event: cached\ndata: {json.dumps({'jobs': cached_jobs, 'fetched_ts': cache_fetched_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
                 return
@@ -268,6 +279,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
                 if refiltered:
                     log_app(f"cache fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
+                    _refresh_posted_times(refiltered)
                     yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
                 else:
                     log_app(f"cache fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")

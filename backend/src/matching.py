@@ -101,3 +101,26 @@ def posted_ts(j: dict) -> float:
         except ValueError:
             continue
     return 0.0
+
+
+def posted_relative(posted_ts_val: float) -> str:
+    """Return a human-readable relative time string (e.g. '2 hours ago') from a Unix timestamp."""
+    if posted_ts_val <= 0:
+        return ""
+    now = datetime.now(timezone.utc).timestamp()
+    delta_secs = int(now - posted_ts_val)
+    if delta_secs < 0:
+        delta_secs = 0
+    if delta_secs < 60:
+        return f"{delta_secs} second{'s' if delta_secs != 1 else ''} ago"
+    delta_mins = delta_secs // 60
+    if delta_mins < 60:
+        return f"{delta_mins} minute{'s' if delta_mins != 1 else ''} ago"
+    delta_hours = delta_mins // 60
+    if delta_hours < 24:
+        return f"{delta_hours} hour{'s' if delta_hours != 1 else ''} ago"
+    delta_days = delta_hours // 24
+    if delta_days < 7:
+        return f"{delta_days} day{'s' if delta_days != 1 else ''} ago"
+    delta_weeks = delta_days // 7
+    return f"{delta_weeks} week{'s' if delta_weeks != 1 else ''} ago"
