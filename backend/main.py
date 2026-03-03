@@ -15,7 +15,7 @@ from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
 from src.matching import title_matches, extract_skills, posted_ts, posted_relative
 from src.models import Job, ScrapeRequest
-from src.ratelimit import _KEYWORD_ALIASES, _KEYWORD_ALIAS_VARIANTS, check_rate_limit, ip_active_inc, ip_active_dec
+from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
 from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
@@ -62,20 +62,8 @@ def _refresh_posted_times(jobs: list[dict]) -> None:
 
 
 def _get_related_keywords(cache_keyword: str) -> list[str]:
-    """Return all keywords to fetch: the canonical keyword and its aliases.
-
-    Cache keys are stored in lowercase, so we convert all to lowercase.
-    Returns both the canonical form and its aliases (e.g., 'product manager',
-    'product owner', 'scrum master') so searches return jobs from all related
-    job titles.
-    """
-    related = [cache_keyword.lower()]
-    if cache_keyword in _KEYWORD_ALIAS_VARIANTS:
-        aliases = _KEYWORD_ALIAS_VARIANTS[cache_keyword]
-        for alias in aliases:
-            if alias.lower() not in related:
-                related.append(alias.lower())
-    return related
+    """Return the canonical cache key. All alias jobs are stored in the canonical cache."""
+    return [cache_keyword.lower()]
 
 
 _SCRAPERS = {

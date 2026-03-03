@@ -86,28 +86,22 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         log_app(f"[warmup][{kw}][{loc}][{site}] {len(result)} jobs in {time.perf_counter()-t0:.1f}s")
         return result
 
-    scrape_keywords = [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, [])
-
     t0 = time.perf_counter()
-    results = []
-    for scrape_kw in scrape_keywords:
-        for site, fn in scrapers.items():
-            try:
-                result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
-                results.append(result)
-            except Exception as e:
-                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
-                results.append([])
-
     jobs: list[dict] = []
     linkedin_jobs: list[dict] = []
     topcv_jobs: list[dict] = []
-    for result in results:
-        if isinstance(result, Exception):
-            log_app(f"[warmup][{kw}][{loc}] scraper error: {result}")
-        elif isinstance(result, list):
+    seen_links: set[str] = set()
+
+    for scrape_kw in [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, []):
+        for site, fn in scrapers.items():
+            try:
+                result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
+            except Exception as e:
+                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
+                result = []
             for j in result:
-                if title_matches(j.get("title", ""), kw):
+                if title_matches(j.get("title", ""), scrape_kw) and j.get("link") not in seen_links:
+                    seen_links.add(j["link"])
                     j["posted_ts"] = posted_ts(j)
                     jobs.append(j)
                     if j.get("source") == "LinkedIn":
