@@ -73,6 +73,9 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                 pass
 
             list_html = page.content()
+            if "This website uses a security service" in list_html:
+                browser.close()
+                return []
             soup = BeautifulSoup(list_html, "html.parser")
             jobs = _parse_itviec_cards(soup)
 
@@ -267,6 +270,8 @@ def _parse_itviec_cards(soup: BeautifulSoup) -> list[dict]:
 
 def _parse_itviec_description(html: str) -> tuple[str, str]:
     """Extract (description_html, location) from an ITViec job detail page."""
+    if "This website uses a security service" in html:
+        return "", ""
     soup = BeautifulSoup(html, "html.parser")
     location = _parse_itviec_location(soup)
 
