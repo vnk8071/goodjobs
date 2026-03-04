@@ -21,7 +21,7 @@ _WARMUP_KEYWORDS = [
     "Flutter Developer",
     "QA Engineer",
 ]
-_WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi", "Da Nang"]
+_WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]
 
 _WARMUP_KEYWORDS_KEY = "warmup:keywords"
 
