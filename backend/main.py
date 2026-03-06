@@ -71,6 +71,7 @@ _SCRAPERS = {
     "itviec":       scrape_itviec,
     "topcv":        scrape_topcv,
     "vietnamworks": scrape_vietnamworks,
+    # TODO: re-enable these once we have error handling and monitoring in place to catch scraper breakages faster
     # "topdev":       scrape_topdev,
     # "indeed":       scrape_indeed,
     "careerviet":   scrape_careerviet,
@@ -135,36 +136,6 @@ async def list_warmup_keywords():
     return {"keywords": keywords, "count": len(keywords)}
 
 
-@app.post("/warmup/keywords")
-async def add_keyword(req: ScrapeRequest):
-    """Add a keyword to the warmup set and immediately scrape all locations for it."""
-    keyword = req.keyword.strip()
-    if not keyword:
-        raise HTTPException(status_code=400, detail="keyword is required")
-    loop = asyncio.get_event_loop()
-    added = await add_warmup_keyword(keyword)
-
-    async def _scrape_new() -> None:
-        for loc in _WARMUP_LOCATIONS:
-            try:
-                async with _get_sem():
-                    await _scrape_keyword(keyword, loc, loop, _executor, _SCRAPERS)
-            except Exception as e:
-                log_app(f"warmup/add error for {keyword!r}/{loc!r}: {e}", "ERROR")
-    asyncio.create_task(_scrape_new())
-
-    return {"keyword": keyword, "added": added, "scraping": True, "locations": _WARMUP_LOCATIONS}
-
-
-@app.delete("/warmup/keywords/{keyword}")
-async def delete_keyword(keyword: str):
-    """Remove a keyword from the warmup set (does not delete cached jobs)."""
-    removed = await remove_warmup_keyword(keyword)
-    if not removed:
-        raise HTTPException(status_code=404, detail=f"{keyword!r} not found in warmup keywords")
-    return {"keyword": keyword, "removed": True}
-
-
 @app.post("/scrape", response_model=list[Job])
 async def scrape(req: ScrapeRequest, request: Request):
     """Scrape jobs for a keyword and location, returning all results as a JSON array."""
@@ -187,6 +158,10 @@ async def scrape(req: ScrapeRequest, request: Request):
         log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords (/scrape)")
         all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
         unique_jobs = list(all_cached_jobs_by_link.values())
+        if keyword.lower() != cache_keyword.lower():
+            kw_lower = keyword.strip().lower()
+            unique_jobs = [j for j in unique_jobs if kw_lower in j.get("title", "").lower()]
+            log_app(f"alias filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
         _refresh_posted_times(unique_jobs)
         return unique_jobs
 
@@ -291,6 +266,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords")
                 all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
                 unique_jobs = list(all_cached_jobs_by_link.values())
+                if keyword.lower() != cache_keyword.lower():
+                    kw_lower = keyword.strip().lower()
+                    unique_jobs = [j for j in unique_jobs if kw_lower in j.get("title", "").lower()]
+                    log_app(f"alias filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
