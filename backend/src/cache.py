@@ -45,7 +45,7 @@ async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: f
         log_app(f"cache set error: {e}", "ERROR")
 
 
-async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.6) -> tuple[list[dict], float] | None:
+async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) -> tuple[list[dict], float] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
     Scans all keys matching jobs:*:<location> and picks the one whose keyword
@@ -60,11 +60,19 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.6) -
             return None
 
         kw_lower = keyword.lower().strip()
+        kw_words = set(kw_lower.split())
         best_key: str | None = None
         best_score = 0.0
 
         for key in keys:
             cached_kw = key[len("jobs:") : -len(f":{loc}")] if loc else key[len("jobs:"):]
+            cached_words = set(cached_kw.split())
+
+            # Word-containment: all words of the shorter phrase must appear in the longer one
+            shorter, longer = (kw_words, cached_words) if len(kw_words) <= len(cached_words) else (cached_words, kw_words)
+            if not shorter.issubset(longer):
+                continue
+
             score = SequenceMatcher(None, kw_lower, cached_kw).ratio()
             if score > best_score:
                 best_score = score
