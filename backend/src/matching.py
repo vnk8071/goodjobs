@@ -3,6 +3,18 @@ from datetime import datetime, timezone
 
 from .constants import SYNONYMS, COMPILED_SKILLS
 
+_LEVEL_WORDS = {
+    "senior", "sr", "junior", "jr", "intern", "internship",
+    "fresher", "lead", "staff", "principal", "mid", "entry",
+    "associate", "head",
+}
+
+
+def strip_level(keyword: str) -> str:
+    """Return keyword with seniority/level words removed, lowercased and stripped."""
+    words = keyword.lower().strip().split()
+    return " ".join(w for w in words if w not in _LEVEL_WORDS).strip() or keyword.lower().strip()
+
 
 def _word_similarity(a: str, b: str) -> float:
     """Return character-level Jaccard similarity between two strings."""

@@ -5,6 +5,7 @@ from redis.asyncio import Redis
 
 from .constants import REDIS_URL
 from .logger import log_app
+from .matching import strip_level
 
 _redis: Redis | None = None
 
@@ -45,12 +46,12 @@ async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: f
         log_app(f"cache set error: {e}", "ERROR")
 
 
-async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) -> tuple[list[dict], float] | None:
+async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) -> tuple[list[dict], float, str] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
     Scans all keys matching jobs:*:<location> and picks the one whose keyword
     has the highest SequenceMatcher ratio against the query keyword, provided it
-    meets threshold. Returns (jobs, fetched_ts) or None.
+    meets threshold. Returns (jobs, fetched_ts, matched_keyword) or None.
     """
     try:
         loc = location.lower().strip()
@@ -60,20 +61,26 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) 
             return None
 
         kw_lower = keyword.lower().strip()
-        kw_words = set(kw_lower.split())
+        kw_core = strip_level(kw_lower)
+        kw_core_words = set(kw_core.split())
         best_key: str | None = None
         best_score = 0.0
 
         for key in keys:
             cached_kw = key[len("jobs:") : -len(f":{loc}")] if loc else key[len("jobs:"):]
-            cached_words = set(cached_kw.split())
+            cached_core = strip_level(cached_kw)
+            cached_core_words = list(cached_core.split())
 
-            # Word-containment: all words of the shorter phrase must appear in the longer one
-            shorter, longer = (kw_words, cached_words) if len(kw_words) <= len(cached_words) else (cached_words, kw_words)
-            if not shorter.issubset(longer):
+            # Each word in the shorter phrase must fuzzy-match a word in the longer phrase
+            shorter_words = kw_core_words if len(kw_core_words) <= len(cached_core_words) else set(cached_core_words)
+            longer_words  = cached_core_words if len(kw_core_words) <= len(cached_core_words) else list(kw_core_words)
+            if not all(
+                any(SequenceMatcher(None, sw, lw).ratio() >= 0.8 for lw in longer_words)
+                for sw in shorter_words
+            ):
                 continue
 
-            score = SequenceMatcher(None, kw_lower, cached_kw).ratio()
+            score = SequenceMatcher(None, kw_core, cached_core).ratio()
             if score > best_score:
                 best_score = score
                 best_key = key
@@ -88,8 +95,9 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) 
         jobs = data["jobs"]
         if not jobs:
             return None
+        matched_kw = best_key[len("jobs:") : -len(f":{loc}")] if loc else best_key[len("jobs:"):]
         log_app(f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)")
-        return jobs, float(data["fetched_ts"])
+        return jobs, float(data["fetched_ts"]), matched_kw
     except Exception as e:
         log_app(f"cache fuzzy_get error: {e}", "ERROR")
         return None

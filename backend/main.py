@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from src.cache import cache_get, cache_set, cache_fuzzy_get
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
-from src.matching import title_matches, extract_skills, posted_ts, posted_relative
+from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level
 from src.models import Job, ScrapeRequest
 from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
@@ -144,7 +144,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         raise HTTPException(status_code=400, detail="keyword is required")
     log_search(request, keyword, req.location)
 
-    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), keyword)
+    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), strip_level(keyword))
 
     all_cached_jobs: list[dict] = []
     related_keywords = _get_related_keywords(cache_keyword)
@@ -158,10 +158,8 @@ async def scrape(req: ScrapeRequest, request: Request):
         log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords (/scrape)")
         all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
         unique_jobs = list(all_cached_jobs_by_link.values())
-        if keyword.lower() != cache_keyword.lower():
-            kw_lower = keyword.strip().lower()
-            unique_jobs = [j for j in unique_jobs if kw_lower in j.get("title", "").lower()]
-            log_app(f"alias filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
+        unique_jobs = [j for j in unique_jobs if title_matches(j.get("title", ""), keyword)]
+        log_app(f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
         _refresh_posted_times(unique_jobs)
         return unique_jobs
 
@@ -225,7 +223,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
     log_search(request, keyword, req.location)
 
-    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), keyword)
+    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), strip_level(keyword))
 
     loop = asyncio.get_event_loop()
 
@@ -266,10 +264,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 log_app(f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords")
                 all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
                 unique_jobs = list(all_cached_jobs_by_link.values())
-                if keyword.lower() != cache_keyword.lower():
-                    kw_lower = keyword.strip().lower()
-                    unique_jobs = [j for j in unique_jobs if kw_lower in j.get("title", "").lower()]
-                    log_app(f"alias filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
+                unique_jobs = [j for j in unique_jobs if title_matches(j.get("title", ""), keyword)]
+                log_app(f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
@@ -278,7 +274,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
             fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
             if fuzzy:
-                fuzzy_jobs, fuzzy_fetched_ts = fuzzy
+                fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
                 refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
                 if refiltered:
                     log_app(f"cache fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
@@ -299,7 +295,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
                 fetch_ts = time.time()
 
-                scrape_kw = cache_keyword
+                scrape_kw = fuzzy_matched_kw if fuzzy else cache_keyword
                 other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
                 futures: dict = {
                     loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location): site
