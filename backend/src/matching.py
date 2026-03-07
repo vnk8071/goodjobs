@@ -84,6 +84,11 @@ def title_matches(title: str, keyword: str) -> bool:
     if all(idx >= 0 for idx in indices) and indices == sorted(indices):
         return True
 
+    # Level words in the keyword are hard requirements — if any failed to match, reject.
+    level_kw_words = [w for w in kw_words if w in _LEVEL_WORDS]
+    if any(_match_index(w) < 0 for w in level_kw_words):
+        return False
+
     kw_set   = set(kw_words)
     core_set = set(core_words)
     overlap  = len(kw_set & core_set) / len(kw_set | core_set)

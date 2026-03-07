@@ -277,9 +277,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
                 refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
                 if refiltered:
-                    log_app(f"cache fuzzy — streaming {len(refiltered)} re-filtered jobs for {keyword!r}, then scraping")
+                    log_app(f"cache fuzzy — streaming {len(refiltered)} jobs for {keyword!r}, done")
                     _refresh_posted_times(refiltered)
                     yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
+                    yield "event: done\ndata: {}\n\n"
+                    return
                 else:
                     log_app(f"cache fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")
 
