@@ -68,12 +68,13 @@ def title_matches(title: str, keyword: str) -> bool:
 
     def _match_index(kw: str) -> int:
         """Return the earliest core_words index that matches kw, or -1 if none."""
+        is_level = kw in _LEVEL_WORDS
         kw_variants = _expand(kw)
         for i, tw in enumerate(core_words):
             for variant in kw_variants:
                 if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
                     return i
-            if _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
+            if not is_level and _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
                 return i
         return -1
 
