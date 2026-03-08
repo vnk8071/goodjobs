@@ -35,7 +35,10 @@ def scrape_topcv(keyword: str, location: str = "Ho Chi Minh City", max_results: 
     Only returns jobs posted within RECENT_DAYS days.
     """
     keyword_slug              = keyword.strip().lower().replace(" ", "-")
-    city_slug, city_code, loc_param = _topcv_city_params(location or "Ho Chi Minh City")
+    result = _topcv_city_params(location or "Ho Chi Minh City")
+    if result is None:
+        return []
+    city_slug, city_code, loc_param = result
     url = (
         f"https://www.topcv.vn/tim-viec-lam-{keyword_slug}"
         f"-tai-{city_slug}-{city_code}"
@@ -80,13 +83,13 @@ def scrape_topcv_detail_one(job: dict, cooldown: float) -> None:
     except Exception as e:
         print(f"[TopCV detail] {e}")
 
-def _topcv_city_params(location: str) -> tuple[str, str, str]:
+def _topcv_city_params(location: str) -> tuple[str, str, str] | None:
     """Return (city_slug, city_code, loc_param) for the TopCV URL from a location string."""
     key = location.strip().lower()
     for candidate, params in _TOPCV_CITY_PARAMS.items():
         if candidate in key:
             return params
-    return ("ho-chi-minh", "kl2", "l2")
+    return None
 
 
 def _topcv_playwright(url: str, max_results: int, location: str = "") -> list[dict]:

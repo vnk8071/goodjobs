@@ -37,17 +37,20 @@ def scrape_careerviet(keyword: str, location: str = "Ho Chi Minh City", max_resu
     Only returns jobs posted within RECENT_DAYS days.
     """
     keyword_slug = keyword.strip().lower().replace(" ", "-")
-    city_slug, city_code = _careerviet_city(location or "Ho Chi Minh City")
+    city = _careerviet_city(location or "Ho Chi Minh City")
+    if city is None:
+        return []
+    city_slug, city_code = city
     url = f"https://careerviet.vn/viec-lam/{keyword_slug}-{city_slug}-{city_code}-vi.html"
     return _careerviet_playwright(url, max_results)
 
-def _careerviet_city(location: str) -> tuple[str, str]:
+def _careerviet_city(location: str) -> tuple[str, str] | None:
     """Return (city_slug, city_code) for the CareerViet URL from a location string."""
     key = location.strip().lower()
     for candidate in _CAREERVIET_CITY_SLUGS:
         if candidate in key:
             return _CAREERVIET_CITY_SLUGS[candidate], _CAREERVIET_CITY_CODES[candidate]
-    return "tai-ho-chi-minh", "kl8"
+    return None
 
 
 def _careerviet_playwright(url: str, max_results: int) -> list[dict]:

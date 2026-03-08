@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 
 from fastapi import Request
@@ -23,6 +23,9 @@ _app_logger.propagate = False
 _app_handler = RotatingFileHandler(
     _APP_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
+_TZ_ICT = timezone(timedelta(hours=7))
+
+logging.Formatter.converter = lambda *_: datetime.now(_TZ_ICT).timetuple()
 _app_handler.setFormatter(logging.Formatter("[%(levelname)s] %(asctime)s — %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 _app_logger.addHandler(_app_handler)
 
@@ -54,7 +57,7 @@ def log_search(request: Request, keyword: str, location: str) -> None:
         or (request.client.host if request.client else "unknown")
     )
     entry = {
-        "ts":       datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "ts":       datetime.now(_TZ_ICT).strftime("%Y-%m-%dT%H:%M:%S+07:00"),
         "ip":       ip,
         "keyword":  keyword,
         "location": location,

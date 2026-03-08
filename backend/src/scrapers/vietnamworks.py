@@ -26,16 +26,18 @@ def scrape_vietnamworks(keyword: str, location: str = "Ho Chi Minh City", max_re
     """
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_code    = _vietnamworks_city_code(location or "Ho Chi Minh City")
+    if city_code is None:
+        return []
     url = f"https://www.vietnamworks.com/viec-lam?q={keyword_slug}&l={city_code}"
     return _vietnamworks_playwright(url, max_results)
 
-def _vietnamworks_city_code(location: str) -> str:
+def _vietnamworks_city_code(location: str) -> str | None:
     """Return the VietnamWorks city code for a given location string."""
     key = location.strip().lower()
     for candidate, code in _VIETNAMWORKS_CITY_CODES.items():
         if candidate in key:
             return code
-    return "29"
+    return None
 
 
 def _vietnamworks_playwright(url: str, max_results: int) -> list[dict]:

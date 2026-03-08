@@ -50,20 +50,25 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
     since_seconds: when set, adds f_TPR=r{since_seconds} to only fetch jobs posted in that window.
     """
     mapped_location = _linkedin_location(location or "Ho Chi Minh City")
-    geo_ids         = _LINKEDIN_GEO_IDS.get(mapped_location, _LINKEDIN_GEO_IDS["Ho Chi Minh City"])
+    geo_ids         = _LINKEDIN_GEO_IDS.get(mapped_location)
     tpr_param       = f"&f_TPR=r{since_seconds}" if since_seconds else ""
 
     def _fetch_all_pages(kw: str) -> list[dict]:
         kw_enc    = quote_plus(kw)
         all_jobs: list[dict] = []
         seen: set[str] = set()
-        for geo_id in geo_ids:
+        loc_ids = geo_ids if geo_ids else [None]
+        for geo_id in loc_ids:
             start = 0
             while len(all_jobs) < _LINKEDIN_MAX_RESULTS:
+                if geo_id:
+                    loc_param = f"&geoId={geo_id}"
+                else:
+                    loc_param = f"&location={quote_plus(mapped_location)}"
                 url = (
                     f"https://www.linkedin.com/jobs/search/"
                     f"?keywords={kw_enc}"
-                    f"&geoId={geo_id}"
+                    f"{loc_param}"
                     f"&sortBy=DD"
                     f"{tpr_param}"
                     f"&start={start}"
@@ -85,7 +90,8 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                     break
                 start += _LINKEDIN_PAGE_SIZE
             pages = start // _LINKEDIN_PAGE_SIZE + 1
-            log_app(f"[LinkedIn] '{kw}' geoId={geo_id} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
+            loc_label = f"geoId={geo_id}" if geo_id else f"location={mapped_location!r}"
+            log_app(f"[LinkedIn] '{kw}' {loc_label} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
         return all_jobs
 
     all_jobs: list[dict] = _fetch_all_pages(keyword)
