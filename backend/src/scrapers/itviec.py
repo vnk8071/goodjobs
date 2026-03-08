@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from bs4 import BeautifulSoup
 
 from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS
-from ..utils import _relative_display, _clean_html, _extract_html, _truncate
+from ..utils import _relative_display
 
 _ITVIEC_CITY_SLUGS = {
     "ho chi minh":  "ho-chi-minh-hcm",
@@ -26,16 +26,18 @@ def scrape_itviec(keyword: str, location: str = "Ho Chi Minh City", max_results:
     """
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_slug    = _itviec_city_slug(location or "Ho Chi Minh City")
+    if city_slug is None:
+        return []
     url = f"https://itviec.com/it-jobs/{keyword_slug}/{city_slug}"
     return _itviec_playwright(url, max_results)
 
-def _itviec_city_slug(location: str) -> str:
+def _itviec_city_slug(location: str) -> str | None:
     """Return the ITViec URL city slug for a given location string."""
     key = location.strip().lower()
     for candidate, slug in _ITVIEC_CITY_SLUGS.items():
         if candidate in key:
             return slug
-    return "ho-chi-minh-hcm"
+    return None
 
 
 def _itviec_display(text: str) -> str:
@@ -56,33 +58,45 @@ def _itviec_display(text: str) -> str:
 
 
 def _itviec_playwright(url: str, max_results: int) -> list[dict]:
-    """Scrape ITViec job listings and detail pages via headless Chromium."""
+    """Scrape ITViec job listings and descriptions via headless Chromium.
+
+    Strategy to bypass Cloudflare:
+    1. Load the listing page in one browser context to extract all card metadata.
+    2. For each job, open a **fresh incognito context** (new_context) to load
+       the individual job page — Cloudflare does not challenge fresh contexts
+       the same way it blocks re-navigations within an existing session.
+    3. Extract description from `.jd-main` on the job detail page.
+    """
     try:
         from playwright.sync_api import sync_playwright
+        import time as _time
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            context = browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                locale="en-US",
-            )
-            page = context.new_page()
+
+            # ── Step 1: load listing, extract all card data ───────────────
+            ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+            page = ctx.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             try:
                 page.wait_for_selector("div.job-card", timeout=10000)
             except Exception:
                 pass
 
-            list_html = page.content()
-            if "This website uses a security service" in list_html:
+            page_title = page.title()
+            if "security service" in page_title.lower() or "just a moment" in page_title.lower():
+                ctx.close()
                 browser.close()
                 return []
-            soup = BeautifulSoup(list_html, "html.parser")
-            jobs = _parse_itviec_cards(soup)
+
+            jobs = _extract_itviec_cards_js(page)
+            ctx.close()
 
             jobs = [j for j in jobs if j["_days_ago"] <= RECENT_DAYS][:max_results]
 
-            for job in jobs:
-                content_path  = job.pop("_content_url", "")
+            # ── Step 2: fetch each job description in a fresh context ─────
+            for i, job in enumerate(jobs):
+                job.pop("_content_url", "")
                 days_ago      = job.pop("_days_ago", 9999)
                 card_location = job.pop("_card_location", "")
                 job["posted_date"] = (
@@ -90,54 +104,28 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                     if days_ago < 9999 else ""
                 )
                 job["description"] = ""
-                detail_url = job.get("link", "")
-                if detail_url:
-                    try:
-                        page.goto(detail_url, wait_until="domcontentloaded", timeout=15000)
-                        try:
-                            page.wait_for_selector(
-                                "div.job-detail__body, div[class*='salary'], span[class*='salary']",
-                                timeout=6000,
-                            )
-                        except Exception:
-                            pass
-                        detail_html = page.content()
-                        if "This website uses a security service" in detail_html:
-                            job["description"] = ""
-                            continue
-                        detail_soup = BeautifulSoup(detail_html, "html.parser")
-
-                        salary_text = ""
-                        for sal_sel in (
-                            "div.job-detail__salary span",
-                            "div[class*='salary'] span",
-                            "span[class*='salary']",
-                            "div.salary-text",
-                            "div.job-detail__info-salary",
-                        ):
-                            sal_el = detail_soup.select_one(sal_sel)
-                            if sal_el:
-                                t = sal_el.get_text(strip=True)
-                                if t and "sign in" not in t.lower():
-                                    salary_text = t
-                                    break
-                        if salary_text:
-                            job["salary"] = salary_text
-
-                        loc = _parse_itviec_location(detail_soup)
-                        if loc:
-                            job["location"] = loc
-
-                        desc, loc_from_desc = _parse_itviec_description(page.content())
-                        job["description"] = desc
-                        if loc_from_desc and not job.get("location"):
-                            job["location"] = loc_from_desc
-                    except Exception as e:
-                        print(f"[ITViec detail] {e}")
-                        job["description"] = ""
-
                 if not job.get("location") and card_location:
                     job["location"] = card_location
+
+                if i > 0:
+                    _time.sleep(1.5)
+
+                job_ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+                try:
+                    job_page = job_ctx.new_page()
+                    job_page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
+                    _time.sleep(1.5)
+                    detail_title = job_page.title()
+                    if "just a moment" not in detail_title.lower():
+                        desc = job_page.evaluate("""() => {
+                            const el = document.querySelector('.jd-main');
+                            return el ? el.innerText.trim() : '';
+                        }""")
+                        job["description"] = desc or ""
+                except Exception as e:
+                    print(f"[ITViec desc] {job['link']}: {e}")
+                finally:
+                    job_ctx.close()
 
             browser.close()
         return jobs
@@ -146,43 +134,61 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
         return []
 
 
-def _parse_itviec_location(soup: BeautifulSoup) -> str:
-    """Extract city name(s) from an ITViec detail page, joined by " | "."""
-    _CITY_PATTERNS = [
-        ("Ha Noi",      re.compile(r"\bHa\s*Noi\b|\bHà\s*Nội\b",             re.IGNORECASE)),
-        ("Ho Chi Minh", re.compile(r"\bHo\s*Chi\s*Minh\b|\bHồ\s*Chí\s*Minh\b", re.IGNORECASE)),
-        ("Da Nang",     re.compile(r"\bDa\s*Nang\b|\bĐà\s*Nẵng\b",           re.IGNORECASE)),
-        ("Hai Phong",   re.compile(r"\bHai\s*Phong\b|\bHải\s*Phòng\b",        re.IGNORECASE)),
-        ("Can Tho",     re.compile(r"\bCan\s*Tho\b|\bCần\s*Thơ\b",           re.IGNORECASE)),
-        ("Binh Duong",  re.compile(r"\bBinh\s*Duong\b|\bBình\s*Dương\b",      re.IGNORECASE)),
-    ]
-    _ADDR_PAT = re.compile(r"Tầng|Đường|Phường|Quận|Street|Floor|số\s+\d", re.IGNORECASE)
 
-    cities: list[str] = []
-    for el in soup.find_all(["p", "span", "div", "li", "a"]):
-        if len(el.find_all(recursive=False)) > 2:
+
+def _extract_itviec_cards_js(page) -> list[dict]:
+    """Extract job card data from ITViec listing page using JavaScript (avoids page.content() which triggers Cloudflare)."""
+    cards_data = page.evaluate("""() => {
+        const cards = Array.from(document.querySelectorAll('div.job-card'));
+        return cards.map(card => {
+            const titleEl = card.querySelector("h3[data-search--job-selection-target='jobTitle']");
+            const imgEl = card.querySelector('a.logo-employer-card img');
+            const locEl = card.querySelector('div.search-tag');
+            const postedEl = card.querySelector('span.small-text.text-dark-grey');
+            const salaryEl = card.querySelector("div.job-card__salary, span.salary, div[class*='salary']");
+            return {
+                title: titleEl ? titleEl.textContent.trim() : '',
+                slug: card.getAttribute('data-search--job-selection-job-slug-value') || '',
+                contentUrl: card.getAttribute('data-search--job-selection-job-url-value') || '',
+                logoUrl: imgEl ? (imgEl.getAttribute('data-src') || imgEl.getAttribute('src') || '') : '',
+                company: imgEl ? imgEl.getAttribute('alt') || '' : 'N/A',
+                location: locEl ? locEl.textContent.trim() : '',
+                postedText: postedEl ? postedEl.textContent.trim() : '',
+                salary: salaryEl ? salaryEl.textContent.trim() : '',
+                cardText: card.textContent || '',
+            };
+        });
+    }""")
+    import re as _re
+    jobs = []
+    for c in cards_data:
+        if not c["title"] or not c["slug"]:
             continue
-        text = el.get_text(separator=" ", strip=True)
-        if not _ADDR_PAT.search(text):
-            continue
-        for city_name, pattern in _CITY_PATTERNS:
-            if pattern.search(text) and city_name not in cities:
-                cities.append(city_name)
-
-    if cities:
-        return " | ".join(cities)
-
-    _WORK_CONTEXT = re.compile(r"At office|office|Hybrid|Remote|On-site", re.IGNORECASE)
-    full_text = soup.get_text(separator="\n")
-    for line in full_text.splitlines():
-        line = line.strip()
-        if not _WORK_CONTEXT.search(line):
-            continue
-        for city_name, pattern in _CITY_PATTERNS:
-            if pattern.search(line) and city_name not in cities:
-                cities.append(city_name)
-
-    return " | ".join(cities)
+        company = _re.sub(r"\s*(Vietnam)?\s*(?:Big|Small)\s*Logo\s*$", "", c["company"], flags=_re.IGNORECASE).strip() or "N/A"
+        salary = c["salary"]
+        if salary and "sign in" in salary.lower():
+            salary = ""
+        if not salary:
+            m = _re.search(r"(?:Up\s+to|From)?\s*\$[\d,]+(?:\s*-\s*\$[\d,]+)?", c["cardText"], _re.IGNORECASE)
+            if m:
+                salary = m.group(0).strip()
+        days_ago = _parse_itviec_days_ago(c["postedText"])
+        jobs.append({
+            "title":          c["title"],
+            "company":        company,
+            "location":       c["location"],
+            "link":           f"https://itviec.com/it-jobs/{c['slug']}",
+            "source":         "ITViec",
+            "posted":         _itviec_display(c["postedText"]),
+            "description":    "",
+            "logo":           c["logoUrl"],
+            "salary":         salary,
+            "_days_ago":      days_ago,
+            "_content_url":   c["contentUrl"],
+            "_card_location": c["location"],
+        })
+    jobs.sort(key=lambda j: j["_days_ago"])
+    return jobs
 
 
 def _parse_itviec_days_ago(text: str) -> int:
@@ -238,6 +244,8 @@ def _parse_itviec_cards(soup: BeautifulSoup) -> list[dict]:
 
         salary_el = card.select_one("div.job-card__salary, span.salary, div[class*='salary']")
         salary = salary_el.get_text(strip=True) if salary_el else ""
+        if salary and "sign in" in salary.lower():
+            salary = ""
         if not salary:
             card_text = card.get_text(separator=" ", strip=True)
             m = re.search(r"(?:Up\s+to|Lên\s+đến|From|Từ)?\s*\$[\d,]+(?:\s*-\s*\$[\d,]+)?", card_text, re.IGNORECASE)
@@ -268,57 +276,3 @@ def _parse_itviec_cards(soup: BeautifulSoup) -> list[dict]:
     return jobs
 
 
-def _parse_itviec_description(html: str) -> tuple[str, str]:
-    """Extract (description_html, location) from an ITViec job detail page."""
-    if "This website uses a security service" in html:
-        return "", ""
-    soup = BeautifulSoup(html, "html.parser")
-    location = _parse_itviec_location(soup)
-
-    heading = None
-    for tag in ("h2", "h3", "h4"):
-        heading = soup.find(tag, string=re.compile(r"Job\s*description", re.IGNORECASE))
-        if heading:
-            break
-
-    if heading:
-        _JOB_SECTION = re.compile(
-            r"Your skills|Why you.ll love|Skills and experience|Benefits|Quyền lợi",
-            re.IGNORECASE,
-        )
-        node = heading
-        while node.parent and node.parent.name not in ("body", "[document]"):
-            node = node.parent
-            siblings_text = " ".join(
-                s.get_text() for s in node.next_siblings if hasattr(s, "get_text")
-            )
-            if _JOB_SECTION.search(siblings_text):
-                parts = [str(node)]
-                for sib in node.next_siblings:
-                    parts.append(str(sib))
-                desc = "".join(parts).strip()
-                if desc:
-                    return _truncate(_clean_html(desc)), location
-                break
-
-        parts = [str(heading)]
-        for sib in heading.next_siblings:
-            parts.append(str(sib))
-        desc = "".join(parts).strip()
-        if desc:
-            return _truncate(_clean_html(desc)), location
-
-    for sel in ("div.preview-job-content", "div.job-content", "div[class*='description']"):
-        el = soup.select_one(sel)
-        if el:
-            html_content = _extract_html(el)
-            if html_content:
-                return _truncate(html_content), location
-
-    paragraphs = soup.find_all("p")
-    if paragraphs:
-        html_parts = [str(p) for p in paragraphs if p.get_text(strip=True)]
-        if html_parts:
-            return _truncate(_clean_html("".join(html_parts))), location
-
-    return "", location

@@ -20,6 +20,10 @@ _WARMUP_KEYWORDS = [
     "DevOps Engineer",
     "Flutter Developer",
     "QA Engineer",
+    "Software Engineer",
+    "Marketing Executive",
+    "UX/UI Designer",
+    "Recruiter",
 ]
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]
 
