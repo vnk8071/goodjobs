@@ -10,11 +10,9 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "nlp engineer":              "AI Engineer",
     "computer vision engineer":  "AI Engineer",
     # Mobile
-    "mobile engineer":           "Mobile Developer",
     "flutter developer":         "Mobile Developer",
     "ios developer":             "Mobile Developer",
     "android developer":         "Mobile Developer",
-    "react native developer":    "Mobile Developer",
     # Product / Management
     "project manager":           "Product Manager",
     "product owner":             "Product Manager",

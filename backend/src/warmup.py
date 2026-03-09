@@ -219,7 +219,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     """
     loop = asyncio.get_event_loop()
 
-    CYCLE_INTERVAL = 600
+    CYCLE_INTERVAL = 1200
     SCRAPE_INTERVAL = 7200
 
     await asyncio.sleep(5.0)
