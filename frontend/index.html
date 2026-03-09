@@ -564,6 +564,20 @@
         white-space: nowrap;
       }
 
+      #titleFilter {
+        font-size: 0.78rem;
+        padding: 0.2rem 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg);
+        color: var(--text);
+        width: 180px;
+        outline: none;
+      }
+      #titleFilter:focus {
+        border-color: var(--primary);
+      }
+
       .badge-filter {
         cursor: pointer;
         opacity: 0.35;
@@ -1131,6 +1145,7 @@
 
         <div id="filterBar" class="filter-bar hidden">
           <span class="filter-label">Filter:</span>
+          <input id="titleFilter" type="text" placeholder="Require words in title…" autocomplete="off" />
         </div>
 
         <div class="table-wrapper">

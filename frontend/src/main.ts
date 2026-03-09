@@ -56,6 +56,11 @@ fetchBtn.addEventListener("click", async () => {
     setStatus("Please enter a job title.", "error");
     return;
   }
+  const isChip = [...suggestionChips].some(c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase());
+  if (!isChip && keyword.split(/\s+/).length < 2) {
+    setStatus("Please be more specific — enter at least 2 words (e.g. \"AI Engineer\").", "error");
+    return;
+  }
 
   abortController?.abort();
   abortController = new AbortController();

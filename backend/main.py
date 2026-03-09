@@ -216,7 +216,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
 
-    ip = request.client.host if request.client else "unknown"
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
     rate_err = check_rate_limit(ip)
     if rate_err:
         raise HTTPException(status_code=429, detail=rate_err)

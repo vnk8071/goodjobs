@@ -13,7 +13,10 @@ const statusEl   = document.getElementById("status")    as HTMLDivElement;
 const resultsEl  = document.getElementById("results")   as HTMLDivElement;
 const jobsBody   = document.getElementById("jobsBody")  as HTMLTableSectionElement;
 const jobCountEl = document.getElementById("jobCount")  as HTMLSpanElement;
-const filterBar  = document.getElementById("filterBar") as HTMLDivElement;
+const filterBar    = document.getElementById("filterBar")   as HTMLDivElement;
+const titleFilter  = document.getElementById("titleFilter") as HTMLInputElement;
+
+titleFilter.addEventListener("input", () => _applyFilter());
 
 // Job detail modal elements
 const jobModal         = document.getElementById("jobModal")         as HTMLDivElement;
@@ -308,17 +311,21 @@ export function hideResults(): void {
   // Reset filter state
   _allJobs = [];
   _hiddenSources.clear();
+  titleFilter.value = "";
 }
 
 let _allJobs: Job[] = [];
 let _hiddenSources = new Set<string>();
 
-/** Re-render the table rows based on the current _hiddenSources filter set. */
+/** Re-render the table rows based on the current _hiddenSources filter set and title words. */
 function _applyFilter(): void {
-  const visible =
-    _hiddenSources.size === 0
-      ? _allJobs
-      : _allJobs.filter((j) => !_hiddenSources.has(j.source));
+  const words = titleFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const visible = _allJobs.filter((j) => {
+    if (_hiddenSources.has(j.source)) return false;
+    if (words.length === 0) return true;
+    const title = j.title.toLowerCase();
+    return words.every((w) => title.includes(w));
+  });
 
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
@@ -336,20 +343,23 @@ function _applyFilter(): void {
       : `${shown} of ${total} result${total !== 1 ? "s" : ""}`;
 }
 
-/** Rebuild the source filter pill bar from current _allJobs, hiding it when only one source. */
+/** Rebuild the source filter pill bar from current _allJobs. */
 function _rebuildFilterBar(): void {
   const label = filterBar.querySelector(".filter-label");
   filterBar.innerHTML = "";
   if (label) filterBar.appendChild(label);
+  filterBar.appendChild(titleFilter);
 
   const sources = [...new Set(_allJobs.map((j) => j.source))].sort();
 
-  if (sources.length <= 1) {
+  if (_allJobs.length === 0) {
     filterBar.classList.add("hidden");
     return;
   }
 
   filterBar.classList.remove("hidden");
+
+  if (sources.length <= 1) return;
 
   sources.forEach((source) => {
     const count = _allJobs.filter((j) => j.source === source).length;
