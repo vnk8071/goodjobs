@@ -23,11 +23,11 @@ _WARMUP_KEYWORDS = [
     "QA Engineer",
     "Software Engineer",
     "Data Scientist",
-    "UX/UI Designer",
+    "UI/UX Designer",
     "Marketing Executive",
     "Recruiter",
     "Sales Executive",
-    "Customer Success",
+    "Customer Service",
     "Cloud Engineer"
 ]
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]

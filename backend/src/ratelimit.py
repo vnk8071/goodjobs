@@ -38,6 +38,11 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "site reliability engineer": "Cloud Engineer",
     "sre":                       "Cloud Engineer",
     "infrastructure engineer":   "Cloud Engineer",
+    # Customer Service
+    "customer success":          "Customer Service",
+    "customer support":          "Customer Service",
+    "client success":            "Customer Service",
+    "client support":            "Customer Service",
 }
 
 _KEYWORD_ALIAS_VARIANTS: dict[str, list[str]] = {}
