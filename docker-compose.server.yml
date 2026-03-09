@@ -13,6 +13,8 @@ services:
     restart: unless-stopped
     expose:
       - "8000"
+    environment:
+      WARMUP_KEYWORDS: ${WARMUP_KEYWORDS:-}
     volumes:
       - ./logs:/app/logs
     depends_on:

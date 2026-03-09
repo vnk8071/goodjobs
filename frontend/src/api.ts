@@ -165,6 +165,11 @@ export async function scrapeJobsStream(
           eventType = "message";
           continue;
         }
+        if (eventType === "itviec-done") {
+          if (onSiteDone) onSiteDone("ITViec", siteCounts.get("ITViec") ?? 0);
+          eventType = "message";
+          continue;
+        }
         if (eventType === "queued") {
           try {
             const { position } = JSON.parse(payload) as { position: number };
@@ -206,6 +211,14 @@ export async function scrapeJobsStream(
           try {
             const { count } = JSON.parse(payload) as { count: number };
             if (onSiteLoading) onSiteLoading("TopCV", count);
+          } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "itviec-enriching") {
+          try {
+            const { count } = JSON.parse(payload) as { count: number };
+            if (onSiteLoading) onSiteLoading("ITViec", count);
           } catch { /* ignore */ }
           eventType = "message";
           continue;

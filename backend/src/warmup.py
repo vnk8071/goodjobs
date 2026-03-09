@@ -1,4 +1,5 @@
 import asyncio
+import os
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -7,10 +8,9 @@ from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
 from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
-from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one
+from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one
 
-_WARMUP_KEYWORDS = [
-    # Engineering
+_WARMUP_KEYWORDS_DEFAULT = [
     "AI Engineer",
     "Product Manager",
     "Business Analyst",
@@ -24,8 +24,16 @@ _WARMUP_KEYWORDS = [
     "Data Scientist",
     "UI/UX Designer",
     "Marketing Executive",
-    "Cloud Engineer"
+    "Cloud Engineer",
 ]
+
+def _load_warmup_keywords() -> list[str]:
+    raw = os.environ.get("WARMUP_KEYWORDS", "").strip()
+    if raw:
+        return [kw.strip() for kw in raw.split(",") if kw.strip()]
+    return _WARMUP_KEYWORDS_DEFAULT
+
+_WARMUP_KEYWORDS = _load_warmup_keywords()
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]
 
 _WARMUP_KEYWORDS_KEY = "warmup:keywords"
@@ -99,6 +107,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     jobs: list[dict] = []
     linkedin_jobs: list[dict] = []
     topcv_jobs: list[dict] = []
+    itviec_jobs: list[dict] = []
     seen_links: set[str] = set()
 
     for scrape_kw in [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, []):
@@ -117,6 +126,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                         linkedin_jobs.append(j)
                     elif j.get("source") == "TopCV":
                         topcv_jobs.append(j)
+                    elif j.get("source") == "ITViec":
+                        itviec_jobs.append(j)
 
     if linkedin_jobs:
         log_app(f"[warmup][{kw}][{loc}] enriching {len(linkedin_jobs)} LinkedIn jobs...")
@@ -138,6 +149,16 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 await loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown)
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
+
+    if itviec_jobs:
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
+        itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        for i, job in enumerate(itviec_jobs):
+            cooldown = 2.0 if i > 0 else 0.0
+            try:
+                await loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown)
+            except Exception as e:
+                log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
 
     for j in jobs:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
@@ -165,14 +186,17 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
 
 async def _cleanup_stale_keys() -> None:
-    """Delete Redis keys for warmup locations that do not match any canonical warmup keyword.
+    """Delete Redis cache keys and warmup:keywords members not in _WARMUP_KEYWORDS.
 
     Removes leftover keys from renamed keywords or typo searches.
+    Uses _WARMUP_KEYWORDS (hardcoded) as the source of truth, not the Redis set,
+    so removed keywords are pruned even if they still exist in the set.
     """
     try:
         redis = get_redis()
-        canonical = {kw.lower().strip() for kw in await get_warmup_keywords()}
+        canonical = {kw.lower().strip() for kw in _WARMUP_KEYWORDS}
         deleted = 0
+
         for loc in _WARMUP_LOCATIONS:
             loc_key = loc.lower().strip()
             suffix = f":{loc_key}"
@@ -185,6 +209,13 @@ async def _cleanup_stale_keys() -> None:
                     await redis.delete(key)
                     log_app(f"[warmup] deleted stale key: {key!r}")
                     deleted += 1
+
+        members = await redis.smembers(_WARMUP_KEYWORDS_KEY)
+        for member in members:
+            if member.lower().strip() not in canonical:
+                await redis.srem(_WARMUP_KEYWORDS_KEY, member)
+                log_app(f"[warmup] removed stale keyword from set: {member!r}")
+
         log_app(f"[warmup] cleanup done — {deleted} stale key(s) removed")
     except Exception as e:
         log_app(f"[warmup] cleanup error: {e}")

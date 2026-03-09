@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 
 import requests
 
@@ -20,8 +21,6 @@ CHROMIUM_ARGS = [
     "--disable-setuid-sandbox",
     "--disable-dev-shm-usage",
     "--disable-gpu",
-    "--no-zygote",
-    "--single-process",
     "--disable-extensions",
     "--disable-background-networking",
     "--disable-default-apps",
@@ -31,6 +30,7 @@ CHROMIUM_ARGS = [
     "--mute-audio",
     "--no-first-run",
     "--safebrowsing-disable-auto-update",
+    *(["--no-zygote", "--single-process"] if sys.platform == "linux" else []),
 ]
 
 session = requests.Session()

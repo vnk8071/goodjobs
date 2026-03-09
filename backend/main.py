@@ -314,6 +314,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
                 linkedin_jobs: list[dict] = []
                 topcv_jobs: list[dict] = []
+                itviec_jobs: list[dict] = []
                 all_jobs: list[dict] = []
                 pending = set(futures.keys())
                 deadline = loop.time() + 120.0
@@ -322,6 +323,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 enrich_task: asyncio.Task | None = None
                 topcv_enrich_queue: asyncio.Queue = asyncio.Queue()
                 topcv_enrich_task: asyncio.Task | None = None
+                itviec_enrich_queue: asyncio.Queue = asyncio.Queue()
+                itviec_enrich_task: asyncio.Task | None = None
 
                 async def _phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
@@ -364,6 +367,22 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     await topcv_enrich_queue.put(None)
                     log_app("topcv: finished streaming details")
 
+                async def _itviec_phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    log_app(f"itviec: fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    for i, job in enumerate(jobs):
+                        cooldown = 2.0 if i > 0 else 0.0
+                        try:
+                            await loop.run_in_executor(
+                                _executor, scrape_itviec_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            log_app(f"itviec detail error job {i}: {e}", "ERROR")
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await itviec_enrich_queue.put(job)
+                    await itviec_enrich_queue.put(None)
+                    log_app("itviec: finished streaming details")
+
                 while pending:
                     time_left = max(0.1, deadline - loop.time())
                     done, pending = await asyncio.wait(
@@ -395,6 +414,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             topcv_jobs = filtered
                             yield f"event: topcv-enriching\ndata: {json.dumps({'count': len(topcv_jobs)})}\n\n"
                             topcv_enrich_task = asyncio.create_task(_topcv_phase2(topcv_jobs))
+                        if site == "itviec":
+                            itviec_jobs = filtered
+                            yield f"event: itviec-enriching\ndata: {json.dumps({'count': len(itviec_jobs)})}\n\n"
+                            itviec_enrich_task = asyncio.create_task(_itviec_phase2(itviec_jobs))
                         if filtered:
                             yield f"data: {json.dumps(filtered, ensure_ascii=False)}\n\n"
 
@@ -413,6 +436,14 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         else:
                             yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                         if topcv_enrich_task is None:
+                            break
+                    while not itviec_enrich_queue.empty():
+                        item = itviec_enrich_queue.get_nowait()
+                        if item is None:
+                            itviec_enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if itviec_enrich_task is None:
                             break
 
                 yield "event: done\ndata: {}\n\n"
@@ -436,6 +467,16 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         enriched_count += 1
                         yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                     yield f"event: topcv-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                if itviec_enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await itviec_enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: itviec-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
         finally:

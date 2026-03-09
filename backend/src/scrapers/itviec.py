@@ -58,23 +58,12 @@ def _itviec_display(text: str) -> str:
 
 
 def _itviec_playwright(url: str, max_results: int) -> list[dict]:
-    """Scrape ITViec job listings and descriptions via headless Chromium.
-
-    Strategy to bypass Cloudflare:
-    1. Load the listing page in one browser context to extract all card metadata.
-    2. For each job, open a **fresh incognito context** (new_context) to load
-       the individual job page — Cloudflare does not challenge fresh contexts
-       the same way it blocks re-navigations within an existing session.
-    3. Extract description from `.jd-main` on the job detail page.
-    """
+    """Scrape ITViec listing page only. Descriptions are fetched in Phase 2 via scrape_itviec_detail_one."""
     try:
         from playwright.sync_api import sync_playwright
-        import time as _time
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-
-            # ── Step 1: load listing, extract all card data ───────────────
             ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
             page = ctx.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
@@ -91,52 +80,64 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
 
             jobs = _extract_itviec_cards_js(page)
             ctx.close()
-
-            jobs = [j for j in jobs if j["_days_ago"] <= RECENT_DAYS][:max_results]
-
-            # ── Step 2: fetch each job description in a fresh context ─────
-            for i, job in enumerate(jobs):
-                job.pop("_content_url", "")
-                days_ago      = job.pop("_days_ago", 9999)
-                card_location = job.pop("_card_location", "")
-                job["posted_date"] = (
-                    (date.today() - timedelta(days=days_ago)).isoformat()
-                    if days_ago < 9999 else ""
-                )
-                job["description"] = ""
-                if not job.get("location") and card_location:
-                    job["location"] = card_location
-
-                if i > 0:
-                    _time.sleep(1.5)
-
-                job_ctx = None
-                try:
-                    job_ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
-                    job_page = job_ctx.new_page()
-                    job_page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
-                    _time.sleep(1.5)
-                    detail_title = job_page.title()
-                    if "just a moment" not in detail_title.lower():
-                        desc = job_page.evaluate("""() => {
-                            const el = document.querySelector('.jd-main');
-                            return el ? el.innerText.trim() : '';
-                        }""")
-                        job["description"] = desc or ""
-                except Exception as e:
-                    print(f"[ITViec desc] {job['link']}: {e}")
-                finally:
-                    if job_ctx is not None:
-                        try:
-                            job_ctx.close()
-                        except Exception:
-                            pass
-
             browser.close()
+
+        jobs = [j for j in jobs if j["_days_ago"] <= RECENT_DAYS][:max_results]
+
+        for job in jobs:
+            job.pop("_content_url", None)
+            days_ago      = job.pop("_days_ago", 9999)
+            card_location = job.pop("_card_location", "")
+            job["posted_date"] = (
+                (date.today() - timedelta(days=days_ago)).isoformat()
+                if days_ago < 9999 else ""
+            )
+            job["description"] = ""
+            if not job.get("location") and card_location:
+                job["location"] = card_location
+
         return jobs
     except Exception as e:
         print(f"[ITViec Playwright] {e}")
         return []
+
+
+def scrape_itviec_detail_one(job: dict, cooldown: float) -> None:
+    """Fetch and fill description for a single ITViec job in-place (Phase 2 enrichment).
+
+    Launches a fresh browser+context per job — safe under --single-process since
+    only one context is active at a time.
+    """
+    import time as _time
+    if cooldown > 0:
+        _time.sleep(cooldown)
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
+            ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+            page = ctx.new_page()
+            try:
+                page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
+                _time.sleep(1.5)
+                detail_title = page.title()
+                if "just a moment" not in detail_title.lower():
+                    desc = page.evaluate("""() => {
+                        const el = document.querySelector('.jd-main');
+                        return el ? el.innerText.trim() : '';
+                    }""")
+                    if desc:
+                        job["description"] = desc
+            except Exception as e:
+                print(f"[ITViec desc] {job['link']}: {e}")
+            finally:
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+                browser.close()
+    except Exception as e:
+        print(f"[ITViec detail] {e}")
 
 
 
