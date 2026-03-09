@@ -2,26 +2,42 @@ import collections
 import time
 
 _KEYWORD_ALIASES: dict[str, str] = {
-    "ai/ml engineer":       "AI Engineer",
-    "ml engineer":          "AI Engineer",
+    # AI / ML
+    "ai/ml engineer":            "AI Engineer",
+    "ml engineer":               "AI Engineer",
     "machine learning engineer": "AI Engineer",
-    "mobile engineer":      "Flutter Developer",
-    "mobile developer":     "Flutter Developer",
-    "ios developer":        "Flutter Developer",
-    "android developer":    "Flutter Developer",
-    "project manager":      "Product Manager",
-    "product owner":        "Product Manager",
-    "scrum master":         "Product Manager",
-    "it ba":                "Business Analyst",
-    "data analyst":         "Business Analyst",
-    "bi analyst":           "Business Analyst",
-    "bi engineer":          "Business Analyst",
-    "business intelligence": "Business Analyst",
-    "tester":               "QA Engineer",
-    "qa tester":            "QA Engineer",
-    "quality assurance":    "QA Engineer",
-    "test engineer":        "QA Engineer",
-    "automation engineer":  "QA Engineer",
+    "llm engineer":              "AI Engineer",
+    "nlp engineer":              "AI Engineer",
+    "computer vision engineer":  "AI Engineer",
+    # Mobile
+    "mobile engineer":           "Mobile Developer",
+    "flutter developer":         "Mobile Developer",
+    "ios developer":             "Mobile Developer",
+    "android developer":         "Mobile Developer",
+    "react native developer":    "Mobile Developer",
+    # Product / Management
+    "project manager":           "Product Manager",
+    "product owner":             "Product Manager",
+    "scrum master":              "Product Manager",
+    # Business Analyst
+    "it ba":                     "Business Analyst",
+    "data analyst":              "Business Analyst",
+    "bi analyst":                "Business Analyst",
+    "bi engineer":               "Business Analyst",
+    "business intelligence":     "Business Analyst",
+    # QA
+    "tester":                    "QA Engineer",
+    "qa tester":                 "QA Engineer",
+    "quality assurance":         "QA Engineer",
+    "test engineer":             "QA Engineer",
+    "automation engineer":       "QA Engineer",
+    # Data
+    "data science":              "Data Scientist",
+    "ml researcher":             "Data Scientist",
+    # Cloud / DevOps
+    "site reliability engineer": "Cloud Engineer",
+    "sre":                       "Cloud Engineer",
+    "infrastructure engineer":   "Cloud Engineer",
 }
 
 _KEYWORD_ALIAS_VARIANTS: dict[str, list[str]] = {}

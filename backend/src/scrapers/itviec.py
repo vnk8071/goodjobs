@@ -110,8 +110,9 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                 if i > 0:
                     _time.sleep(1.5)
 
-                job_ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+                job_ctx = None
                 try:
+                    job_ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
                     job_page = job_ctx.new_page()
                     job_page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
                     _time.sleep(1.5)
@@ -125,7 +126,11 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                 except Exception as e:
                     print(f"[ITViec desc] {job['link']}: {e}")
                 finally:
-                    job_ctx.close()
+                    if job_ctx is not None:
+                        try:
+                            job_ctx.close()
+                        except Exception:
+                            pass
 
             browser.close()
         return jobs

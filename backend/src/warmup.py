@@ -10,6 +10,7 @@ from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one
 
 _WARMUP_KEYWORDS = [
+    # Engineering
     "AI Engineer",
     "Product Manager",
     "Business Analyst",
@@ -18,12 +19,16 @@ _WARMUP_KEYWORDS = [
     "Fullstack Engineer",
     "Data Engineer",
     "DevOps Engineer",
-    "Flutter Developer",
+    "Mobile Developer",
     "QA Engineer",
     "Software Engineer",
-    "Marketing Executive",
+    "Data Scientist",
     "UX/UI Designer",
+    "Marketing Executive",
     "Recruiter",
+    "Sales Executive",
+    "Customer Success",
+    "Cloud Engineer"
 ]
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]
 
@@ -31,12 +36,16 @@ _WARMUP_KEYWORDS_KEY = "warmup:keywords"
 
 
 async def get_warmup_keywords() -> list[str]:
-    """Return current warmup keywords from Redis, seeding defaults on first call."""
+    """Return current warmup keywords from Redis.
+
+    Always ensures the hardcoded _WARMUP_KEYWORDS defaults are present —
+    so new keywords added to the list are picked up on the next server restart
+    even if the Redis set already existed.
+    """
     redis = get_redis()
+    # sadd is a no-op for members that already exist, so this is safe to call always
+    await redis.sadd(_WARMUP_KEYWORDS_KEY, *_WARMUP_KEYWORDS)
     members = await redis.smembers(_WARMUP_KEYWORDS_KEY)
-    if not members:
-        await redis.sadd(_WARMUP_KEYWORDS_KEY, *_WARMUP_KEYWORDS)
-        return list(_WARMUP_KEYWORDS)
     return sorted(members)
 
 
@@ -170,9 +179,12 @@ async def _cleanup_stale_keys() -> None:
         deleted = 0
         for loc in _WARMUP_LOCATIONS:
             loc_key = loc.lower().strip()
+            suffix = f":{loc_key}"
             pattern = f"jobs:*:{loc_key}"
             async for key in redis.scan_iter(pattern):
-                kw_part = key[len("jobs:"):-len(f":{loc_key}")]
+                if not key.endswith(suffix):
+                    continue
+                kw_part = key[len("jobs:") : len(key) - len(suffix)]
                 if kw_part not in canonical:
                     await redis.delete(key)
                     log_app(f"[warmup] deleted stale key: {key!r}")
