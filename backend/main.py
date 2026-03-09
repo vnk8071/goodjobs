@@ -111,7 +111,7 @@ async def cache_status():
             if is_missing:
                 missing.append((kw, loc))
 
-    if missing:
+    if missing and _get_sem()._value > 0:  # noqa: SLF001
         async def _scrape_missing() -> None:
             for kw, loc in missing:
                 try:
