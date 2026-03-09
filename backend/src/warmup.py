@@ -21,13 +21,9 @@ _WARMUP_KEYWORDS = [
     "DevOps Engineer",
     "Mobile Developer",
     "QA Engineer",
-    "Software Engineer",
     "Data Scientist",
     "UI/UX Designer",
     "Marketing Executive",
-    "Recruiter",
-    "Sales Executive",
-    "Customer Service",
     "Cloud Engineer"
 ]
 _WARMUP_LOCATIONS = ["Ho Chi Minh City", "Ha Noi"]
