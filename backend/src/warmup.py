@@ -256,26 +256,27 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
 
-    log_app(f"[warmup] startup pass — checking for missing keys...")
+    log_app(f"[warmup] startup pass — checking for missing or stale keys...")
     warmup_kws = await get_warmup_keywords()
-    startup_tasks = [
-        (kw, loc)
-        for kw in warmup_kws
-        for loc in _WARMUP_LOCATIONS
-        if await cache_get(kw, loc) is None
-    ]
+    now = time.time()
+    startup_tasks = []
+    for kw in warmup_kws:
+        for loc in _WARMUP_LOCATIONS:
+            existing = await cache_get(kw, loc)
+            if existing is None or now - existing[1] >= SCRAPE_INTERVAL:
+                startup_tasks.append((kw, loc, existing[1] if existing else 0.0))
 
     if startup_tasks:
-        log_app(f"[warmup] startup pass: scraping {len(startup_tasks)} missing entries...")
+        log_app(f"[warmup] startup pass: scraping {len(startup_tasks)} missing/stale entries...")
 
-        async def _startup_scrape(kw: str, loc: str) -> None:
+        async def _startup_scrape(kw: str, loc: str, fetched_ts: float) -> None:
             try:
                 async with get_sem():
-                    await _scrape_keyword(kw, loc, loop, executor, scrapers)
+                    await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
 
-        await asyncio.gather(*[_startup_scrape(kw, loc) for kw, loc in startup_tasks])
+        await asyncio.gather(*[_startup_scrape(kw, loc, ft) for kw, loc, ft in startup_tasks])
         log_app(f"[warmup] startup pass done")
     else:
         log_app(f"[warmup] startup pass: all keys present, skipping")

@@ -115,14 +115,13 @@ async def cache_status():
                 needs_scrape.append((kw, loc, fetched_ts))
 
     if needs_scrape and _get_sem()._value > 0:  # noqa: SLF001
-        async def _scrape_stale() -> None:
-            for kw, loc, fetched_ts in needs_scrape:
-                try:
-                    async with _get_sem():
-                        await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
-                except Exception as e:
-                    log_app(f"cache/status scrape error for {kw!r}/{loc!r}: {e}", "ERROR")
-        asyncio.create_task(_scrape_stale())
+        async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
+            try:
+                async with _get_sem():
+                    await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
+            except Exception as e:
+                log_app(f"cache/status scrape error for {kw!r}/{loc!r}: {e}", "ERROR")
+        asyncio.create_task(asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in needs_scrape]))
 
     return {
         "total": len(keys),

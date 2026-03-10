@@ -123,11 +123,16 @@ def scrape_itviec_detail_one(job: dict, cooldown: float) -> None:
                 detail_title = page.title()
                 if "just a moment" not in detail_title.lower():
                     desc = page.evaluate("""() => {
-                        const el = document.querySelector('.jd-main');
-                        return el ? el.innerText.trim() : '';
+                        const parts = [];
+                        document.querySelectorAll('.job-description__item').forEach(el => {
+                            parts.push(el.innerHTML.trim());
+                        });
+                        if (parts.length) return parts.join('<hr>');
+                        const sec = document.querySelector('section.job-content');
+                        return sec ? sec.innerHTML.trim() : '';
                     }""")
                     if desc:
-                        job["description"] = desc
+                        job["description"] = desc.replace("\n", "").replace("\r", "")
             except Exception as e:
                 print(f"[ITViec desc] {job['link']}: {e}")
             finally:
