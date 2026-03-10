@@ -7,7 +7,7 @@ from src.cache import cache_get, cache_set, get_redis, _key
 from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
-from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
+
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one
 
 _WARMUP_KEYWORDS_DEFAULT = [
@@ -110,7 +110,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     itviec_jobs: list[dict] = []
     seen_links: set[str] = set()
 
-    for scrape_kw in [kw] + _KEYWORD_ALIAS_VARIANTS.get(kw, []):
+    for scrape_kw in [kw]:
         for site, fn in scrapers.items():
             try:
                 result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
@@ -130,35 +130,47 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                         itviec_jobs.append(j)
 
     if linkedin_jobs:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(linkedin_jobs)} LinkedIn jobs...")
-        await asyncio.sleep(10.0)
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        for i, job in enumerate(linkedin_jobs[:30]):
-            cooldown = 3.0 if i > 0 else 0.0
+        batch = linkedin_jobs[:30]
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} LinkedIn jobs...")
+        await asyncio.sleep(3.0)
+        enriched_linkedin = 0
+        for i, job in enumerate(batch):
+            cooldown = 1.5 if i > 0 else 0.0
             try:
-                await loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown)
+                ok = await loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown)
+                if not ok:
+                    break
+                enriched_linkedin += 1
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] LinkedIn enrich done — {enriched_linkedin}/{len(batch)} jobs enriched")
 
     if topcv_jobs:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
         topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
+        enriched_topcv = 0
         for i, job in enumerate(topcv_jobs):
-            cooldown = 2.0 if i > 0 else 0.0
+            cooldown = 1.0 if i > 0 else 0.0
             try:
                 await loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown)
+                enriched_topcv += 1
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] TopCV enrich done — {enriched_topcv}/{len(topcv_jobs)} jobs enriched")
 
     if itviec_jobs:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
         itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
+        enriched_itviec = 0
         for i, job in enumerate(itviec_jobs):
-            cooldown = 2.0 if i > 0 else 0.0
+            cooldown = 1.0 if i > 0 else 0.0
             try:
                 await loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown)
+                enriched_itviec += 1
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
 
     for j in jobs:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
@@ -250,7 +262,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     """
     loop = asyncio.get_event_loop()
 
-    CYCLE_INTERVAL = 1200
+    CYCLE_INTERVAL = 600
     SCRAPE_INTERVAL = 7200
 
     await asyncio.sleep(5.0)
@@ -333,7 +345,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
                     except Exception as e:
                         log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 
-                await asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks])
+                asyncio.create_task(asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks]))
             else:
                 log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 
