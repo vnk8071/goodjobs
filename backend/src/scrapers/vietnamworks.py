@@ -46,95 +46,96 @@ def _vietnamworks_playwright(url: str, max_results: int) -> list[dict]:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            context = browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                locale="vi-VN",
-            )
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
             try:
-                page.wait_for_selector("div.new-job-card, div.job-item, article[class*='job']", timeout=12000)
-            except Exception:
-                pass
-            soup = BeautifulSoup(page.content(), "html.parser")
-            jobs = _parse_vietnamworks(soup, max_results)
-
-            for job in jobs:
+                context = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="vi-VN",
+                )
+                page = context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 try:
-                    page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_selector("div.new-job-card, div.job-item, article[class*='job']", timeout=12000)
+                except Exception:
+                    pass
+                soup = BeautifulSoup(page.content(), "html.parser")
+                jobs = _parse_vietnamworks(soup, max_results)
+
+                for job in jobs:
                     try:
-                        page.wait_for_function(
-                            """() => {
-                                const headings = Array.from(document.querySelectorAll('h2, h3, h4, strong'));
-                                const sec = headings.find(h => /Mô tả|Yêu cầu|Job Description|Requirements/i.test(h.textContent));
-                                if (sec) {
-                                    const sib = sec.nextElementSibling;
-                                    if (sib && sib.innerText && sib.innerText.trim().length > 20) return true;
+                        page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
+                        try:
+                            page.wait_for_function(
+                                """() => {
+                                    const headings = Array.from(document.querySelectorAll('h2, h3, h4, strong'));
+                                    const sec = headings.find(h => /Mô tả|Yêu cầu|Job Description|Requirements/i.test(h.textContent));
+                                    if (sec) {
+                                        const sib = sec.nextElementSibling;
+                                        if (sib && sib.innerText && sib.innerText.trim().length > 20) return true;
+                                    }
+                                    const desc = document.querySelector('[class*="description"], [class*="job-detail"]');
+                                    return desc && desc.innerText && desc.innerText.trim().length > 50;
+                                }""",
+                                timeout=12000,
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            expand_btn = page.query_selector("button:has-text('Xem đầy đủ'), a:has-text('Xem đầy đủ'), span:has-text('Xem đầy đủ')")
+                            if expand_btn:
+                                expand_btn.click()
+                                page.wait_for_timeout(800)
+                        except Exception:
+                            pass
+                        desc_html = page.evaluate("""() => {
+                            const jobSections = Array.from(document.querySelectorAll('h2, h3, h4, strong'))
+                                .filter(h => /Mô tả|Yêu cầu|Quyền lợi|Thông tin|Kỹ năng|Job Description|Requirements|Benefits/i.test(h.textContent));
+
+                            if (jobSections.length === 0) {
+                                const container = document.querySelector('[class*="description"]:not(meta):not(script)');
+                                return container ? container.innerHTML : '';
+                            }
+
+                            let ancestor = jobSections[0].parentElement;
+                            while (ancestor) {
+                                if (jobSections.every(h => ancestor.contains(h))) break;
+                                ancestor = ancestor.parentElement;
+                            }
+                            if (!ancestor) {
+                                const sib = jobSections[0].nextElementSibling;
+                                return sib ? sib.innerHTML : '';
+                            }
+
+                            const _isNoise = (el) => {
+                                if (jobSections.some(h => el.contains(h))) return false;
+                                const t = el.textContent.trim();
+                                return /Các phúc lợi dành cho bạn|Thông tin việc làm|NGÀY ĐĂNG|CẤP BẬC|KỸ NĂNG|Từ khoá|Xem thêm việc làm|Chia sẻ|Báo cáo/i.test(t);
+                            };
+
+                            let html = '';
+                            let started = false;
+                            for (const child of ancestor.children) {
+                                if (!started && jobSections.some(h => child.contains(h) || child === h)) {
+                                    started = true;
                                 }
-                                const desc = document.querySelector('[class*="description"], [class*="job-detail"]');
-                                return desc && desc.innerText && desc.innerText.trim().length > 50;
-                            }""",
-                            timeout=12000,
-                        )
-                    except Exception:
-                        pass
-                    try:
-                        expand_btn = page.query_selector("button:has-text('Xem đầy đủ'), a:has-text('Xem đầy đủ'), span:has-text('Xem đầy đủ')")
-                        if expand_btn:
-                            expand_btn.click()
-                            page.wait_for_timeout(800)
-                    except Exception:
-                        pass
-                    desc_html = page.evaluate("""() => {
-                        const jobSections = Array.from(document.querySelectorAll('h2, h3, h4, strong'))
-                            .filter(h => /Mô tả|Yêu cầu|Quyền lợi|Thông tin|Kỹ năng|Job Description|Requirements|Benefits/i.test(h.textContent));
-
-                        if (jobSections.length === 0) {
-                            const container = document.querySelector('[class*="description"]:not(meta):not(script)');
-                            return container ? container.innerHTML : '';
-                        }
-
-                        let ancestor = jobSections[0].parentElement;
-                        while (ancestor) {
-                            if (jobSections.every(h => ancestor.contains(h))) break;
-                            ancestor = ancestor.parentElement;
-                        }
-                        if (!ancestor) {
-                            const sib = jobSections[0].nextElementSibling;
-                            return sib ? sib.innerHTML : '';
-                        }
-
-                        const _isNoise = (el) => {
-                            if (jobSections.some(h => el.contains(h))) return false;
-                            const t = el.textContent.trim();
-                            return /Các phúc lợi dành cho bạn|Thông tin việc làm|NGÀY ĐĂNG|CẤP BẬC|KỸ NĂNG|Từ khoá|Xem thêm việc làm|Chia sẻ|Báo cáo/i.test(t);
-                        };
-
-                        let html = '';
-                        let started = false;
-                        for (const child of ancestor.children) {
-                            if (!started && jobSections.some(h => child.contains(h) || child === h)) {
-                                started = true;
+                                if (started) {
+                                    if (_isNoise(child)) break;
+                                    const c = child.cloneNode(true);
+                                    c.querySelectorAll('button, a, span, p').forEach(el => {
+                                        if (/Xem đầy đủ/i.test(el.innerText || el.textContent)) el.remove();
+                                    });
+                                    html += c.outerHTML;
+                                }
                             }
-                            if (started) {
-                                if (_isNoise(child)) break;
-                                const c = child.cloneNode(true);
-                                c.querySelectorAll('button, a, span, p').forEach(el => {
-                                    if (/Xem đầy đủ/i.test(el.innerText || el.textContent)) el.remove();
-                                });
-                                html += c.outerHTML;
-                            }
-                        }
-                        return html || ancestor.innerHTML;
-                    }""")
-                    desc = _truncate(_clean_html(desc_html)) if desc_html and desc_html.strip() else ""
-                    job["description"] = desc
-                    if not desc:
-                        print(f"[VietnamWorks desc] empty for {job['link']}")
-                except Exception as e:
-                    print(f"[VietnamWorks desc] {e}")
-
-            browser.close()
+                            return html || ancestor.innerHTML;
+                        }""")
+                        desc = _truncate(_clean_html(desc_html)) if desc_html and desc_html.strip() else ""
+                        job["description"] = desc
+                        if not desc:
+                            print(f"[VietnamWorks desc] empty for {job['link']}")
+                    except Exception as e:
+                        print(f"[VietnamWorks desc] {e}")
+            finally:
+                browser.close()
         return jobs
     except Exception as e:
         print(f"[VietnamWorks Playwright] {e}")

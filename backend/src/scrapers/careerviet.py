@@ -59,54 +59,55 @@ def _careerviet_playwright(url: str, max_results: int) -> list[dict]:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            context = browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                locale="vi-VN",
-            )
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
             try:
-                page.wait_for_selector("div.job-item, div[class*='job-item']", timeout=12000)
-            except Exception:
-                pass
-            soup = BeautifulSoup(page.content(), "html.parser")
-            jobs = _parse_careerviet(soup, max_results)
-
-            for job in jobs:
+                context = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="vi-VN",
+                )
+                page = context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 try:
-                    page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
-                    try:
-                        page.wait_for_function(
-                            """() => {
-                                const rows = document.querySelectorAll('div.detail-row');
-                                return Array.from(rows).some(r => {
-                                    const h2 = r.querySelector('h2.detail-title, h2');
-                                    return h2 && /Mô tả|Yêu cầu/i.test(h2.textContent) && r.innerText.trim().length > 80;
-                                });
-                            }""",
-                            timeout=15000,
-                        )
-                    except Exception:
-                        page.wait_for_timeout(2000)
-                    desc_html = page.evaluate("""() => {
-                        const rows = Array.from(document.querySelectorAll('div.detail-row'));
-                        const jobRows = rows.filter(r => {
-                            const h2 = r.querySelector('h2.detail-title, h2');
-                            if (!h2) return false;
-                            return /Mô tả|Yêu cầu|Quyền lợi|Địa điểm|Job Description|Requirements|Benefits|Location/i.test(h2.textContent);
-                        });
-                        if (jobRows.length > 0) return jobRows.map(r => r.outerHTML).join('');
-                        const fck = document.querySelector('div.content_fck');
-                        return fck && fck.innerText.trim().length > 50 ? fck.innerHTML : '';
-                    }""")
-                    desc = _truncate(_clean_html(desc_html)) if desc_html and desc_html.strip() else ""
-                    job["description"] = desc
-                    if not desc:
-                        print(f"[CareerViet detail] empty description for {job['link']}")
-                except Exception as e:
-                    print(f"[CareerViet detail] {e}")
+                    page.wait_for_selector("div.job-item, div[class*='job-item']", timeout=12000)
+                except Exception:
+                    pass
+                soup = BeautifulSoup(page.content(), "html.parser")
+                jobs = _parse_careerviet(soup, max_results)
 
-            browser.close()
+                for job in jobs:
+                    try:
+                        page.goto(job["link"], wait_until="domcontentloaded", timeout=20000)
+                        try:
+                            page.wait_for_function(
+                                """() => {
+                                    const rows = document.querySelectorAll('div.detail-row');
+                                    return Array.from(rows).some(r => {
+                                        const h2 = r.querySelector('h2.detail-title, h2');
+                                        return h2 && /Mô tả|Yêu cầu/i.test(h2.textContent) && r.innerText.trim().length > 80;
+                                    });
+                                }""",
+                                timeout=15000,
+                            )
+                        except Exception:
+                            page.wait_for_timeout(2000)
+                        desc_html = page.evaluate("""() => {
+                            const rows = Array.from(document.querySelectorAll('div.detail-row'));
+                            const jobRows = rows.filter(r => {
+                                const h2 = r.querySelector('h2.detail-title, h2');
+                                if (!h2) return false;
+                                return /Mô tả|Yêu cầu|Quyền lợi|Địa điểm|Job Description|Requirements|Benefits|Location/i.test(h2.textContent);
+                            });
+                            if (jobRows.length > 0) return jobRows.map(r => r.outerHTML).join('');
+                            const fck = document.querySelector('div.content_fck');
+                            return fck && fck.innerText.trim().length > 50 ? fck.innerHTML : '';
+                        }""")
+                        desc = _truncate(_clean_html(desc_html)) if desc_html and desc_html.strip() else ""
+                        job["description"] = desc
+                        if not desc:
+                            print(f"[CareerViet detail] empty description for {job['link']}")
+                    except Exception as e:
+                        print(f"[CareerViet detail] {e}")
+            finally:
+                browser.close()
         return jobs
     except Exception as e:
         print(f"[CareerViet Playwright] {e}")

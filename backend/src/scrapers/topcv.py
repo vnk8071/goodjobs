@@ -58,18 +58,20 @@ def scrape_topcv_detail_one(job: dict, cooldown: float) -> None:
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            context = browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                locale="vi-VN",
-            )
-            page = context.new_page()
             try:
-                page.goto(job["link"], wait_until="commit", timeout=15000)
-                page.wait_for_selector("div.container.job-detail", timeout=8000)
-            except Exception:
-                pass
-            detail_soup = BeautifulSoup(page.content(), "html.parser")
-            browser.close()
+                context = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="vi-VN",
+                )
+                page = context.new_page()
+                try:
+                    page.goto(job["link"], wait_until="commit", timeout=15000)
+                    page.wait_for_selector("div.container.job-detail", timeout=8000)
+                except Exception:
+                    pass
+                detail_soup = BeautifulSoup(page.content(), "html.parser")
+            finally:
+                browser.close()
 
         desc = _parse_topcv_description(detail_soup)
         if desc:
@@ -98,19 +100,21 @@ def _topcv_playwright(url: str, max_results: int, location: str = "") -> list[di
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            context = browser.new_context(
-                user_agent=HEADERS["User-Agent"],
-                locale="vi-VN",
-            )
-            page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=15000)
             try:
-                page.wait_for_selector("div.job-item-search-result", timeout=10000)
-            except Exception:
-                pass
-            soup = BeautifulSoup(page.content(), "html.parser")
-            jobs = _parse_topcv(soup, max_results, location)
-            browser.close()
+                context = browser.new_context(
+                    user_agent=HEADERS["User-Agent"],
+                    locale="vi-VN",
+                )
+                page = context.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    page.wait_for_selector("div.job-item-search-result", timeout=10000)
+                except Exception:
+                    pass
+                soup = BeautifulSoup(page.content(), "html.parser")
+                jobs = _parse_topcv(soup, max_results, location)
+            finally:
+                browser.close()
         return jobs
     except Exception as e:
         print(f"[TopCV Playwright] {e}")

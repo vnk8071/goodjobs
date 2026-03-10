@@ -396,5 +396,7 @@ async def warmup(executor, scrapers: dict) -> None:
                 await _cleanup_old_jobs()
                 _last_cleanup_ts = time.time()
 
+            await asyncio.sleep(CYCLE_INTERVAL)
+
         except Exception as e:
             log_app(f"[warmup] cycle crashed: {e}")

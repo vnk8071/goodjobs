@@ -64,23 +64,23 @@ def _itviec_playwright(url: str, max_results: int, default_location: str = "") -
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
-            ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
-            page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
             try:
-                page.wait_for_selector("div.job-card", timeout=10000)
-            except Exception:
-                pass
+                ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+                page = ctx.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                try:
+                    page.wait_for_selector("div.job-card", timeout=10000)
+                except Exception:
+                    pass
 
-            page_title = page.title()
-            if "security service" in page_title.lower() or "just a moment" in page_title.lower():
+                page_title = page.title()
+                if "security service" in page_title.lower() or "just a moment" in page_title.lower():
+                    return []
+
+                jobs = _extract_itviec_cards_js(page)
                 ctx.close()
+            finally:
                 browser.close()
-                return []
-
-            jobs = _extract_itviec_cards_js(page)
-            ctx.close()
-            browser.close()
 
         jobs = [j for j in jobs if j["_days_ago"] <= RECENT_DAYS][:max_results]
 
