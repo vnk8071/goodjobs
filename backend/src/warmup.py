@@ -284,49 +284,53 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
     _CLEANUP_INTERVAL = 86400
 
     while True:
-        sleep_secs = _seconds_until_active()
-        if sleep_secs > 0:
-            wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
-            log_app(f"[warmup] quiet hours ��� sleeping until {wake.strftime('%H:%M')} ICT ({sleep_secs/3600:.1f}h)")
-            while True:
-                remaining = _seconds_until_active()
-                if remaining <= 0:
-                    break
-                await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
-            log_app(f"[warmup] quiet hours over — resuming")
+        try:
+            sleep_secs = _seconds_until_active()
+            if sleep_secs > 0:
+                wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
+                log_app(f"[warmup] quiet hours — sleeping until {wake.strftime('%H:%M')} ICT ({sleep_secs/3600:.1f}h)")
+                while True:
+                    remaining = _seconds_until_active()
+                    if remaining <= 0:
+                        break
+                    await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
+                log_app(f"[warmup] quiet hours over — resuming")
 
-        now = time.time()
-        tasks = []
-        for kw in await get_warmup_keywords():
-            for loc in _WARMUP_LOCATIONS:
-                existing = await cache_get(kw, loc)
-                if existing is None:
-                    log_app(f"[warmup] URGENT: {_key(kw, loc)!r} missing — scraping immediately")
-                    tasks.append((kw, loc, 0.0))
-                else:
-                    _, fetched_ts = existing
-                    if now - fetched_ts >= SCRAPE_INTERVAL:
-                        tasks.append((kw, loc, fetched_ts))
+            now = time.time()
+            tasks = []
+            for kw in await get_warmup_keywords():
+                for loc in _WARMUP_LOCATIONS:
+                    existing = await cache_get(kw, loc)
+                    if existing is None:
+                        log_app(f"[warmup] URGENT: {_key(kw, loc)!r} missing — scraping immediately")
+                        tasks.append((kw, loc, 0.0))
+                    else:
+                        _, fetched_ts = existing
+                        if now - fetched_ts >= SCRAPE_INTERVAL:
+                            tasks.append((kw, loc, fetched_ts))
 
-        if tasks:
-            missing_count = sum(1 for _, _, ft in tasks if ft == 0.0)
-            log_app(f"[warmup] cycle: {len(tasks)} keys need refresh ({missing_count} missing)")
+            if tasks:
+                missing_count = sum(1 for _, _, ft in tasks if ft == 0.0)
+                log_app(f"[warmup] cycle: {len(tasks)} keys need refresh ({missing_count} missing)")
 
-            async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
-                age = "missing" if fetched_ts == 0.0 else f"age={int(now - fetched_ts)}s"
-                try:
-                    log_app(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
-                    async with get_sem():
-                        await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
-                except Exception as e:
-                    log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
+                async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
+                    age = "missing" if fetched_ts == 0.0 else f"age={int(now - fetched_ts)}s"
+                    try:
+                        log_app(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
+                        async with get_sem():
+                            await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
+                    except Exception as e:
+                        log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 
-            await asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks])
-        else:
-            log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
+                await asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks])
+            else:
+                log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 
-        if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
-            await _cleanup_old_jobs()
-            _last_cleanup_ts = time.time()
+            if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
+                await _cleanup_old_jobs()
+                _last_cleanup_ts = time.time()
+
+        except Exception as e:
+            log_app(f"[warmup] cycle crashed: {e}")
 
         await asyncio.sleep(CYCLE_INTERVAL)

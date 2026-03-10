@@ -86,10 +86,12 @@ def health():
 
 @app.get("/cache/status")
 async def cache_status():
-    """Report status of all 30 cache keys and trigger scraping for any that are missing."""
+    """Report status of all cache keys and trigger scraping for any that are missing or stale (>2h)."""
     loop = asyncio.get_event_loop()
+    now = time.time()
+    STALE_THRESHOLD = 7200
     keys = []
-    missing = []
+    needs_scrape: list[tuple[str, str, float]] = []
     for kw in await get_warmup_keywords():
         for loc in _WARMUP_LOCATIONS:
             existing = await cache_get(kw, loc)
@@ -97,7 +99,7 @@ async def cache_status():
             fetched_ts = existing[1] if existing else 0.0
             job_count = len(existing[0]) if existing else 0
             if fetched_ts:
-                age = int(time.time() - fetched_ts)
+                age = int(now - fetched_ts)
                 if age < 3600:
                     fetched_ago = f"{age // 60}m ago"
                 elif age < 86400:
@@ -106,25 +108,27 @@ async def cache_status():
                     fetched_ago = f"{age // 86400}d ago"
             else:
                 fetched_ago = "never"
+            is_stale = is_missing or (now - fetched_ts >= STALE_THRESHOLD)
             keys.append({"keyword": kw, "location": loc, "missing": is_missing,
-                         "fetched_ago": fetched_ago, "job_count": job_count})
-            if is_missing:
-                missing.append((kw, loc))
+                         "stale": is_stale, "fetched_ago": fetched_ago, "job_count": job_count})
+            if is_stale:
+                needs_scrape.append((kw, loc, fetched_ts))
 
-    if missing and _get_sem()._value > 0:  # noqa: SLF001
-        async def _scrape_missing() -> None:
-            for kw, loc in missing:
+    if needs_scrape and _get_sem()._value > 0:  # noqa: SLF001
+        async def _scrape_stale() -> None:
+            for kw, loc, fetched_ts in needs_scrape:
                 try:
                     async with _get_sem():
-                        await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS)
+                        await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
                 except Exception as e:
-                    log_app(f"warmup/status error for {kw!r}/{loc!r}: {e}", "ERROR")
-        asyncio.create_task(_scrape_missing())
+                    log_app(f"cache/status scrape error for {kw!r}/{loc!r}: {e}", "ERROR")
+        asyncio.create_task(_scrape_stale())
 
     return {
         "total": len(keys),
-        "missing": len(missing),
-        "triggered_scrape": len(missing) > 0,
+        "missing": sum(1 for k in keys if k["missing"]),
+        "stale": len(needs_scrape),
+        "triggered_scrape": len(needs_scrape) > 0,
         "keys": keys,
     }
 
