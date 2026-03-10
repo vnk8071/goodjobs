@@ -113,7 +113,13 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     for scrape_kw in [kw]:
         for site, fn in scrapers.items():
             try:
-                result = await loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc)
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc),
+                    timeout=120.0,
+                )
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] scrape timeout")
+                result = []
             except Exception as e:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
                 result = []
@@ -156,10 +162,15 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         for i, job in enumerate(batch):
             cooldown = 1.5 if i > 0 else 0.0
             try:
-                ok = await loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown)
+                ok = await asyncio.wait_for(
+                    loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown),
+                    timeout=60.0,
+                )
                 if not ok:
                     break
                 enriched_linkedin += 1
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{kw}][{loc}] linkedin detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] LinkedIn enrich done — {enriched_linkedin}/{len(batch)} jobs enriched")
@@ -171,8 +182,13 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         for i, job in enumerate(topcv_jobs[:10]):
             cooldown = 1.0 if i > 0 else 0.0
             try:
-                await loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown)
+                await asyncio.wait_for(
+                    loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown),
+                    timeout=60.0,
+                )
                 enriched_topcv += 1
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{kw}][{loc}] topcv detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] TopCV enrich done — {enriched_topcv}/{len(topcv_jobs)} jobs enriched")
@@ -184,8 +200,13 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         for i, job in enumerate(itviec_jobs[:10]):
             cooldown = 1.0 if i > 0 else 0.0
             try:
-                await loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown)
+                await asyncio.wait_for(
+                    loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown),
+                    timeout=60.0,
+                )
                 enriched_itviec += 1
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{kw}][{loc}] itviec detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
