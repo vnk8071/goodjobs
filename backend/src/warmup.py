@@ -359,5 +359,3 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
 
         except Exception as e:
             log_app(f"[warmup] cycle crashed: {e}")
-
-        await asyncio.sleep(CYCLE_INTERVAL)
