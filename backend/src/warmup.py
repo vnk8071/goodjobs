@@ -1,5 +1,6 @@
 import asyncio
 import os
+import random
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -83,16 +84,26 @@ def _seconds_until_active() -> float:
     return 0.0
 
 
-async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, last_fetched_ts: float = 0.0) -> None:
+async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, last_fetched_ts: float = 0.0, blocked_sites: set | None = None) -> None:
     """Scrape all sites for one keyword+location, enrich descriptions, and merge into Redis.
 
     When last_fetched_ts > 0, LinkedIn uses f_TPR for incremental fetching.
-    When 0, performs a full backfill. Sites are scraped sequentially to keep
-    memory usage low on single-CPU servers.
+    When 0, performs a full backfill. Sites are scraped sequentially with a
+    per-site inter-request delay to avoid IP blocks.
     """
     from src.scrapers.linkedin import scrape_linkedin
 
     since_seconds = 43200 if last_fetched_ts > 0 else None
+
+    # Minimum delay between consecutive site requests.
+    # A random jitter of 0–50% is added on top to avoid predictable intervals.
+    _SITE_DELAY: dict[str, float] = {
+        "linkedin":     8.0,
+        "itviec":       10.0,
+        "topcv":        6.0,
+        "vietnamworks": 6.0,
+        "careerviet":   6.0,
+    }
 
     def _timed(site: str, fn, kw: str, loc: str):
         t0 = time.perf_counter()
@@ -111,11 +122,11 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     seen_links: set[str] = set()
 
     for scrape_kw in [kw]:
-        for site, fn in scrapers.items():
+        for i, (site, fn) in enumerate(scrapers.items()):
             try:
                 result = await asyncio.wait_for(
                     loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc),
-                    timeout=120.0,
+                    timeout=45.0,
                 )
             except asyncio.TimeoutError:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] scrape timeout")
@@ -134,6 +145,11 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                         topcv_jobs.append(j)
                     elif j.get("source") == "ITViec":
                         itviec_jobs.append(j)
+            # Inter-site delay with jitter — only between sites, not after the last one.
+            if i < len(scrapers) - 1:
+                base = _SITE_DELAY.get(site, 4.0)
+                jitter = random.uniform(0, base * 0.5)
+                await asyncio.sleep(base + jitter)
 
     cutoff_ts = time.time() - RECENT_DAYS * 86400
     existing = await cache_get(kw, loc)
@@ -157,10 +173,10 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         batch = linkedin_jobs[:30]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} LinkedIn jobs...")
-        await asyncio.sleep(3.0)
+        await asyncio.sleep(1.0)
         enriched_linkedin = 0
         for i, job in enumerate(batch):
-            cooldown = 1.5 if i > 0 else 0.0
+            cooldown = 1.0 if i > 0 else 0.0
             try:
                 ok = await asyncio.wait_for(
                     loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown),
@@ -367,8 +383,12 @@ async def warmup(executor, scrapers: dict) -> None:
                     except Exception as e:
                         log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 
-                for kw, loc, ft in tasks:
+                for i, (kw, loc, ft) in enumerate(tasks):
                     await _scrape_one(kw, loc, ft)
+                    # Between-keyword cooldown: 15–30 s so back-to-back keyword
+                    # cycles don't look like a bot burst to LinkedIn/ITViec.
+                    if i < len(tasks) - 1:
+                        await asyncio.sleep(random.uniform(15, 30))
             else:
                 log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 

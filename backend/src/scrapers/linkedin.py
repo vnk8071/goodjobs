@@ -4,10 +4,9 @@ import time as _time
 from datetime import date, timedelta
 from urllib.parse import quote_plus
 
-import requests
 from bs4 import BeautifulSoup
 
-from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS, session
+from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS, new_session
 from ..logger import log_app
 from ..utils import _parse_iso_date, _relative_display, _clean_html, _extract_html, _truncate, _fmt_num
 
@@ -173,7 +172,9 @@ def _linkedin_keyword_variants(keyword: str) -> list[str]:
 def _linkedin_requests(url: str, max_results: int) -> list[dict]:
     """Fetch LinkedIn job listings via plain HTTP requests. Returns [] on failure or block."""
     try:
-        resp = session.get(url, timeout=12)
+        # Fresh session per call so LinkedIn cannot fingerprint a long-lived session.
+        s = new_session()
+        resp = s.get(url, timeout=12)
         if resp.status_code != 200:
             return []
         if "authwall" in resp.url or "login" in resp.url:
@@ -371,8 +372,7 @@ def _linkedin_fetch_detail(job_url: str) -> tuple[str, str]:
 
     for attempt in range(3):
         try:
-            s = requests.Session()
-            s.headers.update(HEADERS)
+            s = new_session()
             resp = s.get(api_url, timeout=10)
             if resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", 15 * (attempt + 1)))

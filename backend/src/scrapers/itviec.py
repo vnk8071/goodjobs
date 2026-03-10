@@ -29,7 +29,7 @@ def scrape_itviec(keyword: str, location: str = "Ho Chi Minh City", max_results:
     if city_slug is None:
         return []
     url = f"https://itviec.com/it-jobs/{keyword_slug}/{city_slug}"
-    return _itviec_playwright(url, max_results)
+    return _itviec_playwright(url, max_results, location)
 
 def _itviec_city_slug(location: str) -> str | None:
     """Return the ITViec URL city slug for a given location string."""
@@ -57,7 +57,7 @@ def _itviec_display(text: str) -> str:
     return text
 
 
-def _itviec_playwright(url: str, max_results: int) -> list[dict]:
+def _itviec_playwright(url: str, max_results: int, default_location: str = "") -> list[dict]:
     """Scrape ITViec listing page only. Descriptions are fetched in Phase 2 via scrape_itviec_detail_one."""
     try:
         from playwright.sync_api import sync_playwright
@@ -93,8 +93,8 @@ def _itviec_playwright(url: str, max_results: int) -> list[dict]:
                 if days_ago < 9999 else ""
             )
             job["description"] = ""
-            if not job.get("location") and card_location:
-                job["location"] = card_location
+            if not job.get("location"):
+                job["location"] = card_location or default_location
 
         return jobs
     except Exception as e:

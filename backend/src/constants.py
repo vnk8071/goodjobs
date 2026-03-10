@@ -1,20 +1,48 @@
 import os
+import random
 import re
 import sys
 
 import requests
 
+# Pool of realistic desktop Chrome User-Agents across OS/versions.
+# new_session() picks one at random so each HTTP request has a different fingerprint.
+_USER_AGENTS = [
+    # Windows Chrome
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    # macOS Chrome
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+    # macOS Safari
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+    # Windows Edge
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+    # Linux Chrome
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+]
+
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": _USER_AGENTS[0],
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
     "Connection": "keep-alive",
 }
+
+
+def new_session() -> requests.Session:
+    """Return a fresh requests.Session with a randomly rotated User-Agent.
+
+    Call this per-request (or per-scrape-call) instead of reusing a global
+    session — prevents sites from fingerprinting a long-lived connection.
+    """
+    s = requests.Session()
+    headers = {**HEADERS, "User-Agent": random.choice(_USER_AGENTS)}
+    s.headers.update(headers)
+    return s
+
 
 CHROMIUM_ARGS = [
     "--no-sandbox",
@@ -32,9 +60,6 @@ CHROMIUM_ARGS = [
     "--safebrowsing-disable-auto-update",
     *(["--no-zygote", "--single-process"] if sys.platform == "linux" else []),
 ]
-
-session = requests.Session()
-session.headers.update(HEADERS)
 
 DESC_MAX_CHARS    = 10000
 RECENT_DAYS       = 8

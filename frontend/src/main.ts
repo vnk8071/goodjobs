@@ -80,6 +80,11 @@ fetchBtn.addEventListener("click", async () => {
     await scrapeJobsStream(
       { keyword, location },
       (batch) => {
+        if (location) {
+          for (const j of batch) {
+            if (!j.location) j.location = location;
+          }
+        }
         if (batch.some(j => j.source === "LinkedIn" && !j.description)) {
           setLinkedInEnriching(true);
         }
