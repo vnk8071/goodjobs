@@ -168,7 +168,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
         enriched_topcv = 0
-        for i, job in enumerate(topcv_jobs):
+        for i, job in enumerate(topcv_jobs[:10]):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown)
@@ -181,7 +181,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
         enriched_itviec = 0
-        for i, job in enumerate(itviec_jobs):
+        for i, job in enumerate(itviec_jobs[:10]):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown)
@@ -256,7 +256,7 @@ async def _cleanup_old_jobs() -> None:
     log_app(f"[warmup] daily cleanup done — {cleaned} old job(s) removed")
 
 
-async def warmup(get_sem, executor, scrapers: dict) -> None:
+async def warmup(executor, scrapers: dict) -> None:
     """Background loop that keeps all warmup keys fresh.
 
     Every CYCLE_INTERVAL seconds, scrapes any keyword×location whose fetched_ts
@@ -295,8 +295,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
                     await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
                 log_app(f"[warmup] startup: quiet hours over — resuming")
             try:
-                async with get_sem():
-                    await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
+                await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
 
@@ -343,8 +342,7 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
                     age = "missing" if fetched_ts == 0.0 else f"age={int(now - fetched_ts)}s"
                     try:
                         log_app(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
-                        async with get_sem():
-                            await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
+                        await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
                     except Exception as e:
                         log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 

@@ -103,7 +103,7 @@ def _topcv_playwright(url: str, max_results: int, location: str = "") -> list[di
                 locale="vi-VN",
             )
             page = context.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            page.goto(url, wait_until="domcontentloaded", timeout=15000)
             try:
                 page.wait_for_selector("div.job-item-search-result", timeout=10000)
             except Exception:

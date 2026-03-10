@@ -24,7 +24,7 @@ from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_ke
 async def lifespan(app: FastAPI):
     """Start the background warmup task on application startup."""
     log_app("Application starting...")
-    asyncio.create_task(warmup(_get_warmup_sem, _executor, _SCRAPERS))
+    asyncio.create_task(warmup(_executor, _SCRAPERS))
     log_app("Warmup task scheduled")
     yield
     log_app("Application shutting down")
@@ -93,14 +93,11 @@ def health():
     return {"status": "ok", "service": "good jobs"}
 
 
-@app.get("/cache/status")
-async def cache_status():
-    """Report status of all cache keys and trigger scraping for any that are missing or stale (>2h)."""
-    loop = asyncio.get_event_loop()
+async def _cache_status_data() -> dict:
     now = time.time()
     STALE_THRESHOLD = 7200
     keys = []
-    needs_scrape: list[tuple[str, str, float]] = []
+    stale_count = 0
     for kw in await get_warmup_keywords():
         for loc in _WARMUP_LOCATIONS:
             existing = await cache_get(kw, loc)
@@ -118,27 +115,58 @@ async def cache_status():
             else:
                 fetched_ago = "never"
             is_stale = is_missing or (now - fetched_ts >= STALE_THRESHOLD)
+            if is_stale:
+                stale_count += 1
             keys.append({"keyword": kw, "location": loc, "missing": is_missing,
                          "stale": is_stale, "fetched_ago": fetched_ago, "job_count": job_count})
-            if is_stale:
-                needs_scrape.append((kw, loc, fetched_ts))
-
-    if needs_scrape and _get_warmup_sem()._value > 0:  # noqa: SLF001
-        async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
-            try:
-                async with _get_warmup_sem():
-                    await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
-            except Exception as e:
-                log_app(f"cache/status scrape error for {kw!r}/{loc!r}: {e}", "ERROR")
-        asyncio.create_task(asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in needs_scrape]))
-
     return {
         "total": len(keys),
         "missing": sum(1 for k in keys if k["missing"]),
-        "stale": len(needs_scrape),
-        "triggered_scrape": len(needs_scrape) > 0,
+        "stale": stale_count,
         "keys": keys,
     }
+
+
+@app.get("/cache/status")
+async def cache_status():
+    """Report status of all cache keys."""
+    return await _cache_status_data()
+
+
+@app.get("/cache/scrape")
+async def cache_scrape(keyword: str | None = None, location: str | None = None):
+    """Trigger a background scrape. Optionally filter by keyword and/or location.
+
+    Examples:
+      /cache/scrape
+      /cache/scrape?keyword=AI Engineer
+      /cache/scrape?keyword=AI Engineer&location=Ho Chi Minh City
+    """
+    loop = asyncio.get_event_loop()
+    status = await _cache_status_data()
+
+    keys_to_scrape = [
+        k for k in status["keys"]
+        if (keyword is None or k["keyword"].lower() == keyword.lower())
+        and (location is None or k["location"].lower() == location.lower())
+    ]
+
+    if not keys_to_scrape:
+        return {"triggered": 0, "message": "no matching keys found"}
+
+    async def _run() -> None:
+        for k in keys_to_scrape:
+            kw, loc = k["keyword"], k["location"]
+            existing = await cache_get(kw, loc)
+            fetched_ts = existing[1] if existing else 0.0
+            try:
+                await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
+            except Exception as e:
+                log_app(f"[cache/scrape] error for {kw!r}/{loc!r}: {e}", "ERROR")
+
+    asyncio.create_task(_run())
+    triggered = [{"keyword": k["keyword"], "location": k["location"]} for k in keys_to_scrape]
+    return {"triggered": len(triggered), "keys": triggered}
 
 
 @app.get("/warmup/keywords")
