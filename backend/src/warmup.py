@@ -129,6 +129,24 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                     elif j.get("source") == "ITViec":
                         itviec_jobs.append(j)
 
+    cutoff_ts = time.time() - RECENT_DAYS * 86400
+    existing = await cache_get(kw, loc)
+    existing_jobs = existing[0] if existing else []
+
+    new_links = {j["link"] for j in jobs}
+    kept_cached = [
+        j for j in existing_jobs
+        if j["link"] not in new_links and j.get("posted_ts", 0.0) > cutoff_ts
+    ]
+    new_jobs_recent = [j for j in jobs if j.get("posted_ts", 0.0) > cutoff_ts]
+    for j in new_jobs_recent:
+        j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+
+    merged = kept_cached + new_jobs_recent
+    merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+    await cache_set(kw, loc, merged, time.time())
+    log_app(f"[warmup] {kw!r}/{loc!r} cached — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total (pre-enrich)")
+
     if linkedin_jobs:
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         batch = linkedin_jobs[:30]
@@ -172,28 +190,12 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
 
-    for j in jobs:
-        j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+    if linkedin_jobs or topcv_jobs or itviec_jobs:
+        for j in new_jobs_recent:
+            j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+        merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        await cache_set(kw, loc, merged, time.time())
 
-    cutoff_ts = time.time() - RECENT_DAYS * 86400
-    existing = await cache_get(kw, loc)
-    existing_jobs = existing[0] if existing else []
-    cached_fetched_ts = existing[1] if existing else 0.0
-
-    new_links = {j["link"] for j in jobs}
-    kept_cached = [
-        j for j in existing_jobs
-        if j["link"] not in new_links and j.get("posted_ts", 0.0) > cutoff_ts
-    ]
-    new_jobs_recent = [
-        j for j in jobs
-        if j.get("posted_ts", 0.0) > cutoff_ts
-    ]
-
-    merged = kept_cached + new_jobs_recent
-    merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-
-    await cache_set(kw, loc, merged, time.time())
     log_app(f"[warmup] {kw!r}/{loc!r} done — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total ({time.perf_counter()-t0:.1f}s)")
 
 
@@ -298,7 +300,8 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
 
-        await asyncio.gather(*[_startup_scrape(kw, loc, ft) for kw, loc, ft in startup_tasks])
+        for kw, loc, ft in startup_tasks:
+            await _startup_scrape(kw, loc, ft)
         log_app(f"[warmup] startup pass done")
     else:
         log_app(f"[warmup] startup pass: all keys present, skipping")
@@ -345,7 +348,8 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
                     except Exception as e:
                         log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
 
-                asyncio.create_task(asyncio.gather(*[_scrape_one(kw, loc, ft) for kw, loc, ft in tasks]))
+                for kw, loc, ft in tasks:
+                    await _scrape_one(kw, loc, ft)
             else:
                 log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 
