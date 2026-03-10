@@ -270,6 +270,16 @@ async def warmup(get_sem, executor, scrapers: dict) -> None:
         log_app(f"[warmup] startup pass: scraping {len(startup_tasks)} missing/stale entries...")
 
         async def _startup_scrape(kw: str, loc: str, fetched_ts: float) -> None:
+            sleep_secs = _seconds_until_active()
+            if sleep_secs > 0:
+                wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
+                log_app(f"[warmup] startup: quiet hours — waiting until {wake.strftime('%H:%M')} ICT")
+                while True:
+                    remaining = _seconds_until_active()
+                    if remaining <= 0:
+                        break
+                    await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
+                log_app(f"[warmup] startup: quiet hours over — resuming")
             try:
                 async with get_sem():
                     await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)

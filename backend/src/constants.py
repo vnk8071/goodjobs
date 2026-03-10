@@ -38,7 +38,7 @@ session.headers.update(HEADERS)
 
 DESC_MAX_CHARS    = 10000
 RECENT_DAYS       = 8
-MAX_CONCURRENT    = 4
+MAX_CONCURRENT    = 6
 REDIS_URL         = os.getenv("REDIS_URL", "redis://redis:6379")
 
 SYNONYMS: list[set[str]] = [

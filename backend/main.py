@@ -24,7 +24,7 @@ from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_ke
 async def lifespan(app: FastAPI):
     """Start the background warmup task on application startup."""
     log_app("Application starting...")
-    asyncio.create_task(warmup(_get_sem, _executor, _SCRAPERS))
+    asyncio.create_task(warmup(_get_warmup_sem, _executor, _SCRAPERS))
     log_app("Warmup task scheduled")
     yield
     log_app("Application shutting down")
@@ -39,10 +39,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_executor = ThreadPoolExecutor(max_workers=4)
+_executor = ThreadPoolExecutor(max_workers=6)
 
 _MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_SCRAPES", str(MAX_CONCURRENT)))
 _scrape_sem: asyncio.Semaphore | None = None
+_warmup_sem: asyncio.Semaphore | None = None
 _queue_count = 0
 
 
@@ -52,6 +53,14 @@ def _get_sem() -> asyncio.Semaphore:
     if _scrape_sem is None:
         _scrape_sem = asyncio.Semaphore(_MAX_CONCURRENT)
     return _scrape_sem
+
+
+def _get_warmup_sem() -> asyncio.Semaphore:
+    """Return the warmup semaphore, capped at MAX_CONCURRENT-1 to reserve 1 slot for user requests."""
+    global _warmup_sem
+    if _warmup_sem is None:
+        _warmup_sem = asyncio.Semaphore(max(1, _MAX_CONCURRENT - 1))
+    return _warmup_sem
 
 
 def _refresh_posted_times(jobs: list[dict]) -> None:
@@ -114,10 +123,10 @@ async def cache_status():
             if is_stale:
                 needs_scrape.append((kw, loc, fetched_ts))
 
-    if needs_scrape and _get_sem()._value > 0:  # noqa: SLF001
+    if needs_scrape and _get_warmup_sem()._value > 0:  # noqa: SLF001
         async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
             try:
-                async with _get_sem():
+                async with _get_warmup_sem():
                     await _scrape_keyword(kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts)
             except Exception as e:
                 log_app(f"cache/status scrape error for {kw!r}/{loc!r}: {e}", "ERROR")
