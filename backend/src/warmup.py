@@ -69,7 +69,7 @@ async def remove_warmup_keyword(keyword: str) -> bool:
 
 _TZ_ICT = timezone(timedelta(hours=7))
 _QUIET_START = 22
-_QUIET_END   = 12
+_QUIET_END   = 11
 
 
 def _seconds_until_active() -> float:
@@ -161,6 +161,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     existing = await cache_get(kw, loc)
     existing_jobs = existing[0] if existing else []
 
+    cached_with_desc = {j["link"] for j in existing_jobs if j.get("description")}
+
     new_links = {j["link"] for j in jobs}
     kept_cached = [
         j for j in existing_jobs
@@ -177,7 +179,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if linkedin_jobs:
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = linkedin_jobs[:30]
+        batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc][:30]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} LinkedIn jobs...")
         await asyncio.sleep(1.0)
         enriched_linkedin = 0
@@ -199,9 +201,10 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if topcv_jobs:
         topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        topcv_jobs = [j for j in topcv_jobs if j.get("link") not in cached_with_desc][:10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
         enriched_topcv = 0
-        for i, job in enumerate(topcv_jobs[:10]):
+        for i, job in enumerate(topcv_jobs):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await asyncio.wait_for(
@@ -217,9 +220,10 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if itviec_jobs:
         itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        itviec_jobs = [j for j in itviec_jobs if j.get("link") not in cached_with_desc][:10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
         enriched_itviec = 0
-        for i, job in enumerate(itviec_jobs[:10]):
+        for i, job in enumerate(itviec_jobs):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await asyncio.wait_for(
@@ -233,7 +237,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
 
-    vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description")]
+    vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
     if vw_to_enrich:
         vw_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         batch = vw_to_enrich[:10]
@@ -253,7 +257,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] vietnamworks detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] VietnamWorks enrich done — {enriched_vw}/{len(batch)} jobs enriched")
 
-    cv_to_enrich = [j for j in careerviet_jobs if not j.get("description")]
+    cv_to_enrich = [j for j in careerviet_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
     if cv_to_enrich:
         cv_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         batch = cv_to_enrich[:10]
