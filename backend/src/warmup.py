@@ -161,7 +161,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     existing = await cache_get(kw, loc)
     existing_jobs = existing[0] if existing else []
 
-    cached_with_desc = {j["link"] for j in existing_jobs if j.get("description")}
+    cached_desc_by_link = {j["link"]: j["description"] for j in existing_jobs if j.get("description")}
+    cached_with_desc = set(cached_desc_by_link)
 
     new_links = {j["link"] for j in jobs}
     kept_cached = [
@@ -169,6 +170,9 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         if j["link"] not in new_links and j.get("posted_ts", 0.0) > cutoff_ts
     ]
     new_jobs_recent = [j for j in jobs if j.get("posted_ts", 0.0) > cutoff_ts]
+    for j in new_jobs_recent:
+        if not j.get("description") and j["link"] in cached_desc_by_link:
+            j["description"] = cached_desc_by_link[j["link"]]
     for j in new_jobs_recent:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
