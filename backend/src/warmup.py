@@ -9,7 +9,7 @@ from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
 
-from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one
+from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one, scrape_vietnamworks_detail_one, scrape_careerviet_detail_one
 
 _WARMUP_KEYWORDS_DEFAULT = [
     "AI Engineer",
@@ -68,8 +68,8 @@ async def remove_warmup_keyword(keyword: str) -> bool:
     return bool(removed)
 
 _TZ_ICT = timezone(timedelta(hours=7))
-_QUIET_START = 20
-_QUIET_END   = 8
+_QUIET_START = 22
+_QUIET_END   = 12
 
 
 def _seconds_until_active() -> float:
@@ -119,6 +119,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     linkedin_jobs: list[dict] = []
     topcv_jobs: list[dict] = []
     itviec_jobs: list[dict] = []
+    vietnamworks_jobs: list[dict] = []
+    careerviet_jobs: list[dict] = []
     seen_links: set[str] = set()
 
     for scrape_kw in [kw]:
@@ -145,6 +147,10 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                         topcv_jobs.append(j)
                     elif j.get("source") == "ITViec":
                         itviec_jobs.append(j)
+                    elif j.get("source") == "VietnamWorks":
+                        vietnamworks_jobs.append(j)
+                    elif j.get("source") == "CareerViet":
+                        careerviet_jobs.append(j)
             # Inter-site delay with jitter — only between sites, not after the last one.
             if i < len(scrapers) - 1:
                 base = _SITE_DELAY.get(site, 4.0)
@@ -227,7 +233,47 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
 
-    if linkedin_jobs or topcv_jobs or itviec_jobs:
+    vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description")]
+    if vw_to_enrich:
+        vw_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        batch = vw_to_enrich[:10]
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} VietnamWorks jobs...")
+        enriched_vw = 0
+        for i, job in enumerate(batch):
+            cooldown = 1.0 if i > 0 else 0.0
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(executor, scrape_vietnamworks_detail_one, job, cooldown),
+                    timeout=60.0,
+                )
+                enriched_vw += 1
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{kw}][{loc}] vietnamworks detail timeout: {job.get('link')}")
+            except Exception as e:
+                log_app(f"[warmup][{kw}][{loc}] vietnamworks detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] VietnamWorks enrich done — {enriched_vw}/{len(batch)} jobs enriched")
+
+    cv_to_enrich = [j for j in careerviet_jobs if not j.get("description")]
+    if cv_to_enrich:
+        cv_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        batch = cv_to_enrich[:10]
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} CareerViet jobs...")
+        enriched_cv = 0
+        for i, job in enumerate(batch):
+            cooldown = 1.0 if i > 0 else 0.0
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(executor, scrape_careerviet_detail_one, job, cooldown),
+                    timeout=60.0,
+                )
+                enriched_cv += 1
+            except asyncio.TimeoutError:
+                log_app(f"[warmup][{kw}][{loc}] careerviet detail timeout: {job.get('link')}")
+            except Exception as e:
+                log_app(f"[warmup][{kw}][{loc}] careerviet detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] CareerViet enrich done — {enriched_cv}/{len(batch)} jobs enriched")
+
+    if linkedin_jobs or topcv_jobs or itviec_jobs or vw_to_enrich or cv_to_enrich:
         for j in new_jobs_recent:
             j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
         merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
@@ -301,8 +347,8 @@ async def warmup(executor, scrapers: dict) -> None:
     """
     loop = asyncio.get_event_loop()
 
-    CYCLE_INTERVAL = 600
-    SCRAPE_INTERVAL = 7200
+    CYCLE_INTERVAL = 3600
+    SCRAPE_INTERVAL = 25200
 
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
