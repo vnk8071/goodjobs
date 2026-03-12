@@ -583,6 +583,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     yield f"event: itviec-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
+                if not is_warmup:
+                    await cache_touch(cache_keyword, req.location)
         finally:
             ip_active_dec(ip)
 

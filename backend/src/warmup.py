@@ -393,7 +393,6 @@ async def warmup(executor, scrapers: dict) -> None:
 
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
-    await _cleanup_nonwarmup_stale_keys()
 
     log_app(f"[warmup] startup pass — checking for missing or stale keys...")
     warmup_kws = await get_warmup_keywords()
