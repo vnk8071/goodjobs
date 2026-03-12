@@ -4,7 +4,7 @@ import random
 import time
 from datetime import datetime, timezone, timedelta
 
-from src.cache import cache_get, cache_set, get_redis, _key
+from src.cache import cache_get, cache_set, get_redis, _key, cache_access_ts
 from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
@@ -84,7 +84,7 @@ def _seconds_until_active() -> float:
     return 0.0
 
 
-async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, last_fetched_ts: float = 0.0, blocked_sites: set | None = None) -> None:
+async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, last_fetched_ts: float = 0.0, blocked_sites: set | None = None, enrich_limit: int | None = None) -> None:
     """Scrape all sites for one keyword+location, enrich descriptions, and merge into Redis.
 
     When last_fetched_ts > 0, LinkedIn uses f_TPR for incremental fetching.
@@ -93,16 +93,16 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     """
     from src.scrapers.linkedin import scrape_linkedin
 
-    since_seconds = 43200 if last_fetched_ts > 0 else None
+    since_seconds = 86400 if last_fetched_ts > 0 else None
 
     # Minimum delay between consecutive site requests.
     # A random jitter of 0–50% is added on top to avoid predictable intervals.
     _SITE_DELAY: dict[str, float] = {
-        "linkedin":     8.0,
-        "itviec":       10.0,
-        "topcv":        6.0,
-        "vietnamworks": 6.0,
-        "careerviet":   6.0,
+        "linkedin":     3.0,
+        "itviec":       3.0,
+        "topcv":        3.0,
+        "vietnamworks": 3.0,
+        "careerviet":   3.0,
     }
 
     def _timed(site: str, fn, kw: str, loc: str):
@@ -122,6 +122,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     vietnamworks_jobs: list[dict] = []
     careerviet_jobs: list[dict] = []
     seen_links: set[str] = set()
+    site_timeouts: set[str] = set()
 
     for scrape_kw in [kw]:
         for i, (site, fn) in enumerate(scrapers.items()):
@@ -132,6 +133,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 )
             except asyncio.TimeoutError:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] scrape timeout")
+                site_timeouts.add(site)
                 result = []
             except Exception as e:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
@@ -156,6 +158,11 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 base = _SITE_DELAY.get(site, 4.0)
                 jitter = random.uniform(0, base * 0.5)
                 await asyncio.sleep(base + jitter)
+
+    all_sites = set(scrapers.keys())
+    if site_timeouts >= all_sites:
+        log_app(f"[warmup] {kw!r}/{loc!r} all sources timed out — skipping cache update to allow retry")
+        return
 
     cutoff_ts = time.time() - RECENT_DAYS * 86400
     existing = await cache_get(kw, loc)
@@ -183,7 +190,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if linkedin_jobs:
         linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc][:30]
+        batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 30]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} LinkedIn jobs...")
         await asyncio.sleep(1.0)
         enriched_linkedin = 0
@@ -205,7 +212,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if topcv_jobs:
         topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        topcv_jobs = [j for j in topcv_jobs if j.get("link") not in cached_with_desc][:10]
+        topcv_jobs = [j for j in topcv_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
         enriched_topcv = 0
         for i, job in enumerate(topcv_jobs):
@@ -224,7 +231,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     if itviec_jobs:
         itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        itviec_jobs = [j for j in itviec_jobs if j.get("link") not in cached_with_desc][:10]
+        itviec_jobs = [j for j in itviec_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
         enriched_itviec = 0
         for i, job in enumerate(itviec_jobs):
@@ -244,7 +251,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
     if vw_to_enrich:
         vw_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = vw_to_enrich[:10]
+        batch = vw_to_enrich[:enrich_limit if enrich_limit is not None else 10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} VietnamWorks jobs...")
         enriched_vw = 0
         for i, job in enumerate(batch):
@@ -264,7 +271,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     cv_to_enrich = [j for j in careerviet_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
     if cv_to_enrich:
         cv_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = cv_to_enrich[:10]
+        batch = cv_to_enrich[:enrich_limit if enrich_limit is not None else 10]
         log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} CareerViet jobs...")
         enriched_cv = 0
         for i, job in enumerate(batch):
@@ -291,29 +298,15 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
 
 async def _cleanup_stale_keys() -> None:
-    """Delete Redis cache keys and warmup:keywords members not in _WARMUP_KEYWORDS.
+    """Remove keywords from warmup:keywords set that are no longer in _WARMUP_KEYWORDS.
 
-    Removes leftover keys from renamed keywords or typo searches.
+    Does NOT delete non-warmup job cache keys — those are handled by _cleanup_nonwarmup_stale_keys().
     Uses _WARMUP_KEYWORDS (hardcoded) as the source of truth, not the Redis set,
     so removed keywords are pruned even if they still exist in the set.
     """
     try:
         redis = get_redis()
         canonical = {kw.lower().strip() for kw in _WARMUP_KEYWORDS}
-        deleted = 0
-
-        for loc in _WARMUP_LOCATIONS:
-            loc_key = loc.lower().strip()
-            suffix = f":{loc_key}"
-            pattern = f"jobs:*:{loc_key}"
-            async for key in redis.scan_iter(pattern):
-                if not key.endswith(suffix):
-                    continue
-                kw_part = key[len("jobs:") : len(key) - len(suffix)]
-                if kw_part not in canonical:
-                    await redis.delete(key)
-                    log_app(f"[warmup] deleted stale key: {key!r}")
-                    deleted += 1
 
         members = await redis.smembers(_WARMUP_KEYWORDS_KEY)
         for member in members:
@@ -321,9 +314,49 @@ async def _cleanup_stale_keys() -> None:
                 await redis.srem(_WARMUP_KEYWORDS_KEY, member)
                 log_app(f"[warmup] removed stale keyword from set: {member!r}")
 
-        log_app(f"[warmup] cleanup done — {deleted} stale key(s) removed")
+        log_app(f"[warmup] stale keyword set cleanup done")
     except Exception as e:
         log_app(f"[warmup] cleanup error: {e}")
+
+
+async def _cleanup_nonwarmup_stale_keys() -> None:
+    """Delete non-warmup job cache keys (and their access keys) that have not been
+    accessed by a user in more than RECENT_DAYS days.
+
+    Warmup keys are never touched by this function.
+    """
+    try:
+        redis = get_redis()
+        canonical_lower = {kw.lower().strip() for kw in _WARMUP_KEYWORDS}
+        cutoff = time.time() - RECENT_DAYS * 86400
+        deleted = 0
+
+        async for key in redis.scan_iter("jobs:*"):
+            # Extract keyword part from key: "jobs:{kw}:{loc}"
+            # Key format guarantees at least one colon after "jobs:"
+            remainder = key[len("jobs:"):]
+            # Find the last colon — location part never contains a colon
+            last_colon = remainder.rfind(":")
+            if last_colon == -1:
+                continue
+            kw_part = remainder[:last_colon]
+            loc_part = remainder[last_colon + 1:]
+
+            if kw_part in canonical_lower:
+                continue  # warmup key — never delete
+
+            # Non-warmup key: check last-access timestamp
+            access_ts = await cache_access_ts(kw_part, loc_part)
+            if access_ts == 0.0 or access_ts < cutoff:
+                await redis.delete(key)
+                access_key = f"jobs-access:{kw_part}:{loc_part}"
+                await redis.delete(access_key)
+                log_app(f"[warmup] deleted stale non-warmup key: {key!r}")
+                deleted += 1
+
+        log_app(f"[warmup] non-warmup cleanup done — {deleted} key(s) removed")
+    except Exception as e:
+        log_app(f"[warmup] non-warmup cleanup error: {e}")
 
 
 async def _cleanup_old_jobs() -> None:
@@ -360,6 +393,7 @@ async def warmup(executor, scrapers: dict) -> None:
 
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
+    await _cleanup_nonwarmup_stale_keys()
 
     log_app(f"[warmup] startup pass — checking for missing or stale keys...")
     warmup_kws = await get_warmup_keywords()
@@ -448,6 +482,7 @@ async def warmup(executor, scrapers: dict) -> None:
 
             if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
                 await _cleanup_old_jobs()
+                await _cleanup_nonwarmup_stale_keys()
                 _last_cleanup_ts = time.time()
 
             await asyncio.sleep(CYCLE_INTERVAL)

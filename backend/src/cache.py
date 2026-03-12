@@ -1,4 +1,5 @@
 import json
+import time
 from difflib import SequenceMatcher
 
 from redis.asyncio import Redis
@@ -21,6 +22,11 @@ def get_redis() -> Redis:
 def _key(keyword: str, location: str) -> str:
     """Build the canonical Redis key for a keyword+location pair."""
     return f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
+
+
+def _access_key(keyword: str, location: str) -> str:
+    """Build the last-access timestamp key for non-warmup keywords."""
+    return f"jobs-access:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
 async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | None:
@@ -127,3 +133,22 @@ async def cache_merge(keyword: str, location: str, new_jobs: list[dict], fetched
         log_app(f"cache merged {len(new_jobs)} new + {len(existing[0]) if existing else 0} cached = {len(deduped)} total")
     except Exception as e:
         log_app(f"cache merge error: {e}", "ERROR")
+
+
+async def cache_touch(keyword: str, location: str) -> None:
+    """Record the current Unix timestamp as the last user-access time for this cache key.
+    Only called on cache hits from user searches — never by warmup."""
+    try:
+        await get_redis().set(_access_key(keyword, location), str(time.time()))
+    except Exception as e:
+        log_app(f"cache touch error: {e}", "ERROR")
+
+
+async def cache_access_ts(keyword: str, location: str) -> float:
+    """Return the last user-access timestamp for this key, or 0.0 if never accessed."""
+    try:
+        raw = await get_redis().get(_access_key(keyword, location))
+        return float(raw) if raw else 0.0
+    except Exception as e:
+        log_app(f"cache access_ts error: {e}", "ERROR")
+        return 0.0

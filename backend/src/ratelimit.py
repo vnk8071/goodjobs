@@ -13,6 +13,7 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "flutter developer":         "Mobile Developer",
     "ios developer":             "Mobile Developer",
     "android developer":         "Mobile Developer",
+    "mobile engineer":           "Mobile Developer",
     # Product / Management
     "project manager":           "Product Manager",
     "product owner":             "Product Manager",
@@ -36,6 +37,34 @@ _KEYWORD_ALIASES: dict[str, str] = {
     "site reliability engineer": "Cloud Engineer",
     "sre":                       "Cloud Engineer",
     "infrastructure engineer":   "Cloud Engineer",
+    # Developer → Engineer variants
+    "backend developer":         "Backend Engineer",
+    "frontend developer":        "Frontend Engineer",
+    "fullstack developer":       "Fullstack Engineer",
+    "full stack developer":      "Fullstack Engineer",
+    "devops developer":          "DevOps Engineer",
+    "mobile developer":          "Mobile Developer",
+    "cloud developer":           "Cloud Engineer",
+    "data developer":            "Data Engineer",
+    "qa developer":              "QA Engineer",
+    # Tech stack variants (.net → dotnet, c# → csharp, etc.)
+    "dotnet developer":          "Backend Engineer",
+    "dotnet engineer":           "Backend Engineer",
+    "asp.net developer":         "Backend Engineer",
+    "aspnet developer":          "Backend Engineer",
+    "csharp developer":          "Backend Engineer",
+    "csharp engineer":           "Backend Engineer",
+    "c# developer":              "Backend Engineer",
+    "cpp developer":             "Backend Engineer",
+    "php developer":             "Backend Engineer",
+    "nodejs developer":          "Backend Engineer",
+    "node.js developer":         "Backend Engineer",
+    "node js developer":         "Backend Engineer",
+    "python developer":          "Backend Engineer",
+    "java developer":            "Backend Engineer",
+    "go developer":              "Backend Engineer",
+    "golang developer":          "Backend Engineer",
+    "rust developer":            "Backend Engineer",
 }
 
 _KEYWORD_ALIAS_VARIANTS: dict[str, list[str]] = {}

@@ -9,11 +9,101 @@ _LEVEL_WORDS = {
     "associate", "head",
 }
 
+# Common job-related English vocabulary for typo correction
+_JOB_VOCABULARY = {
+    # Roles & positions
+    "engineer", "developer", "architect", "manager", "director", "lead", "lead",
+    "specialist", "analyst", "consultant", "coordinator", "officer", "executive",
+    # Engineering roles
+    "backend", "frontend", "fullstack", "devops", "platform", "infrastructure",
+    "reliability", "security", "quality", "automation", "database", "cloud",
+    # Tech stack
+    "python", "java", "javascript", "typescript", "golang", "rust", "php", "ruby",
+    "csharp", "dotnet", "cpp", "nodejs", "react", "angular", "vue", "django",
+    # Job titles
+    "scientist", "researcher", "designer", "product", "business", "data",
+    "machine", "learning", "artificial", "intelligence", "ai", "ml",
+    # Additional common words
+    "senior", "junior", "staff", "principal", "lead", "tech", "technical",
+}
+
 
 def strip_level(keyword: str) -> str:
     """Return keyword with seniority/level words removed, lowercased and stripped."""
     words = keyword.lower().strip().split()
     return " ".join(w for w in words if w not in _LEVEL_WORDS).strip() or keyword.lower().strip()
+
+
+def _correct_typo_word(typo: str, all_words: list[str]) -> str:
+    """Return the best spelling correction using vocabulary + fuzzy matching.
+
+    Priority order:
+    1. Exact match in vocabulary (fastest)
+    2. Close fuzzy match in vocabulary (similarity > 0.65, first char match, len diff <= 2)
+    3. Fuzzy match in all_words (warmup keywords + vocabulary combined)
+    4. Original typo if no match found
+
+    Vocabulary-based correction prevents false positives like "dotnet" → "frontend".
+    """
+    typo_lower = typo.lower()
+
+    # 1. Exact match in vocabulary
+    if typo_lower in _JOB_VOCABULARY:
+        return typo_lower
+
+    # 2. Fuzzy match in vocabulary (higher priority than all_words)
+    vocab_match = None
+    best_vocab_score = 0.0
+    for vocab_word in _JOB_VOCABULARY:
+        if not (typo_lower and vocab_word and typo_lower[0] == vocab_word[0]):
+            continue
+        score = _word_similarity(typo_lower, vocab_word)
+        if score > 0.65 and abs(len(vocab_word) - len(typo_lower)) <= 2 and score > best_vocab_score:
+            vocab_match = vocab_word
+            best_vocab_score = score
+
+    if vocab_match:
+        return vocab_match
+
+    # 3. Fuzzy match in all_words (warmup keywords) as fallback
+    best_match = typo_lower
+    best_score = 0.0
+    for candidate in all_words:
+        if typo_lower == candidate:
+            return candidate
+        if not (typo_lower and candidate and typo_lower[0] == candidate[0]):
+            continue
+        score = _word_similarity(typo_lower, candidate)
+        if score > 0.65 and abs(len(candidate) - len(typo_lower)) <= 2 and score > best_score:
+            best_match = candidate
+            best_score = score
+
+    return best_match
+
+
+def correct_keyword_typos(keyword: str, all_known_keywords: list[str]) -> str:
+    """Correct typos in keyword by matching against words from known warmup keywords.
+
+    For each word in the keyword, find the best match from all words in all_known_keywords.
+    Example: "enginner" (typo) → finds "engineer" from "Backend Engineer", "Frontend Engineer", etc.
+    """
+    keyword_lower = keyword.lower().strip()
+    words = keyword_lower.split()
+
+    all_known_words = set()
+    for kw in all_known_keywords:
+        kw_words = kw.lower().split()
+        all_known_words.update(kw_words)
+
+    corrected = []
+    for word in words:
+        if len(word) >= 3:
+            corrected_word = _correct_typo_word(word, list(all_known_words))
+            corrected.append(corrected_word)
+        else:
+            corrected.append(word)
+
+    return " ".join(corrected)
 
 
 def _word_similarity(a: str, b: str) -> float:
@@ -33,13 +123,20 @@ def _expand(text: str) -> set[str]:
     return {text}
 
 
-def _normalize(text: str) -> str:
-    """Apply multi-word synonym normalisation (full stack → fullstack, etc.)."""
+def normalize_keyword(text: str) -> str:
+    """Apply multi-word synonym normalisation and special character cleanup."""
     text = re.sub(r"\bfull[\s\-]stack\b", "fullstack", text)
     text = re.sub(r"\bfront[\s\-]end\b", "frontend", text)
     text = re.sub(r"\bback[\s\-]end\b", "backend", text)
     text = re.sub(r"\bmachine\s+learning\b", "ml", text)
     text = re.sub(r"\bartificial\s+intelligence\b", "ai", text)
+    # Special characters: .net → dotnet, c# → csharp, c++ → cpp, node.js → nodejs
+    # Match ".net", "asp.net", "net" but NOT "dotnet" (already normalized)
+    text = re.sub(r"(?:asp\s*)?(?<!dot)\.?\s*net\b", "dotnet", text)
+    text = re.sub(r"\bc\s*#", "csharp", text)
+    text = re.sub(r"\bc\s*\+\+", "cpp", text)
+    text = re.sub(r"\bnode\.js\b", "nodejs", text)
+    text = re.sub(r"\bnode\s+js\b", "nodejs", text)
     return text
 
 
@@ -50,11 +147,11 @@ def title_matches(title: str, keyword: str) -> bool:
     A keyword word found only inside parentheses does not count as a primary match.
     Falls back to exact phrase match and Jaccard similarity on the core title only.
     """
-    kw_phrase  = _normalize(keyword.strip().lower())
+    kw_phrase  = normalize_keyword(keyword.strip().lower())
 
     # Split off parenthetical qualifiers — use only the core title for matching.
     # e.g. "Data Engineer (AI Platform)" → core = "data engineer"
-    core_title = _normalize(re.split(r"\s*[\(\[]", title.strip().lower())[0].strip())
+    core_title = normalize_keyword(re.split(r"\s*[\(\[]", title.strip().lower())[0].strip())
 
     if kw_phrase in core_title:
         return True

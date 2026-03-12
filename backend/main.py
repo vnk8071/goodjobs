@@ -10,14 +10,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from src.cache import cache_get, cache_set, cache_fuzzy_get
+from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
-from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level
+from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
 from src.models import Job, ScrapeRequest
 from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
-from src.warmup import warmup, _WARMUP_LOCATIONS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
+from src.warmup import warmup, _WARMUP_LOCATIONS, _WARMUP_KEYWORDS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
 
 @asynccontextmanager
@@ -85,6 +85,42 @@ _SCRAPERS = {
     # "indeed":       scrape_indeed,
     "careerviet":   scrape_careerviet,
 }
+
+NON_WARMUP_ENRICH_LIMIT = 5
+_active_bg_rescrapes: set[str] = set()
+
+
+def _is_warmup_keyword(keyword: str) -> bool:
+    """Return True if keyword (case-insensitive) is in the hardcoded warmup list."""
+    return keyword.lower().strip() in {kw.lower().strip() for kw in _WARMUP_KEYWORDS}
+
+
+async def _background_rescrape(keyword: str, location: str, last_fetched_ts: float) -> None:
+    """Background re-scrape for a non-warmup cache hit.
+
+    Runs the full scrape+enrich cycle using the existing _scrape_keyword() from warmup,
+    but caps description enrichment at NON_WARMUP_ENRICH_LIMIT per site.
+    Uses the warmup semaphore to avoid overloading the executor.
+    """
+    key = f"{keyword.lower()}:{location.lower()}"
+    if key in _active_bg_rescrapes:
+        log_app(f"[bg-rescrape] already in progress for {keyword!r}/{location!r}, skipping")
+        return
+    _active_bg_rescrapes.add(key)
+    sem = _get_warmup_sem()
+    async with sem:
+        loop = asyncio.get_event_loop()
+        try:
+            log_app(f"[bg-rescrape] starting for {keyword!r}/{location!r}")
+            await _scrape_keyword(
+                keyword, location, loop, _executor, _SCRAPERS,
+                last_fetched_ts=last_fetched_ts,
+                enrich_limit=NON_WARMUP_ENRICH_LIMIT,
+            )
+        except Exception as e:
+            log_app(f"[bg-rescrape] error for {keyword!r}/{location!r}: {e}", "ERROR")
+        finally:
+            _active_bg_rescrapes.discard(key)
 
 
 @app.get("/")
@@ -184,7 +220,16 @@ async def scrape(req: ScrapeRequest, request: Request):
         raise HTTPException(status_code=400, detail="keyword is required")
     log_search(request, keyword, req.location)
 
-    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), strip_level(keyword))
+    warmup_kws = await get_warmup_keywords()
+    keyword_corrected = correct_keyword_typos(keyword, warmup_kws)
+    if keyword_corrected != keyword.lower():
+        log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
+
+    keyword_normalized = normalize_keyword(keyword_corrected)
+    cache_keyword = _KEYWORD_ALIASES.get(keyword_normalized.lower(), None)
+    if not cache_keyword:
+        keyword_stripped = strip_level(keyword_normalized)
+        cache_keyword = _KEYWORD_ALIASES.get(keyword_stripped.lower(), keyword_stripped)
 
     all_cached_jobs: list[dict] = []
     related_keywords = _get_related_keywords(cache_keyword)
@@ -267,9 +312,19 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
     log_search(request, keyword, req.location)
 
-    cache_keyword = _KEYWORD_ALIASES.get(keyword.lower(), strip_level(keyword))
+    warmup_kws = await get_warmup_keywords()
+    keyword_corrected = correct_keyword_typos(keyword, warmup_kws)
+    if keyword_corrected != keyword.lower():
+        log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
+
+    keyword_normalized = normalize_keyword(keyword_corrected)
+    cache_keyword = _KEYWORD_ALIASES.get(keyword_normalized.lower(), None)
+    if not cache_keyword:
+        keyword_stripped = strip_level(keyword_normalized)
+        cache_keyword = _KEYWORD_ALIASES.get(keyword_stripped.lower(), keyword_stripped)
 
     loop = asyncio.get_event_loop()
+    is_warmup = any(cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws)
 
     def _process(jobs: list[dict]) -> list[dict]:
         filtered = []
@@ -314,6 +369,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
+
+                if not is_warmup:
+                    await cache_touch(cache_keyword, req.location)
+                    asyncio.create_task(
+                        _background_rescrape(cache_keyword, req.location, latest_ts)
+                    )
+
                 return
 
             fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
@@ -366,12 +428,14 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 itviec_enrich_queue: asyncio.Queue = asyncio.Queue()
                 itviec_enrich_task: asyncio.Task | None = None
 
+                enrich_limit = NON_WARMUP_ENRICH_LIMIT if not is_warmup else 30
+
                 async def _phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
                     count = len(jobs)
                     log_app(f"linkedin: fetching descriptions for {count} jobs (streaming, newest first)...")
                     await asyncio.sleep(10.0)
-                    for i, job in enumerate(jobs[:30]):
+                    for i, job in enumerate(jobs[:enrich_limit]):
                         cooldown = 3.0 if i > 0 else 0.0
                         try:
                             ok = await loop.run_in_executor(
@@ -384,7 +448,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         await enrich_queue.put(job)
                         if not ok:
                             log_app("linkedin: rate-limited — stopping detail fetch")
-                            for remaining in jobs[i + 1:30]:
+                            for remaining in jobs[i + 1:enrich_limit]:
                                 remaining["skills"] = extract_skills(remaining.get("title", ""), remaining.get("description", ""))
                                 await enrich_queue.put(remaining)
                             break
@@ -394,7 +458,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 async def _topcv_phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
                     log_app(f"topcv: fetching details for {len(jobs)} jobs (streaming, newest first)...")
-                    for i, job in enumerate(jobs):
+                    for i, job in enumerate(jobs[:enrich_limit]):
                         cooldown = 2.0 if i > 0 else 0.0
                         try:
                             await loop.run_in_executor(
@@ -410,7 +474,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 async def _itviec_phase2(jobs: list[dict]) -> None:
                     jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
                     log_app(f"itviec: fetching details for {len(jobs)} jobs (streaming, newest first)...")
-                    for i, job in enumerate(jobs):
+                    for i, job in enumerate(jobs[:enrich_limit]):
                         cooldown = 2.0 if i > 0 else 0.0
                         try:
                             await loop.run_in_executor(
