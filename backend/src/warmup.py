@@ -8,6 +8,7 @@ from src.cache import cache_get, cache_set, get_redis, _key, cache_access_ts
 from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
+from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
 
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one, scrape_vietnamworks_detail_one, scrape_careerviet_detail_one
 
@@ -124,7 +125,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     seen_links: set[str] = set()
     site_timeouts: set[str] = set()
 
-    for scrape_kw in [kw]:
+    alias_variants = _KEYWORD_ALIAS_VARIANTS.get(kw, [])
+    for scrape_kw in [kw] + alias_variants:
         for i, (site, fn) in enumerate(scrapers.items()):
             try:
                 result = await asyncio.wait_for(

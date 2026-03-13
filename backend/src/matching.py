@@ -5,8 +5,8 @@ from .constants import SYNONYMS, COMPILED_SKILLS
 
 _LEVEL_WORDS = {
     "senior", "sr", "junior", "jr", "intern", "internship",
-    "fresher", "lead", "staff", "principal", "mid", "entry",
-    "associate", "head",
+    "fresher", "staff", "principal", "mid", "entry",
+    "associate",
 }
 
 # Common job-related English vocabulary for typo correction
@@ -24,7 +24,7 @@ _JOB_VOCABULARY = {
     "scientist", "researcher", "designer", "product", "business", "data",
     "machine", "learning", "artificial", "intelligence", "ai", "ml",
     # Additional common words
-    "senior", "junior", "staff", "principal", "lead", "tech", "technical",
+    "tech", "technical", "lead", "head", "manager",
 }
 
 
@@ -123,8 +123,47 @@ def _expand(text: str) -> set[str]:
     return {text}
 
 
+_SHORT_ROLE_EXPANSIONS = {
+    # Tech
+    r"\btest\b":   "tester",
+    r"\bdev\b":    "developer",
+    r"\beng\b":    "engineer",
+    r"\barch\b":   "architect",
+    r"\bpm\b":     "product manager",
+    r"\bpo\b":     "product owner",
+    r"\bba\b":     "business analyst",
+    # Marketing
+    r"\bmkt\b":    "marketing",
+    r"\bcmo\b":    "chief marketing officer",
+    # Finance
+    r"\bfin\b":    "finance",
+    r"\bacc\b":    "accountant",
+    r"\bcfo\b":    "chief financial officer",
+    r"\bcpa\b":    "certified public accountant",
+    r"\baudit\b":  "auditor",
+    # HR / Admin
+    r"\bhr\b":     "human resources",
+    r"\bta\b":     "talent acquisition",
+    r"\badmin\b":  "administrator",
+    # Sales
+    r"\bbiz\b":    "business",
+    r"\bbd\b":     "business development",
+    r"\bam\b":     "account manager",
+    r"\bae\b":     "account executive",
+    # Design
+    r"\bux\b":     "ux designer",
+    r"\bui\b":     "ui designer",
+    # Operations
+    r"\bops\b":    "operations",
+    r"\bscm\b":    "supply chain",
+    r"\bcs\b":     "customer service",
+}
+
+
 def normalize_keyword(text: str) -> str:
     """Apply multi-word synonym normalisation and special character cleanup."""
+    for pattern, replacement in _SHORT_ROLE_EXPANSIONS.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     text = re.sub(r"\bfull[\s\-]stack\b", "fullstack", text)
     text = re.sub(r"\bfront[\s\-]end\b", "frontend", text)
     text = re.sub(r"\bback[\s\-]end\b", "backend", text)
@@ -149,15 +188,20 @@ def title_matches(title: str, keyword: str) -> bool:
     """
     kw_phrase  = normalize_keyword(keyword.strip().lower())
 
-    # Split off parenthetical qualifiers — use only the core title for matching.
-    # e.g. "Data Engineer (AI Platform)" → core = "data engineer"
-    core_title = normalize_keyword(re.split(r"\s*[\(\[]", title.strip().lower())[0].strip())
+    # Strip leading bracket tags like [Remote], [HCM], [Urgent] from the title.
+    # e.g. "[Remote] Python Developer" → "Python Developer"
+    t = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title.strip().lower())
+
+    # Split off parenthetical qualifiers and dash-separated suffixes — use only the core role.
+    # e.g. "Data Engineer (AI Platform)" → "data engineer"
+    # e.g. "Python Developer - Machine Learning Focus" → "python developer"
+    core_title = normalize_keyword(re.split(r"\s*[\(\[|]|\s+-\s+", t)[0].strip())
 
     if kw_phrase in core_title:
         return True
 
     kw_words    = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
-    core_words  = re.split(r"[\s/\-,\.]+", core_title)
+    core_words  = re.split(r"[\s/\-,\.&_]+", core_title)
     core_words  = [w for w in core_words if w]
 
     if not kw_words:
