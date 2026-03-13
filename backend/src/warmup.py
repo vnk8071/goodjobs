@@ -123,6 +123,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     vietnamworks_jobs: list[dict] = []
     careerviet_jobs: list[dict] = []
     seen_links: set[str] = set()
+    site_succeeded: set[str] = set()
     site_timeouts: set[str] = set()
 
     alias_variants = _KEYWORD_ALIAS_VARIANTS.get(kw, [])
@@ -133,9 +134,11 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                     loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc),
                     timeout=45.0,
                 )
+                site_succeeded.add(site)
             except asyncio.TimeoutError:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] scrape timeout")
-                site_timeouts.add(site)
+                if site not in site_succeeded:
+                    site_timeouts.add(site)
                 result = []
             except Exception as e:
                 log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
@@ -162,7 +165,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 await asyncio.sleep(base + jitter)
 
     all_sites = set(scrapers.keys())
-    if site_timeouts >= all_sites:
+    if not site_succeeded and site_timeouts >= all_sites:
         log_app(f"[warmup] {kw!r}/{loc!r} all sources timed out — skipping cache update to allow retry")
         return
 
