@@ -8,7 +8,6 @@ from src.cache import cache_get, cache_set, get_redis, _key, cache_access_ts
 from src.constants import RECENT_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
-from src.ratelimit import _KEYWORD_ALIAS_VARIANTS
 
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one, scrape_vietnamworks_detail_one, scrape_careerviet_detail_one
 
@@ -70,7 +69,7 @@ async def remove_warmup_keyword(keyword: str) -> bool:
 
 _TZ_ICT = timezone(timedelta(hours=7))
 _QUIET_START = 22
-_QUIET_END   = 11
+_QUIET_END   = 10
 
 
 def _seconds_until_active() -> float:
@@ -126,43 +125,41 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     site_succeeded: set[str] = set()
     site_timeouts: set[str] = set()
 
-    alias_variants = _KEYWORD_ALIAS_VARIANTS.get(kw, [])
-    for scrape_kw in [kw] + alias_variants:
-        for i, (site, fn) in enumerate(scrapers.items()):
-            try:
-                result = await asyncio.wait_for(
-                    loop.run_in_executor(executor, _timed, site, fn, scrape_kw, loc),
-                    timeout=45.0,
-                )
-                site_succeeded.add(site)
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] scrape timeout")
-                if site not in site_succeeded:
-                    site_timeouts.add(site)
-                result = []
-            except Exception as e:
-                log_app(f"[warmup][{scrape_kw}][{loc}][{site}] error: {e}")
-                result = []
-            for j in result:
-                if title_matches(j.get("title", ""), scrape_kw) and j.get("link") not in seen_links:
-                    seen_links.add(j["link"])
-                    j["posted_ts"] = posted_ts(j)
-                    jobs.append(j)
-                    if j.get("source") == "LinkedIn":
-                        linkedin_jobs.append(j)
-                    elif j.get("source") == "TopCV":
-                        topcv_jobs.append(j)
-                    elif j.get("source") == "ITViec":
-                        itviec_jobs.append(j)
-                    elif j.get("source") == "VietnamWorks":
-                        vietnamworks_jobs.append(j)
-                    elif j.get("source") == "CareerViet":
-                        careerviet_jobs.append(j)
-            # Inter-site delay with jitter — only between sites, not after the last one.
-            if i < len(scrapers) - 1:
-                base = _SITE_DELAY.get(site, 4.0)
-                jitter = random.uniform(0, base * 0.5)
-                await asyncio.sleep(base + jitter)
+    for i, (site, fn) in enumerate(scrapers.items()):
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(executor, _timed, site, fn, kw, loc),
+                timeout=45.0,
+            )
+            site_succeeded.add(site)
+        except asyncio.TimeoutError:
+            log_app(f"[warmup][{kw}][{loc}][{site}] scrape timeout")
+            if site not in site_succeeded:
+                site_timeouts.add(site)
+            result = []
+        except Exception as e:
+            log_app(f"[warmup][{kw}][{loc}][{site}] error: {e}")
+            result = []
+        for j in result:
+            if title_matches(j.get("title", ""), kw) and j.get("link") not in seen_links:
+                seen_links.add(j["link"])
+                j["posted_ts"] = posted_ts(j)
+                jobs.append(j)
+                if j.get("source") == "LinkedIn":
+                    linkedin_jobs.append(j)
+                elif j.get("source") == "TopCV":
+                    topcv_jobs.append(j)
+                elif j.get("source") == "ITViec":
+                    itviec_jobs.append(j)
+                elif j.get("source") == "VietnamWorks":
+                    vietnamworks_jobs.append(j)
+                elif j.get("source") == "CareerViet":
+                    careerviet_jobs.append(j)
+        # Inter-site delay with jitter — only between sites, not after the last one.
+        if i < len(scrapers) - 1:
+            base = _SITE_DELAY.get(site, 4.0)
+            jitter = random.uniform(0, base * 0.5)
+            await asyncio.sleep(base + jitter)
 
     all_sites = set(scrapers.keys())
     if not site_succeeded and site_timeouts >= all_sites:
@@ -193,13 +190,14 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     await cache_set(kw, loc, merged, time.time())
     log_app(f"[warmup] {kw!r}/{loc!r} cached — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total (pre-enrich)")
 
-    if linkedin_jobs:
-        linkedin_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 30]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} LinkedIn jobs...")
+    linkedin_batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc]
+    linkedin_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+    linkedin_batch = linkedin_batch[:enrich_limit if enrich_limit is not None else 30]
+    if linkedin_batch:
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(linkedin_batch)} LinkedIn jobs without description...")
         await asyncio.sleep(1.0)
         enriched_linkedin = 0
-        for i, job in enumerate(batch):
+        for i, job in enumerate(linkedin_batch):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 ok = await asyncio.wait_for(
@@ -213,14 +211,15 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] linkedin detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] LinkedIn enrich done — {enriched_linkedin}/{len(batch)} jobs enriched")
+        log_app(f"[warmup][{kw}][{loc}] LinkedIn enrich done — {enriched_linkedin}/{len(linkedin_batch)} jobs enriched")
 
-    if topcv_jobs:
-        topcv_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        topcv_jobs = [j for j in topcv_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_jobs)} TopCV jobs...")
+    topcv_batch = [j for j in topcv_jobs if j.get("link") not in cached_with_desc]
+    topcv_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+    topcv_batch = topcv_batch[:enrich_limit if enrich_limit is not None else 10]
+    if topcv_batch:
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_batch)} TopCV jobs without description...")
         enriched_topcv = 0
-        for i, job in enumerate(topcv_jobs):
+        for i, job in enumerate(topcv_batch):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await asyncio.wait_for(
@@ -232,14 +231,15 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] topcv detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] TopCV enrich done — {enriched_topcv}/{len(topcv_jobs)} jobs enriched")
+        log_app(f"[warmup][{kw}][{loc}] TopCV enrich done — {enriched_topcv}/{len(topcv_batch)} jobs enriched")
 
-    if itviec_jobs:
-        itviec_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        itviec_jobs = [j for j in itviec_jobs if j.get("link") not in cached_with_desc][:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_jobs)} ITViec jobs...")
+    itviec_batch = [j for j in itviec_jobs if j.get("link") not in cached_with_desc]
+    itviec_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+    itviec_batch = itviec_batch[:enrich_limit if enrich_limit is not None else 10]
+    if itviec_batch:
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_batch)} ITViec jobs without description...")
         enriched_itviec = 0
-        for i, job in enumerate(itviec_jobs):
+        for i, job in enumerate(itviec_batch):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 await asyncio.wait_for(
@@ -251,7 +251,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] itviec detail timeout: {job.get('link')}")
             except Exception as e:
                 log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_jobs)} jobs enriched")
+        log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_batch)} jobs enriched")
 
     vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
     if vw_to_enrich:
@@ -293,7 +293,7 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
                 log_app(f"[warmup][{kw}][{loc}] careerviet detail error: {e}")
         log_app(f"[warmup][{kw}][{loc}] CareerViet enrich done — {enriched_cv}/{len(batch)} jobs enriched")
 
-    if linkedin_jobs or topcv_jobs or itviec_jobs or vw_to_enrich or cv_to_enrich:
+    if linkedin_batch or topcv_batch or itviec_batch or vw_to_enrich or cv_to_enrich:
         for j in new_jobs_recent:
             j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
         merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)

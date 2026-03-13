@@ -15,7 +15,7 @@ from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
 from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
 from src.models import Job, ScrapeRequest
-from src.ratelimit import _KEYWORD_ALIASES, check_rate_limit, ip_active_inc, ip_active_dec
+from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
 from src.warmup import warmup, _WARMUP_LOCATIONS, _WARMUP_KEYWORDS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
@@ -226,10 +226,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
 
     keyword_normalized = normalize_keyword(keyword_corrected)
-    cache_keyword = _KEYWORD_ALIASES.get(keyword_normalized.lower(), None)
-    if not cache_keyword:
-        keyword_stripped = strip_level(keyword_normalized)
-        cache_keyword = _KEYWORD_ALIASES.get(keyword_stripped.lower(), keyword_stripped)
+    cache_keyword = strip_level(keyword_normalized)
 
     all_cached_jobs: list[dict] = []
     related_keywords = _get_related_keywords(cache_keyword)
@@ -318,10 +315,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
 
     keyword_normalized = normalize_keyword(keyword_corrected)
-    cache_keyword = _KEYWORD_ALIASES.get(keyword_normalized.lower(), None)
-    if not cache_keyword:
-        keyword_stripped = strip_level(keyword_normalized)
-        cache_keyword = _KEYWORD_ALIASES.get(keyword_stripped.lower(), keyword_stripped)
+    cache_keyword = strip_level(keyword_normalized)
 
     loop = asyncio.get_event_loop()
     is_warmup = any(cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws)
