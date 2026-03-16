@@ -29,6 +29,7 @@
         box-sizing: border-box;
         margin: 0;
         padding: 0;
+        -webkit-tap-highlight-color: transparent;
       }
 
       body {
@@ -1050,6 +1051,123 @@
         transform: translateX(3px);
       }
 
+      /* About / publisher content section */
+      .about-section {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.75rem 2rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      }
+
+      .about-section h2 {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 0.6rem;
+        color: var(--text);
+      }
+
+      .about-section > p {
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.6;
+        margin-bottom: 1.25rem;
+      }
+
+      .about-features {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.85rem;
+        margin-bottom: 1.5rem;
+      }
+
+      @media (max-width: 640px) {
+        .about-features { grid-template-columns: 1fr; }
+      }
+
+      .about-feature {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+      }
+
+      .about-feature svg {
+        flex-shrink: 0;
+        color: var(--primary);
+        margin-top: 0.1rem;
+      }
+
+      .about-feature strong {
+        display: block;
+        font-size: 0.88rem;
+        font-weight: 600;
+        margin-bottom: 0.15rem;
+        color: var(--text);
+      }
+
+      .about-feature span {
+        font-size: 0.82rem;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .about-popular {
+        border-top: 1px solid var(--border);
+        padding-top: 1.1rem;
+        margin-bottom: 1.1rem;
+      }
+
+      .about-popular h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.6rem;
+        color: var(--text);
+      }
+
+      .about-popular ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+
+      .about-popular li {
+        font-size: 0.85rem;
+        color: var(--muted);
+        line-height: 1.5;
+        padding-left: 1rem;
+        position: relative;
+      }
+
+      .about-popular li::before {
+        content: "›";
+        position: absolute;
+        left: 0;
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      .about-popular li strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+
+      .about-tip {
+        font-size: 0.82rem;
+        color: var(--muted);
+        background: var(--loading-bg);
+        border-radius: 6px;
+        padding: 0.6rem 0.85rem;
+        line-height: 1.5;
+      }
+
+      .about-tip strong {
+        color: var(--loading-text);
+      }
+
+      .about-section.hidden { display: none; }
+
     </style>
   </head>
   <body>
@@ -1063,7 +1181,7 @@
         </div>
         <div class="header-text">
           <h1>Good Jobs</h1>
-          <p>Search recently posted jobs in Vietnam 🇻🇳</p>
+          <p>Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳</p>
         </div>
       </header>
 
@@ -1071,28 +1189,28 @@
       <div class="card">
         <div class="search-grid">
           <div class="field keyword-field">
-            <label for="keyword">Job Title</label>
+            <label for="keyword">Chức danh công việc</label>
             <input
               id="keyword"
               type="text"
-              placeholder="Job title or role…"
+              placeholder="Nhập chức danh, ví dụ: AI Engineer"
               value=""
               autocomplete="off"
             />
           </div>
 
           <div class="field location-field">
-            <label for="locationSelect">Location</label>
+            <label for="locationSelect">Địa điểm</label>
             <select id="locationSelect">
-              <option value="Ho Chi Minh City">Ho Chi Minh City</option>
-              <option value="Ha Noi">Ha Noi</option>
-              <option value="Da Nang">Da Nang</option>
-              <option value="_custom">Other…</option>
+              <option value="Ho Chi Minh City">TP. Hồ Chí Minh</option>
+              <option value="Ha Noi">TP. Hà Nội</option>
+              <option value="Da Nang">TP. Đà Nẵng</option>
+              <option value="_custom">Khác…</option>
             </select>
             <input
               id="locationCustom"
               type="text"
-              placeholder="Enter city name"
+              placeholder="Nhập tên thành phố"
               class="hidden"
               autocomplete="off"
             />
@@ -1104,7 +1222,7 @@
               <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
               </svg>
-              Scrape Jobs
+              Tìm việc làm
             </button>
           </div>
 
@@ -1117,11 +1235,67 @@
             <span class="suggestion-chip" data-kw="Fullstack Engineer">Fullstack Engineer</span>
             <span class="suggestion-chip" data-kw="Data Engineer">Data Engineer</span>
             <span class="suggestion-chip" data-kw="DevOps Engineer">DevOps Engineer</span>
-            <span class="suggestion-chip" data-kw="Flutter Developer">Flutter Developer</span>
+            <span class="suggestion-chip" data-kw="Mobile Developer">Mobile Developer</span>
             <span class="suggestion-chip" data-kw="QA Engineer">QA Engineer</span>
           </div>
         </div>
       </div>
+
+      <!-- About section — visible before any search, helps AdSense see publisher content -->
+      <section id="aboutSection" class="about-section">
+        <h2>Tổng hợp việc làm tại Việt Nam</h2>
+        <p>
+          Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm lớn nhất Việt Nam —
+          LinkedIn, ITviec, TopCV, VietnamWorks và CareerViet — vào một trang duy nhất.
+          Kết quả được cập nhật mỗi 2 giờ, giúp bạn không bỏ lỡ cơ hội nào.
+        </p>
+        <div class="about-features">
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <div>
+              <strong>Tìm kiếm đa nguồn</strong>
+              <span>Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks và CareerViet cùng lúc.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <div>
+              <strong>Dữ liệu mới nhất</strong>
+              <span>Tin tuyển dụng được làm mới tự động mỗi 2 giờ, chỉ hiển thị bài đăng trong 7 ngày gần nhất.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <div>
+              <strong>Lọc theo kỹ năng</strong>
+              <span>Xem ngay kỹ năng yêu cầu, mô tả công việc và thông tin công ty trực tiếp trên trang.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <div>
+              <strong>Miễn phí hoàn toàn</strong>
+              <span>Không cần đăng ký, không cần tạo tài khoản. Tìm kiếm và xem kết quả ngay lập tức.</span>
+            </div>
+          </div>
+        </div>
+        <div class="about-popular">
+          <h3>Vị trí tìm kiếm phổ biến</h3>
+          <ul>
+            <li><strong>AI Engineer / Machine Learning Engineer</strong> — Phát triển mô hình AI, tích hợp LLM vào sản phẩm.</li>
+            <li><strong>Backend Engineer</strong> — Python, Java, Go, Node.js, thiết kế API và hệ thống phân tán.</li>
+            <li><strong>Frontend Engineer</strong> — React, Vue, TypeScript, xây dựng giao diện người dùng hiện đại.</li>
+            <li><strong>Fullstack Engineer</strong> — Làm cả backend lẫn frontend, thường trong các startup và công ty sản phẩm.</li>
+            <li><strong>Data Engineer</strong> — Xây dựng pipeline dữ liệu, data warehouse, ETL trên AWS, GCP, Azure.</li>
+            <li><strong>DevOps / Platform Engineer</strong> — Kubernetes, CI/CD, cloud infrastructure, SRE.</li>
+            <li><strong>Mobile Developer</strong> — iOS (Swift), Android (Kotlin), React Native, Flutter.</li>
+            <li><strong>Product Manager</strong> — Quản lý sản phẩm công nghệ, làm việc với engineering và design.</li>
+          </ul>
+        </div>
+        <p class="about-tip">
+          <strong>Mẹo:</strong> Nhập chức danh bằng tiếng Anh để có kết quả tốt nhất. Ví dụ: "AI Engineer", "Backend Engineer", "Data Scientist".
+        </p>
+      </section>
 
       <!-- Status -->
       <div id="status" class="status hidden"></div>
@@ -1153,13 +1327,13 @@
             <thead>
               <tr>
                 <th>#</th>
-                <th>Job Title</th>
-                <th>Company</th>
-                <th>Location</th>
-                <th>Posted</th>
-                <th>Skills</th>
-                <th>Description</th>
-                <th>Source</th>
+                <th>Chức danh công việc</th>
+                <th>Công ty</th>
+                <th>Địa điểm</th>
+                <th>Ngày đăng</th>
+                <th>Kỹ năng</th>
+                <th>Mô tả</th>
+                <th>Nguồn</th>
                 <th>Link</th>
               </tr>
             </thead>
@@ -1207,16 +1381,16 @@
           <div id="jobModalDesc" class="job-desc-full"></div>
         </div>
         <div class="job-modal-footer">
-          <button id="jobModalCloseBtn" class="btn btn-ghost">Close</button>
+          <button id="jobModalCloseBtn" class="btn btn-ghost">Đóng</button>
           <a id="jobModalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">
-            View on Site ↗
+            Mở liên kết
           </a>
         </div>
       </div>
     </div>
 
     <footer style="text-align:center;margin-top:3rem;padding:1.25rem 1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.8rem;">
-      &copy; 2026 Good Jobs | Scrape every 2 hours
+      &copy; 2026 Good Jobs | Làm mới mỗi 2 giờ
     </footer>
 
     <script type="module" src="/src/main.ts"></script>

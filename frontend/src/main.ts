@@ -8,6 +8,7 @@ const fetchBtn        = document.getElementById("fetchBtn")        as HTMLButton
 const keywordEl       = document.getElementById("keyword")         as HTMLInputElement;
 const locationSelect  = document.getElementById("locationSelect")  as HTMLSelectElement;
 const locationCustom  = document.getElementById("locationCustom")  as HTMLInputElement;
+const aboutSection    = document.getElementById("aboutSection")    as HTMLElement;
 
 locationSelect.addEventListener("change", () => {
   if (locationSelect.value === "_custom") {
@@ -69,6 +70,7 @@ fetchBtn.addEventListener("click", async () => {
 
   fetchBtn.disabled = true;
   currentJobs = [];
+  aboutSection.classList.add("hidden");
   hideResults();
   hideProgress();
   clearStatus();
