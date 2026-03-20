@@ -222,11 +222,9 @@ def title_matches(title: str, keyword: str) -> bool:
                 return i
         return -1
 
-    # All keyword words must match AND appear in order (subsequence) in the core title.
-    # e.g. "AI Engineer" requires "ai" to appear before "engineer" in core_words.
-    # This prevents "Engineer AI" from matching "AI Engineer".
+    # All keyword words must match in the core title (any order).
     indices = [_match_index(kw) for kw in kw_words]
-    if all(idx >= 0 for idx in indices) and indices == sorted(indices):
+    if all(idx >= 0 for idx in indices):
         return True
 
     # Level words in the keyword are hard requirements — if any failed to match, reject.

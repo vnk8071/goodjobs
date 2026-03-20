@@ -54,12 +54,12 @@ let abortController: AbortController | null = null;
 fetchBtn.addEventListener("click", async () => {
   const keyword = keywordEl.value.trim();
   if (!keyword) {
-    setStatus("Please enter a job title.", "error");
+    setStatus("Vui lòng nhập tên công việc.", "error");
     return;
   }
   const isChip = [...suggestionChips].some(c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase());
   if (!isChip && keyword.split(/\s+/).length < 2) {
-    setStatus("Please be more specific — enter at least 2 words (e.g. \"AI Engineer\").", "error");
+    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\").", "error");
     return;
   }
 
@@ -100,11 +100,11 @@ fetchBtn.addEventListener("click", async () => {
         hideProgress();
         const count = currentJobs.length;
         if (count === 0) {
-          setStatus("No matching jobs found in the last week. Try a different keyword.", "error");
+          setStatus("Không tìm thấy việc làm phù hợp trong tuần qua. Thử từ khóa khác.", "error");
         } else if (_isCacheHit) {
-          setStatus(`Found ${count} job${count !== 1 ? "s" : ""} in the last week.`, "success");
+          setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
         } else {
-          setStatus(`Found ${count} job${count !== 1 ? "s" : ""} — fetching descriptions…`, "success");
+          setStatus(`Tìm thấy ${count} việc làm — đang tải mô tả…`, "success");
         }
       },
       abortController.signal,
@@ -119,12 +119,12 @@ fetchBtn.addEventListener("click", async () => {
       () => {
         setLinkedInEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Found ${count} job${count !== 1 ? "s" : ""} in the last week.`, "success");
+        setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
       },
       () => {
         setTopCVEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Found ${count} job${count !== 1 ? "s" : ""} in the last week.`, "success");
+        setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
@@ -136,7 +136,7 @@ fetchBtn.addEventListener("click", async () => {
     currentJobs = [];
     const isNetworkDown = err instanceof TypeError && err.message.toLowerCase().includes("fetch");
     if (isNetworkDown) {
-      setStatus("Server is busy — trying LinkedIn directly…", "error");
+      setStatus("Máy chủ đang bận — đang thử tìm kiếm trực tiếp từ LinkedIn…", "error");
       try {
         const fallbackJobs = await scrapeLinkedInFallback(
           keyword,
@@ -147,18 +147,22 @@ fetchBtn.addEventListener("click", async () => {
           currentJobs = appendJobs([], fallbackJobs);
           const count = fallbackJobs.length;
           setStatus(
-            `Server busy — showing ${count} LinkedIn result${count !== 1 ? "s" : ""} only.`,
+            `Máy chủ bận — chỉ hiển thị ${count} kết quả từ LinkedIn.`,
             "error",
           );
         } else {
-          setStatus("Server is busy. Please try again in a moment.", "error");
+          setStatus("Máy chủ đang bận. Vui lòng thử lại sau.", "error");
         }
       } catch {
-        setStatus("Server is busy. Please try again in a moment.", "error");
+        setStatus("Máy chủ đang bận. Vui lòng thử lại sau.", "error");
       }
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      setStatus(`Error: ${msg}`, "error");
+      if (msg.includes("quá nhiều lần") || msg.includes("Too Many") || msg.includes("429")) {
+        setStatus("Bạn đã tìm kiếm quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.", "error");
+      } else {
+        setStatus(`Lỗi: ${msg}`, "error");
+      }
     }
   } finally {
     fetchBtn.disabled = false;

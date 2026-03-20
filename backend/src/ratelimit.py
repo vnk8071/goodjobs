@@ -17,9 +17,9 @@ def check_rate_limit(ip: str) -> str | None:
     while dq and dq[0] < window_start:
         dq.popleft()
     if len(dq) >= _RATE_LIMIT_MAX:
-        return "Too many requests. Please wait before searching again."
+        return "Bạn đã tìm kiếm quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại."
     if _ip_active[ip] >= _RATE_LIMIT_MAX_CONCURRENT:
-        return "You already have a search in progress. Please wait for it to finish."
+        return "Bạn đang có một tìm kiếm đang chạy. Vui lòng chờ kết quả trước."
     dq.append(now)
     return None
 

@@ -257,7 +257,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         return result
 
     tasks = [
-        loop.run_in_executor(_executor, _timed, site, fn, keyword_corrected, req.location)
+        loop.run_in_executor(_executor, _timed, site, fn, cache_keyword, req.location)
         for site, fn in _SCRAPERS.items()
     ]
 
@@ -398,7 +398,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
                 fetch_ts = time.time()
 
-                scrape_kw = fuzzy_matched_kw if fuzzy else keyword_corrected
+                scrape_kw = fuzzy_matched_kw if fuzzy else cache_keyword
                 other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
                 futures: dict = {
                     loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location): site

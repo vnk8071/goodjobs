@@ -254,8 +254,8 @@ export function markSiteLoading(site: string, count: number): void {
   const pill = document.createElement("span");
   pill.className = "progress-pill progress-pill-loading";
   pill.dataset.site = label;
-  pill.textContent = `${label} fetching descriptions…`;
-  pill.title = `Fetching descriptions for ${count} job${count !== 1 ? "s" : ""}`;
+  pill.textContent = `${label} đang tải mô tả…`;
+  pill.title = `Đang tải mô tả cho ${count} việc làm`;
   progressPills.appendChild(pill);
 }
 
@@ -269,13 +269,13 @@ export function markSiteDone(site: string, count: number): void {
   pill.className = "progress-pill progress-pill-done";
   pill.dataset.site = label;
   pill.textContent = `${label} ${count}`;
-  pill.title = `${count} job${count !== 1 ? "s" : ""}`;
+  pill.title = `${count} việc làm`;
   progressPills.appendChild(pill);
 }
 
 /** Show the queue banner indicating the user's position in the scrape queue. */
 export function showQueuedMessage(position: number): void {
-  queueBanner.textContent = `⏳ Server is busy — you're #${position} in queue. Please wait…`;
+  queueBanner.textContent = `⏳ Máy chủ đang bận — bạn đang ở vị trí #${position} trong hàng đợi. Vui lòng chờ…`;
   queueBanner.classList.remove("hidden");
 }
 
