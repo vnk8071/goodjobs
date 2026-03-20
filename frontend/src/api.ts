@@ -223,6 +223,45 @@ export async function scrapeJobsStream(
           eventType = "message";
           continue;
         }
+        if (eventType === "topdev-enriching") {
+          try {
+            const { count } = JSON.parse(payload) as { count: number };
+            if (onSiteLoading) onSiteLoading("TopDev", count);
+          } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "topdev-done") {
+          if (onSiteDone) onSiteDone("TopDev", siteCounts.get("TopDev") ?? 0);
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "jobsgo-enriching") {
+          try {
+            const { count } = JSON.parse(payload) as { count: number };
+            if (onSiteLoading) onSiteLoading("JobsGo", count);
+          } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "jobsgo-done") {
+          if (onSiteDone) onSiteDone("JobsGo", siteCounts.get("JobsGo") ?? 0);
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "careerlink-enriching") {
+          try {
+            const { count } = JSON.parse(payload) as { count: number };
+            if (onSiteLoading) onSiteLoading("CareerLink", count);
+          } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "careerlink-done") {
+          if (onSiteDone) onSiteDone("CareerLink", siteCounts.get("CareerLink") ?? 0);
+          eventType = "message";
+          continue;
+        }
         try {
           const jobs = JSON.parse(payload) as Job[];
           if (jobs.length > 0) {

@@ -15,6 +15,8 @@ _LINKEDIN_GEO_IDS: dict[str, list[str]] = {
     "Hanoi":            ["105790653", "90010186", ],
     "Da Nang":          ["115237480", "102868289", "105668258", "90010189"],
     "Vietnam":          ["104195383"],
+    "Remote":           ["103697962", "102267004", "90010187", "109912426", "100126839",
+                         "105790653", "90010186"],
 }
 
 _LINKEDIN_LOCATION_MAP: dict[str, str] = {
@@ -27,6 +29,7 @@ _LINKEDIN_LOCATION_MAP: dict[str, str] = {
     "da nang":      "Da Nang",
     "danang":       "Da Nang",
     "đà nẵng":      "Da Nang",
+    "remote":       "Remote",
 }
 
 _LINKEDIN_PAGE_SIZE   = 25
@@ -51,6 +54,7 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
     mapped_location = _linkedin_location(location or "Ho Chi Minh City")
     geo_ids         = _LINKEDIN_GEO_IDS.get(mapped_location)
     tpr_param       = f"&f_TPR=r{since_seconds}" if since_seconds else ""
+    remote_param    = "&f_WT=2" if mapped_location == "Remote" else ""
 
     def _fetch_all_pages(kw: str) -> list[dict]:
         kw_enc    = quote_plus(kw)
@@ -70,6 +74,7 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                     f"{loc_param}"
                     f"&sortBy=DD"
                     f"{tpr_param}"
+                    f"{remote_param}"
                     f"&start={start}"
                 )
                 page_jobs = _linkedin_requests(url, _LINKEDIN_PAGE_SIZE * 2)

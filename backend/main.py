@@ -80,10 +80,11 @@ _SCRAPERS = {
     "itviec":       scrape_itviec,
     "topcv":        scrape_topcv,
     "vietnamworks": scrape_vietnamworks,
-    # TODO: re-enable these once we have error handling and monitoring in place to catch scraper breakages faster
-    # "topdev":       scrape_topdev,
+    "topdev":       scrape_topdev,
     # "indeed":       scrape_indeed,
     "careerviet":   scrape_careerviet,
+    "jobsgo":       scrape_jobsgo,
+    "careerlink":   scrape_careerlink,
 }
 
 NON_WARMUP_ENRICH_LIMIT = 5
@@ -411,6 +412,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 linkedin_jobs: list[dict] = []
                 topcv_jobs: list[dict] = []
                 itviec_jobs: list[dict] = []
+                topdev_jobs: list[dict] = []
+                jobsgo_jobs: list[dict] = []
+                careerlink_jobs: list[dict] = []
                 all_jobs: list[dict] = []
                 pending = set(futures.keys())
                 deadline = loop.time() + 120.0
@@ -421,6 +425,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 topcv_enrich_task: asyncio.Task | None = None
                 itviec_enrich_queue: asyncio.Queue = asyncio.Queue()
                 itviec_enrich_task: asyncio.Task | None = None
+                topdev_enrich_queue: asyncio.Queue = asyncio.Queue()
+                topdev_enrich_task: asyncio.Task | None = None
+                jobsgo_enrich_queue: asyncio.Queue = asyncio.Queue()
+                jobsgo_enrich_task: asyncio.Task | None = None
+                careerlink_enrich_queue: asyncio.Queue = asyncio.Queue()
+                careerlink_enrich_task: asyncio.Task | None = None
 
                 enrich_limit = NON_WARMUP_ENRICH_LIMIT if not is_warmup else 30
 
@@ -481,6 +491,54 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     await itviec_enrich_queue.put(None)
                     log_app("itviec: finished streaming details")
 
+                async def _topdev_phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    log_app(f"topdev: fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    for i, job in enumerate(jobs[:enrich_limit]):
+                        cooldown = 2.0 if i > 0 else 0.0
+                        try:
+                            await loop.run_in_executor(
+                                _executor, scrape_topdev_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            log_app(f"topdev detail error job {i}: {e}", "ERROR")
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await topdev_enrich_queue.put(job)
+                    await topdev_enrich_queue.put(None)
+                    log_app("topdev: finished streaming details")
+
+                async def _careerlink_phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    log_app(f"careerlink: fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    for i, job in enumerate(jobs[:enrich_limit]):
+                        cooldown = 2.0 if i > 0 else 0.0
+                        try:
+                            await loop.run_in_executor(
+                                _executor, scrape_careerlink_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            log_app(f"careerlink detail error job {i}: {e}", "ERROR")
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await careerlink_enrich_queue.put(job)
+                    await careerlink_enrich_queue.put(None)
+                    log_app("careerlink: finished streaming details")
+
+                async def _jobsgo_phase2(jobs: list[dict]) -> None:
+                    jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+                    log_app(f"jobsgo: fetching details for {len(jobs)} jobs (streaming, newest first)...")
+                    for i, job in enumerate(jobs[:enrich_limit]):
+                        cooldown = 2.0 if i > 0 else 0.0
+                        try:
+                            await loop.run_in_executor(
+                                _executor, scrape_jobsgo_detail_one, job, cooldown
+                            )
+                        except Exception as e:
+                            log_app(f"jobsgo detail error job {i}: {e}", "ERROR")
+                        job["skills"] = extract_skills(job.get("title", ""), job.get("description", ""))
+                        await jobsgo_enrich_queue.put(job)
+                    await jobsgo_enrich_queue.put(None)
+                    log_app("jobsgo: finished streaming details")
+
                 while pending:
                     time_left = max(0.1, deadline - loop.time())
                     done, pending = await asyncio.wait(
@@ -516,6 +574,18 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             itviec_jobs = filtered
                             yield f"event: itviec-enriching\ndata: {json.dumps({'count': len(itviec_jobs)})}\n\n"
                             itviec_enrich_task = asyncio.create_task(_itviec_phase2(itviec_jobs))
+                        if site == "topdev":
+                            topdev_jobs = filtered
+                            yield f"event: topdev-enriching\ndata: {json.dumps({'count': len(topdev_jobs)})}\n\n"
+                            topdev_enrich_task = asyncio.create_task(_topdev_phase2(topdev_jobs))
+                        if site == "jobsgo":
+                            jobsgo_jobs = filtered
+                            yield f"event: jobsgo-enriching\ndata: {json.dumps({'count': len(jobsgo_jobs)})}\n\n"
+                            jobsgo_enrich_task = asyncio.create_task(_jobsgo_phase2(jobsgo_jobs))
+                        if site == "careerlink":
+                            careerlink_jobs = filtered
+                            yield f"event: careerlink-enriching\ndata: {json.dumps({'count': len(careerlink_jobs)})}\n\n"
+                            careerlink_enrich_task = asyncio.create_task(_careerlink_phase2(careerlink_jobs))
                         if filtered:
                             yield f"data: {json.dumps(filtered, ensure_ascii=False)}\n\n"
 
@@ -542,6 +612,30 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         else:
                             yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                         if itviec_enrich_task is None:
+                            break
+                    while not topdev_enrich_queue.empty():
+                        item = topdev_enrich_queue.get_nowait()
+                        if item is None:
+                            topdev_enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if topdev_enrich_task is None:
+                            break
+                    while not jobsgo_enrich_queue.empty():
+                        item = jobsgo_enrich_queue.get_nowait()
+                        if item is None:
+                            jobsgo_enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if jobsgo_enrich_task is None:
+                            break
+                    while not careerlink_enrich_queue.empty():
+                        item = careerlink_enrich_queue.get_nowait()
+                        if item is None:
+                            careerlink_enrich_task = None
+                        else:
+                            yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                        if careerlink_enrich_task is None:
                             break
 
                 yield "event: done\ndata: {}\n\n"
@@ -575,6 +669,36 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         enriched_count += 1
                         yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                     yield f"event: itviec-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                if topdev_enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await topdev_enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: topdev-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                if jobsgo_enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await jobsgo_enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: jobsgo-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
+
+                if careerlink_enrich_task is not None:
+                    enriched_count = 0
+                    while True:
+                        item = await careerlink_enrich_queue.get()
+                        if item is None:
+                            break
+                        enriched_count += 1
+                        yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                    yield f"event: careerlink-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
                 if not is_warmup:

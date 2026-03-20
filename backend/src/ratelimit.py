@@ -1,8 +1,8 @@
 import collections
 import time
 
-_RATE_LIMIT_WINDOW  = 60
-_RATE_LIMIT_MAX     = 2
+_RATE_LIMIT_WINDOW  = 90
+_RATE_LIMIT_MAX     = 4
 _RATE_LIMIT_MAX_CONCURRENT = 1
 
 _ip_timestamps: dict[str, collections.deque] = collections.defaultdict(collections.deque)

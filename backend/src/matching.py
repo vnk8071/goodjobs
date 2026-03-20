@@ -176,6 +176,9 @@ def normalize_keyword(text: str) -> str:
     text = re.sub(r"\bc\s*\+\+", "cpp", text)
     text = re.sub(r"\bnode\.js\b", "nodejs", text)
     text = re.sub(r"\bnode\s+js\b", "nodejs", text)
+    text = re.sub(r"\bdeveloper\b", "engineer", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bprogrammer\b", "engineer", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bdev\b", "engineer", text, flags=re.IGNORECASE)
     return text
 
 
