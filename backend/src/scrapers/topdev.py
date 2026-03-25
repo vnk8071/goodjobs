@@ -181,6 +181,7 @@ def _parse_topdev(soup: BeautifulSoup, max_results: int) -> list[dict]:
             "posted":      _relative_display(days_ago) if days_ago < 9999 else posted_text,
             "posted_date": posted_date,
             "description": "",
+            "summary_description": "",  # No enrichment for basic listings
             "logo":        logo_url,
             "salary":      salary,
         })

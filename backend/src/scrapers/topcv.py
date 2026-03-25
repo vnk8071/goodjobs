@@ -76,6 +76,7 @@ def scrape_topcv_detail_one(job: dict, cooldown: float) -> None:
         desc = _parse_topcv_description(detail_soup)
         if desc:
             job["description"] = desc
+            job["summary_description"] = None  # Filled by background task
         if not job.get("logo"):
             logo_el = detail_soup.select_one(
                 "a.company-logo img.img-responsive, div.job-detail__company img.img-responsive"

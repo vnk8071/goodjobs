@@ -152,7 +152,9 @@ def scrape_vietnamworks_detail_one(job: dict, cooldown: float) -> None:
                     desc = _truncate(_clean_html(desc_html)) if desc_html and desc_html.strip() else ""
                     if desc:
                         job["description"] = desc
+                        job["summary_description"] = None  # Filled by background task
                     else:
+                        job["summary_description"] = ""  # Empty when no description
                         print(f"[VietnamWorks desc] empty for {job['link']}")
                 except Exception as e:
                     print(f"[VietnamWorks desc] {e}")

@@ -10,6 +10,7 @@ from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
 
 from src.scrapers import scrape_linkedin_detail_one, scrape_topcv_detail_one, scrape_itviec_detail_one, scrape_vietnamworks_detail_one, scrape_careerviet_detail_one, scrape_jobsgo_detail_one, scrape_careerlink_detail_one
+from src.background_summarizer import run_background_summarization
 
 _WARMUP_KEYWORDS_DEFAULT = [
     "AI Engineer",
@@ -478,7 +479,13 @@ async def warmup(executor, scrapers: dict) -> None:
 
         for kw, loc, ft in startup_tasks:
             await _startup_scrape(kw, loc, ft)
-        log_app(f"[warmup] startup pass done")
+
+        log_app(f"[warmup] startup pass done — triggering background summarization")
+        try:
+            stats = await run_background_summarization(keyword_filter=_TEST_KEYWORD)
+            log_app(f"[warmup] background summarization complete: {stats}")
+        except Exception as e:
+            log_app(f"[warmup] background summarization error: {e}", "ERROR")
     else:
         log_app(f"[warmup] startup pass: all keys present, skipping")
 
@@ -529,6 +536,17 @@ async def warmup(executor, scrapers: dict) -> None:
                     # cycles don't look like a bot burst to LinkedIn/ITViec.
                     if i < len(tasks) - 1:
                         await asyncio.sleep(random.uniform(15, 30))
+
+                # Trigger background summarization after all scraping done
+                log_app(f"[warmup] cycle done — triggering background summarization")
+                try:
+                    stats = await run_background_summarization(keyword_filter=_TEST_KEYWORD)
+                    log_app(f"[warmup] background summarization complete: {stats}")
+                    # TEMP: Exit after first summarization run for testing
+                    log_app(f"[warmup] TEMP: Exiting after first summarization (remove this break later)")
+                    break
+                except Exception as e:
+                    log_app(f"[warmup] background summarization error: {e}", "ERROR")
             else:
                 log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
 

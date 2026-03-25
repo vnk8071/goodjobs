@@ -4,6 +4,9 @@ import re
 import sys
 
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Pool of realistic desktop Chrome User-Agents across OS/versions.
 # new_session() picks one at random so each HTTP request has a different fingerprint.
@@ -65,6 +68,16 @@ DESC_MAX_CHARS    = 10000
 RECENT_DAYS       = 8
 MAX_CONCURRENT    = 6
 REDIS_URL         = os.getenv("REDIS_URL", "redis://redis:6379")
+
+# Summarizer configuration
+SUMMARIZER_MAX_LENGTH = int(os.getenv("SUMMARIZER_MAX_LENGTH", "200"))
+SUMMARIZER_MIN_LENGTH = int(os.getenv("SUMMARIZER_MIN_LENGTH", "50"))
+
+# Cloudflare AI configuration
+CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
+CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
+CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
+CLOUDFLARE_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
 
 SYNONYMS: list[set[str]] = [
     {"engineer", "developer", "dev", "programmer"},

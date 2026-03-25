@@ -52,6 +52,7 @@ def scrape_careerlink_detail_one(job: dict, cooldown: float) -> None:
                 }""")
                 if desc:
                     job["description"] = _truncate(_clean_html(desc))
+                    job["summary_description"] = None  # Filled by background task
                 if not job.get("logo"):
                     logo = page.evaluate("""() => {
                         const el = document.querySelector('.job-logo img');
@@ -112,6 +113,7 @@ def _careerlink_playwright(url: str, area_code: str, max_results: int) -> list[d
                 if days_ago < 9999 else ""
             )
             job["description"] = ""
+            job["summary_description"] = ""  # No description for listing-only
         return jobs
     except Exception as e:
         print(f"[CareerLink Playwright] {e}")
