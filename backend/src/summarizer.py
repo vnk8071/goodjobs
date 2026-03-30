@@ -2,8 +2,6 @@
 import time
 import requests
 
-from langdetect import detect as lang_detect
-
 from src.constants import (
     CLOUDFLARE_ACCOUNT_ID,
     CLOUDFLARE_API_TOKEN,
@@ -40,9 +38,8 @@ class SummarizerService:
     _TOP_P = 0.3
     _TOP_K = 10
 
-    # System prompt templates — {max_len} is filled from SUMMARIZER_MAX_LENGTH
-    _SYSTEM_PROMPT_VI = "Bạn là chuyên gia viết tóm tắt công việc. Viết bản tóm tắt KHÔNG QUÁ {max_len} kí tự, cùng ngôn ngữ với bản gốc. Gồm: trách nhiệm chính, yêu cầu quan trọng, quyền lợi nổi bật. KHÔNG giải thích, KHÔNG phân tích, chỉ đưa ra kết quả. Không dùng markdown, chỉ plain text. Viết trên 1 dòng duy nhất, không xuống dòng."
-    _SYSTEM_PROMPT_EN = "You are a job description summarization expert. Write a summary NO MORE THAN {max_len} characters, in the same language as input. Cover: main responsibilities, key requirements, top benefits. No explanation, no analysis, just give the summary result. No markdown, plain text only. Write on a single line, no newlines."
+    # System prompt — always Vietnamese, {max_len} is filled from SUMMARIZER_MAX_LENGTH
+    _SYSTEM_PROMPT = "Bạn là chuyên gia viết tóm tắt tin tuyển dụng. Tóm tắt bằng TIẾNG VIỆT, bất kể ngôn ngữ gốc. CHỈ tập trung vào YÊU CẦU ứng viên: kinh nghiệm, kỹ năng, công cụ/tech stack. KHÔNG QUÁ {max_len} kí tự. Không dùng markdown, chỉ plain text. Viết trên 1 dòng duy nhất, không xuống dòng."
 
     def __init__(
         self,
@@ -109,18 +106,6 @@ class SummarizerService:
 
         return results
 
-    def _detect_language(self, text: str) -> str:
-        """Detect 'vi', 'en', or 'unknown'."""
-        try:
-            detected = lang_detect(text)
-            lang = detected if detected in ("vi", "en") else "unknown"
-            preview = text[:120].strip().replace('\n', ' ').replace('\r', '')
-            log_app(f"[summarizer] langdetect: '{preview}...' → {lang}")
-            return lang
-        except Exception as e:
-            log_app(f"[summarizer] langdetect failed: {e}", "WARNING")
-            return "unknown"
-
     def _truncate_input(self, text: str, max_chars: int = 2000) -> str:
         """Truncate at sentence boundary."""
         if len(text) <= max_chars:
@@ -144,16 +129,15 @@ class SummarizerService:
             raise ValueError("Cloudflare credentials not configured")
 
         # Build requests array using messages format
+        system_prompt = self._SYSTEM_PROMPT.format(max_len=self.max_length)
         requests_payload = []
         for desc in descriptions:
-            lang = self._detect_language(desc)
-            system_prompt = (self._SYSTEM_PROMPT_VI if lang == "vi" else self._SYSTEM_PROMPT_EN).format(max_len=self.max_length)
             requests_payload.append({
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Tóm tắt tin tuyển dụng:\n{desc}" if lang == "vi" else f"Summarize this job description:\n{desc}"},
+                    {"role": "user", "content": f"Tóm tắt tin tuyển dụng:\n{desc}"},
                 ],
-                "max_tokens": 350,
+                "max_tokens": 200,
                 "temperature": self._TEMPERATURE,
                 "top_p": self._TOP_P,
                 "top_k": self._TOP_K,

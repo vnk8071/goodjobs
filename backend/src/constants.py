@@ -70,7 +70,7 @@ MAX_CONCURRENT    = 6
 REDIS_URL         = os.getenv("REDIS_URL", "redis://redis:6379")
 
 # Summarizer configuration
-SUMMARIZER_MAX_LENGTH = int(os.getenv("SUMMARIZER_MAX_LENGTH", "200"))
+SUMMARIZER_MAX_LENGTH = int(os.getenv("SUMMARIZER_MAX_LENGTH", "300"))
 SUMMARIZER_MIN_LENGTH = int(os.getenv("SUMMARIZER_MIN_LENGTH", "50"))
 
 # Cloudflare AI configuration
