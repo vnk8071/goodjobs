@@ -133,6 +133,7 @@ def scrape_itviec_detail_one(job: dict, cooldown: float) -> None:
                     }""")
                     if desc:
                         job["description"] = desc.replace("\n", "").replace("\r", "")
+                        job["summary_description"] = None  # Filled by background task
             except Exception as e:
                 print(f"[ITViec desc] {job['link']}: {e}")
             finally:

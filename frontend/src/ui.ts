@@ -439,6 +439,7 @@ function renderTable(jobs: Job[]): void {
 function buildRow(job: Job, num: number): HTMLTableRowElement {
   const tr = document.createElement("tr");
   const skillsHtml = renderSkillTags(job.skills);
+  const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
   tr.innerHTML = `
     <td class="num">${num}</td>
     <td class="title" data-company="${esc(job.company)}">${esc(job.title)}</td>
@@ -446,7 +447,7 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td>${esc(job.location)}</td>
     <td class="posted">${esc(job.posted ?? "")}</td>
     <td class="skills-cell">${skillsHtml || '<span class="no-skills">—</span>'}</td>
-    <td class="desc">${esc(truncate(job.description ?? "", 160))}</td>
+    <td class="desc">${esc(descText)}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(job.source)}</span></td>
     <td><a href="${esc(job.link)}" target="_blank" rel="noopener" class="view-link" onclick="event.stopPropagation()">View ↗</a></td>
   `;

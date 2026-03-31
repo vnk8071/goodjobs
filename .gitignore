@@ -33,3 +33,7 @@ playwright-browsers/
 
 # Logs
 logs/
+
+docs/
+
+tests/

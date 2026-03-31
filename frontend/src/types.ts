@@ -8,6 +8,7 @@ export interface Job {
   posted_date?: string;   // ISO date YYYY-MM-DD for sorting
   posted_ts?: number;     // Unix timestamp for precise sort (newer = larger)
   description?: string;
+  summary_description?: string;
   skills?: string[];
   logo?: string;
 }

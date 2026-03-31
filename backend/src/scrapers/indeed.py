@@ -156,6 +156,7 @@ def _indeed_playwright(url: str, max_results: int) -> list[dict]:
                     "posted":      posted_display,
                     "posted_date": posted_date,
                     "description": description,
+                    "summary_description": "",  # No enrichment for basic listings
                     "salary":      salary,
                 })
 

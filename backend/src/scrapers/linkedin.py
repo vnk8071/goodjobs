@@ -124,6 +124,7 @@ def scrape_linkedin_details(jobs: list[dict]) -> None:
             break
         if desc:
             job["description"] = desc
+            job["summary_description"] = None  # Filled by background task
         if salary and not job["salary"]:
             job["salary"] = salary
 
@@ -140,6 +141,7 @@ def scrape_linkedin_detail_one(job: dict, cooldown: float) -> bool:
         return False
     if desc:
         job["description"] = desc
+        job["summary_description"] = None  # Filled by background task
     if salary and not job.get("salary"):
         job["salary"] = salary
     return True
