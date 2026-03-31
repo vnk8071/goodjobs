@@ -10,13 +10,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch
+from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch, embedded_links_add, embedded_links_filter, get_redis, vector_mark_nonwarmup_seen
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
 from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
 from src.models import Job, ScrapeRequest
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
+from src.vector import ensure_index, upsert_jobs, search as vector_search, rerank_jobs_by_vector
 from src.warmup import warmup, _WARMUP_LOCATIONS, _WARMUP_KEYWORDS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
 
@@ -26,6 +27,8 @@ async def lifespan(app: FastAPI):
     log_app("Application starting...")
     asyncio.create_task(warmup(_executor, _SCRAPERS))
     log_app("Warmup task scheduled")
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, ensure_index)
     yield
     log_app("Application shutting down")
 
@@ -73,6 +76,61 @@ def _refresh_posted_times(jobs: list[dict]) -> None:
 def _get_related_keywords(cache_keyword: str) -> list[str]:
     """Return the canonical cache key. All alias jobs are stored in the canonical cache."""
     return [cache_keyword.lower()]
+
+
+async def _upsert_and_track(jobs: list[dict]) -> None:
+    """Embed and upsert only jobs not already in Vectorize, then mark them as embedded."""
+    loop = asyncio.get_event_loop()
+    unembedded = await embedded_links_filter(jobs)
+    if not unembedded:
+        return
+    ok = await loop.run_in_executor(_executor, upsert_jobs, unembedded)
+    if ok:
+        await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
+        log_app(f"[vector] tracked {len(unembedded)} newly embedded links")
+
+
+async def _fetch_vector_supplement(query: str, seen_links: set[str], location: str, warmup_keywords: list[str], top_k: int = 20) -> list[dict]:
+    """Search Vectorize and hydrate full job dicts from warmup caches for non-warmup cache misses.
+
+    Returns semantically related jobs from warmup caches at the user's location only,
+    excluding links already in seen_links. No cross-location fallback.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        matches = await loop.run_in_executor(_executor, vector_search, query, top_k)
+    except Exception as e:
+        log_app(f"[vector] supplement search error: {e}", "ERROR")
+        return []
+    if not matches:
+        return []
+
+    target = {m["link"]: m["score"] for m in matches if m.get("link") and m["link"] not in seen_links}
+    if not target:
+        return []
+
+    redis = get_redis()
+    hydrated: list[dict] = []
+    for kw in warmup_keywords:
+        if not target:
+            break
+        key = f"jobs:{kw.lower()}:{location.lower()}"
+        raw = await redis.get(key)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+            for job in data.get("jobs", []):
+                link = job.get("link", "")
+                if link in target:
+                    job["_vector_score"] = target.pop(link)
+                    job["_from_vector"] = True
+                    hydrated.append(job)
+        except Exception:
+            continue
+
+    hydrated.sort(key=lambda j: j["_vector_score"], reverse=True)
+    return hydrated
 
 
 _SCRAPERS = {
@@ -283,8 +341,22 @@ async def scrape(req: ScrapeRequest, request: Request):
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
     await cache_set(cache_keyword, req.location, jobs, time.time())
+    asyncio.create_task(_upsert_and_track(jobs))
     _refresh_posted_times(jobs)
     return jobs
+
+
+@app.get("/search-semantic")
+async def search_semantic(q: str, top_k: int = 20):
+    """Semantic job search using Cloudflare Vectorize + embeddinggemma-300m embeddings.
+
+    Embeds the query string and returns the top-k most similar indexed jobs by cosine similarity.
+    """
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="q is required")
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(_executor, vector_search, q.strip(), top_k)
+    return {"query": q.strip(), "count": len(results), "results": results}
 
 
 @app.post("/scrape-stream")
@@ -360,6 +432,14 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 unique_jobs = list(all_cached_jobs_by_link.values())
                 unique_jobs = [j for j in unique_jobs if title_matches(j.get("title", ""), keyword)]
                 log_app(f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
+                if is_warmup and unique_jobs:
+                    try:
+                        unique_jobs = await loop.run_in_executor(
+                            _executor, rerank_jobs_by_vector, unique_jobs, keyword
+                        )
+                        log_app(f"[vector] reranked {len(unique_jobs)} jobs for {keyword!r}")
+                    except Exception as e:
+                        log_app(f"[vector] rerank error: {e}", "ERROR")
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
@@ -369,6 +449,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     await cache_touch(cache_keyword, req.location)
                     asyncio.create_task(
                         _background_rescrape(cache_keyword, req.location, latest_ts)
+                    )
+                    await vector_mark_nonwarmup_seen(
+                        [str(j["link"]) for j in unique_jobs if j.get("link")], time.time()
                     )
 
                 return
@@ -700,9 +783,18 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                     yield f"event: careerlink-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
+                seen_links_for_supplement = {j.get("link") for j in all_jobs if j.get("link")}
+                vector_supplement = await _fetch_vector_supplement(keyword, seen_links_for_supplement, req.location, warmup_kws)
+                if vector_supplement:
+                    yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
+
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
+                asyncio.create_task(_upsert_and_track(all_jobs))
                 if not is_warmup:
                     await cache_touch(cache_keyword, req.location)
+                    await vector_mark_nonwarmup_seen(
+                        [str(j["link"]) for j in all_jobs if j.get("link")], time.time()
+                    )
         finally:
             ip_active_dec(ip)
 
