@@ -33,6 +33,7 @@ const jobModalLink     = document.getElementById("jobModalLink")     as HTMLAnch
 const jobModalClose    = document.getElementById("jobModalClose")    as HTMLButtonElement;
 const jobModalCloseBtn = document.getElementById("jobModalCloseBtn") as HTMLButtonElement;
 const jobModalSkills   = document.getElementById("jobModalSkills")   as HTMLDivElement;
+const jobModalSummary  = document.getElementById("jobModalSummary")  as HTMLDivElement;
 const jobModalBody     = document.querySelector(".job-modal-body")    as HTMLDivElement;
 
 /** Render skill tags as HTML spans, collapsing extras into a "+N" pill. */
@@ -70,7 +71,7 @@ const _SOURCE_DOMAINS: Record<string, string> = {
   "topdev":       "topdev.vn",
   "indeed":       "indeed.com",
   "careerviet":   "careerviet.vn",
-  "jobgo":        "jobgo.vn",
+  "jobsgo":       "jobsgo.vn",
   "careerlink":   "careerlink.vn",
 };
 
@@ -104,19 +105,27 @@ function openJobModal(job: Job): void {
     (_linkedinEnriching && job.source === "LinkedIn") ||
     (_topcvEnriching    && job.source === "TopCV");
   if (!job.skills?.length && isEnriching) {
-    jobModalSkills.innerHTML = '<span class="desc-loading">Detecting skills…</span>';
+    jobModalSkills.innerHTML = '<span class="desc-loading">Đang tìm kỹ năng…</span>';
   } else {
     jobModalSkills.innerHTML = renderSkillTags(job.skills);
   }
-  if (!job.description && isEnriching) {
-    jobModalDesc.innerHTML = '<span class="desc-loading">Fetching description…</span>';
+  if (job.summary_description) {
+    jobModalSummary.textContent = job.summary_description;
+    jobModalSummary.classList.remove("hidden");
   } else {
-    jobModalDesc.innerHTML = job.description || "";
+    jobModalSummary.textContent = "";
+    jobModalSummary.classList.add("hidden");
   }
   jobModalLink.href            = job.link;
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
-  requestAnimationFrame(() => { jobModalBody.scrollTop = 0; });
+  const descHtml = (!job.description && isEnriching)
+    ? '<span class="desc-loading">Đang tìm mô tả…</span>'
+    : (job.description || "");
+  requestAnimationFrame(() => {
+    jobModalBody.scrollTop = 0;
+    jobModalDesc.innerHTML = descHtml;
+  });
 }
 
 /** Close the job detail modal and restore body scroll. */
@@ -335,7 +344,7 @@ function _applyFilter(): void {
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
     jobsBody.innerHTML =
-      '<tr><td colspan="9" class="empty">No jobs match the selected filter.</td></tr>';
+      '<tr><td colspan="9" class="empty">Không có việc làm nào phù hợp với bộ lọc đã chọn.</td></tr>';
   } else {
     visible.forEach((job, i) => jobsBody.appendChild(buildRow(job, i + 1)));
   }
@@ -344,8 +353,8 @@ function _applyFilter(): void {
   const shown = visible.length;
   jobCountEl.textContent =
     shown === total
-      ? `${total} result${total !== 1 ? "s" : ""}`
-      : `${shown} of ${total} result${total !== 1 ? "s" : ""}`;
+      ? `${total} kết quả`
+      : `${shown} trong ${total} kết quả`;
 }
 
 /** Rebuild the source filter pill bar from current _allJobs. */

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -297,7 +298,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     if keyword_corrected != keyword.lower():
         log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
 
-    keyword_normalized = normalize_keyword(keyword_corrected)
+    keyword_normalized = " ".join(re.sub(r"\d+", " ", normalize_keyword(keyword_corrected)).split())
     cache_keyword = strip_level(keyword_normalized)
 
     all_cached_jobs: list[dict] = []
@@ -400,7 +401,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if keyword_corrected != keyword.lower():
         log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
 
-    keyword_normalized = normalize_keyword(keyword_corrected)
+    keyword_normalized = " ".join(re.sub(r"\d+", " ", normalize_keyword(keyword_corrected)).split())
     cache_keyword = strip_level(keyword_normalized)
 
     loop = asyncio.get_event_loop()

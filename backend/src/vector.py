@@ -9,7 +9,7 @@ from .logger import log_app
 _CF_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
 _CF_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 _EMBED_MODEL = "@cf/google/embeddinggemma-300m"
-_INDEX_NAME = "goodjobs"
+_INDEX_NAME = "embeddings"
 _EMBED_DIM = 768
 
 _CF_AI_URL = f"https://api.cloudflare.com/client/v4/accounts/{_CF_ACCOUNT_ID}/ai/run/{_EMBED_MODEL}"

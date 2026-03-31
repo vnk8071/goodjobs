@@ -558,14 +558,14 @@
         color: #c2410c;
       }
 
-      .badge-jobgo {
-        background: #d1fae5;
-        color: #065f46;
+      .badge-jobsgo {
+        background: #fce7f3;
+        color: #9d174d;
       }
 
       .badge-careerlink {
-        background: #e0e7ff;
-        color: #3730a3;
+        background: #ccfbf1;
+        color: #0f766e;
       }
 
       /* Source filter bar */
@@ -688,6 +688,7 @@
         padding-right: 0.5rem;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
+        contain: content;
       }
 
       .job-meta {
@@ -714,6 +715,28 @@
         color: var(--muted);
         min-width: 4.5rem;
         font-size: 0.82rem;
+      }
+
+      .job-summary-box {
+        font-size: 0.88rem;
+        color: var(--text);
+        line-height: 1.65;
+        padding: 0.85rem 1.1rem;
+        background: #eff6ff;
+        border-radius: 8px;
+        border: 1px solid #bfdbfe;
+        margin-bottom: 1rem;
+      }
+
+      .job-summary-box::before {
+        content: "Tóm tắt";
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #3b82f6;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.4rem;
       }
 
       .job-desc-full {
@@ -818,7 +841,6 @@
         align-items: center;
         justify-content: center;
         z-index: 1000;
-        backdrop-filter: blur(2px);
       }
 
       .modal {
@@ -828,13 +850,8 @@
         width: 100%;
         max-width: 420px;
         box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
-        animation: modalIn 0.2s ease-out;
       }
 
-      @keyframes modalIn {
-        from { opacity: 0; transform: scale(0.95) translateY(8px); }
-        to   { opacity: 1; transform: scale(1) translateY(0); }
-      }
 
       .modal h3 {
         font-size: 1.1rem;
@@ -1295,8 +1312,8 @@
           <div class="about-feature">
             <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <div>
-              <strong>Miễn phí hoàn toàn</strong>
-              <span>Không cần đăng ký, không cần tạo tài khoản. Tìm kiếm và xem kết quả ngay lập tức.</span>
+              <strong>Tóm tắt nội dung công việc</strong>
+              <span>Sử dụng AI để tóm tắt nhanh mô tả công việc dài dòng, giúp bạn nắm bắt yêu cầu chính chỉ trong vài giây.</span>
             </div>
           </div>
         </div>
@@ -1328,12 +1345,12 @@
       <!-- Results -->
       <div id="results" class="hidden">
         <div class="results-header">
-          <h2>Results <span id="jobCount"></span></h2>
+          <h2>Kết quả <span id="jobCount"></span></h2>
         </div>
 
         <div id="filterBar" class="filter-bar hidden">
-          <span class="filter-label">Filter:</span>
-          <input id="titleFilter" type="text" placeholder="Require words in title…" autocomplete="off" />
+          <span class="filter-label">Bộ lọc:</span>
+          <input id="titleFilter" type="text" placeholder="Từ khóa trong tiêu đề…" autocomplete="off" />
         </div>
 
         <div class="table-wrapper">
@@ -1417,6 +1434,7 @@
             </div>
           </div>
           <div id="jobModalSkills" class="modal-skills"></div>
+          <div id="jobModalSummary" class="job-summary-box hidden"></div>
           <div id="jobModalDesc" class="job-desc-full"></div>
         </div>
         <div class="job-modal-footer">

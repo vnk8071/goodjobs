@@ -98,6 +98,12 @@ async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | Non
 
     stats = {"processed": 0, "success": 0, "skipped": 0, "failed": 0}
 
+    jobs_to_summarize = [item for item in jobs_to_summarize if item["job"].get("description")]
+
+    if not jobs_to_summarize:
+        log_app("[summarizer] no jobs with description to summarize")
+        return {"processed": 0, "success": 0, "failed": 0}
+
     for i in range(0, len(jobs_to_summarize), batch_size):
         batch = jobs_to_summarize[i:i + batch_size]
         descriptions = [item["job"].get("description", "") for item in batch]

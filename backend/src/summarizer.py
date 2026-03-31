@@ -39,7 +39,7 @@ class SummarizerService:
     _TOP_K = 10
 
     # System prompt — always Vietnamese, {max_len} is filled from SUMMARIZER_MAX_LENGTH
-    _SYSTEM_PROMPT = "Bạn là chuyên gia viết tóm tắt tin tuyển dụng. Tóm tắt bằng TIẾNG VIỆT, bất kể ngôn ngữ gốc. CHỈ tập trung vào YÊU CẦU ứng viên: kinh nghiệm, kỹ năng, công cụ/tech stack. KHÔNG QUÁ {max_len} kí tự. Không dùng markdown, chỉ plain text. Viết trên 1 dòng duy nhất, không xuống dòng."
+    _SYSTEM_PROMPT = "Bạn là chuyên gia viết tóm tắt tin tuyển dụng. Tóm tắt bằng TIẾNG VIỆT, bất kể ngôn ngữ gốc. CHỈ tập trung vào YÊU CẦU ứng viên: kinh nghiệm, kỹ năng, yêu cầu về công cụ/tech stack, yêu cầu công việc. KHÔNG QUÁ {max_len} kí tự. Không dùng markdown, chỉ plain text. Viết trên 1 dòng duy nhất, không xuống dòng."
 
     def __init__(
         self,
@@ -98,8 +98,11 @@ class SummarizerService:
         # Batch API call
         try:
             summaries = self._batch_call([p[1] for p in pending])
-            for (i, _), summary in zip(pending, summaries):
-                results[i] = summary
+            if len(summaries) != len(pending):
+                log_app(f"[summarizer] response count mismatch: expected {len(pending)}, got {len(summaries)} — skipping batch", "WARNING")
+            else:
+                for (i, _), summary in zip(pending, summaries):
+                    results[i] = summary
         except Exception as e:
             log_app(f"[summarizer] batch API failed: {e}, {len(pending)} jobs will be retried next cycle", "WARNING")
             # Leave results as "" so they get retried on next summarization run

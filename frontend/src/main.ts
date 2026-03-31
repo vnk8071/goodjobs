@@ -177,3 +177,12 @@ fetchBtn.addEventListener("click", async () => {
     fetchBtn.disabled = false;
   }
 });
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && fetchBtn.disabled) {
+    abortController?.abort();
+    abortController = null;
+    fetchBtn.disabled = false;
+    hideProgress();
+  }
+});
