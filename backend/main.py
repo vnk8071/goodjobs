@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch, embedded_links_add, embedded_links_filter, get_redis, vector_mark_nonwarmup_seen
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
-from src.matching import title_matches, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
+from src.matching import title_matches, title_matches_loose, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
 from src.models import Job, ScrapeRequest
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
@@ -410,6 +410,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         filtered = []
         for j in jobs:
             if is_warmup and not title_matches(j.get("title", ""), keyword):
+                continue
+            if not is_warmup and not title_matches_loose(j.get("title", ""), keyword):
                 continue
             j["posted_ts"] = posted_ts(j)
             j["posted"] = posted_relative(j["posted_ts"])

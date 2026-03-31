@@ -238,6 +238,48 @@ def title_matches(title: str, keyword: str) -> bool:
     return overlap >= 0.5
 
 
+def title_matches_loose(title: str, keyword: str) -> bool:
+    """Looser version of title_matches for non-warmup keywords (Jaccard threshold 0.3)."""
+    kw_phrase  = normalize_keyword(keyword.strip().lower())
+
+    t = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title.strip().lower())
+    core_title = normalize_keyword(re.split(r"\s*[\(\[|]|\s+-\s+", t)[0].strip())
+
+    if kw_phrase in core_title:
+        return True
+
+    kw_words    = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
+    core_words  = re.split(r"[\s/\-,\.&_]+", core_title)
+    core_words  = [w for w in core_words if w]
+
+    if not kw_words:
+        return True
+
+    def _match_index(kw: str) -> int:
+        is_level = kw in _LEVEL_WORDS
+        kw_variants = _expand(kw)
+        for i, tw in enumerate(core_words):
+            for variant in kw_variants:
+                if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
+                    return i
+            if not is_level and _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
+                return i
+        return -1
+
+    indices = [_match_index(kw) for kw in kw_words]
+    if all(idx >= 0 for idx in indices):
+        return True
+
+    level_kw_words = [w for w in kw_words if w in _LEVEL_WORDS]
+    if any(_match_index(w) < 0 for w in level_kw_words):
+        return False
+
+    kw_set   = set(kw_words)
+    core_set = set(core_words)
+    overlap  = len(kw_set & core_set) / len(kw_set | core_set)
+    return overlap >= 0.3
+
+
 def extract_skills(title: str, description: str) -> list[str]:
     """Return list of canonical skill names found in title or description."""
     text = f"{title} {description}"
