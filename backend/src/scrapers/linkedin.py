@@ -79,7 +79,6 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                 page_jobs = _linkedin_requests(url, _LINKEDIN_PAGE_SIZE * 2)
                 if not page_jobs:
                     if start == 0:
-                        log_app(f"[LinkedIn] requests blocked for geoId={geo_id} — trying Playwright")
                         page_jobs = _linkedin_playwright(url, _LINKEDIN_PAGE_SIZE * 2)
                     if not page_jobs:
                         break

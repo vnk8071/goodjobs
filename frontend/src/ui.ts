@@ -70,6 +70,8 @@ const _SOURCE_DOMAINS: Record<string, string> = {
   "topdev":       "topdev.vn",
   "indeed":       "indeed.com",
   "careerviet":   "careerviet.vn",
+  "jobgo":        "jobgo.vn",
+  "careerlink":   "careerlink.vn",
 };
 
 /** Render a company logo img or letter-avatar span, with Clearbit and scraped-logo fallbacks. */

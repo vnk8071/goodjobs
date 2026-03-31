@@ -91,10 +91,10 @@ async def _upsert_and_track(jobs: list[dict]) -> None:
 
 
 async def _fetch_vector_supplement(query: str, seen_links: set[str], location: str, warmup_keywords: list[str], top_k: int = 20) -> list[dict]:
-    """Search Vectorize and hydrate full job dicts from warmup caches for non-warmup cache misses.
+    """Search Vectorize and hydrate full job dicts from all cached keys at the user's location.
 
-    Returns semantically related jobs from warmup caches at the user's location only,
-    excluding links already in seen_links. No cross-location fallback.
+    Searches warmup keys first, then scans all jobs:{kw}:{location} keys for remaining matches.
+    Excludes links already in seen_links. No cross-location fallback.
     """
     loop = asyncio.get_event_loop()
     try:
@@ -111,13 +111,13 @@ async def _fetch_vector_supplement(query: str, seen_links: set[str], location: s
 
     redis = get_redis()
     hydrated: list[dict] = []
-    for kw in warmup_keywords:
+
+    async def _hydrate_from_key(key: str) -> None:
         if not target:
-            break
-        key = f"jobs:{kw.lower()}:{location.lower()}"
+            return
         raw = await redis.get(key)
         if not raw:
-            continue
+            return
         try:
             data = json.loads(raw)
             for job in data.get("jobs", []):
@@ -127,7 +127,20 @@ async def _fetch_vector_supplement(query: str, seen_links: set[str], location: s
                     job["_from_vector"] = True
                     hydrated.append(job)
         except Exception:
-            continue
+            pass
+
+    for kw in warmup_keywords:
+        await _hydrate_from_key(f"jobs:{kw.lower()}:{location.lower()}")
+
+    if target:
+        loc_pattern = f"jobs:*:{location.lower()}"
+        warmup_keys = {f"jobs:{kw.lower()}:{location.lower()}" for kw in warmup_keywords}
+        async for key in redis.scan_iter(loc_pattern):
+            key_str = key.decode() if isinstance(key, bytes) else key
+            if key_str not in warmup_keys:
+                await _hydrate_from_key(key_str)
+            if not target:
+                break
 
     hydrated.sort(key=lambda j: j["_vector_score"], reverse=True)
     return hydrated
@@ -780,18 +793,16 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                     yield f"event: careerlink-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
-                seen_links_for_supplement = {j.get("link") for j in all_jobs if j.get("link")}
-                vector_supplement = await _fetch_vector_supplement(keyword, seen_links_for_supplement, req.location, warmup_kws)
-                if vector_supplement:
-                    yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
-
-                try:
-                    all_jobs = await loop.run_in_executor(_executor, rerank_jobs_by_vector, all_jobs, keyword)
-                    log_app(f"[vector] reranked {len(all_jobs)} jobs for {keyword!r} before caching")
-                except Exception as e:
-                    log_app(f"[vector] rerank error: {e}", "ERROR")
-                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
                 asyncio.create_task(_upsert_and_track(all_jobs))
+
+                if not is_warmup:
+                    seen_links_for_supplement = {j.get("link") for j in all_jobs if j.get("link")}
+                    vector_supplement = await _fetch_vector_supplement(keyword, seen_links_for_supplement, req.location, warmup_kws)
+                    if vector_supplement:
+                        yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
+                        all_jobs = all_jobs + vector_supplement
+                        log_app(f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}")
+                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
                 if not is_warmup:
                     await cache_touch(cache_keyword, req.location)
                     await vector_mark_nonwarmup_seen(
