@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -72,6 +72,7 @@ fetchBtn.addEventListener("click", async () => {
   currentJobs = [];
   aboutSection.classList.add("hidden");
   hideResults();
+  hideRelated();
   hideProgress();
   clearStatus();
   showProgress();
@@ -128,6 +129,14 @@ fetchBtn.addEventListener("click", async () => {
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
+      },
+      (relatedJobs) => {
+        if (location) {
+          for (const j of relatedJobs) {
+            if (!j.location) j.location = location;
+          }
+        }
+        showRelated(relatedJobs);
       },
     );
   } catch (err) {

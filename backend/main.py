@@ -432,18 +432,15 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 unique_jobs = list(all_cached_jobs_by_link.values())
                 unique_jobs = [j for j in unique_jobs if title_matches(j.get("title", ""), keyword)]
                 log_app(f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
-                if is_warmup and unique_jobs:
-                    try:
-                        unique_jobs = await loop.run_in_executor(
-                            _executor, rerank_jobs_by_vector, unique_jobs, keyword
-                        )
-                        log_app(f"[vector] reranked {len(unique_jobs)} jobs for {keyword!r}")
-                    except Exception as e:
-                        log_app(f"[vector] rerank error: {e}", "ERROR")
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
                 yield "event: done\ndata: {}\n\n"
+
+                seen_links = {j.get("link") for j in unique_jobs if j.get("link")}
+                vector_supplement = await _fetch_vector_supplement(keyword, seen_links, req.location, warmup_kws)
+                if vector_supplement:
+                    yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
 
                 if not is_warmup:
                     await cache_touch(cache_keyword, req.location)
@@ -788,6 +785,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 if vector_supplement:
                     yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
 
+                try:
+                    all_jobs = await loop.run_in_executor(_executor, rerank_jobs_by_vector, all_jobs, keyword)
+                    log_app(f"[vector] reranked {len(all_jobs)} jobs for {keyword!r} before caching")
+                except Exception as e:
+                    log_app(f"[vector] rerank error: {e}", "ERROR")
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
                 asyncio.create_task(_upsert_and_track(all_jobs))
                 if not is_warmup:

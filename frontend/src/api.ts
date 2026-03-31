@@ -95,6 +95,7 @@ export async function scrapeJobsStream(
   onLinkedInDone?: () => void,
   onTopCVDone?: () => void,
   onCached?: (fetchedTs: number, fuzzy: boolean) => void,
+  onVectorResults?: (jobs: Job[]) => void,
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/scrape-stream`, {
     method: "POST",
@@ -259,6 +260,14 @@ export async function scrapeJobsStream(
         }
         if (eventType === "careerlink-done") {
           if (onSiteDone) onSiteDone("CareerLink", siteCounts.get("CareerLink") ?? 0);
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "vector-results") {
+          try {
+            const { jobs } = JSON.parse(payload) as { jobs: Job[]; count: number };
+            if (jobs.length > 0 && onVectorResults) onVectorResults(jobs);
+          } catch { /* ignore */ }
           eventType = "message";
           continue;
         }
