@@ -51,7 +51,7 @@ def embed_texts(texts: list[str]) -> list[list[float]] | None:
     if not texts:
         return []
     try:
-        resp = requests.post(_CF_AI_URL, headers=_headers(), json={"text": texts}, timeout=30)
+        resp = requests.post(_CF_AI_URL, headers=_headers(), json={"text": texts}, timeout=(10, 90))
         if resp.ok:
             result = resp.json().get("result", {})
             return result.get("data")
@@ -120,7 +120,7 @@ def upsert_jobs(jobs: list[dict]) -> bool:
             f"{_CF_VEC_BASE}/upsert",
             headers=upsert_headers,
             data=ndjson_body.encode("utf-8"),
-            timeout=30,
+            timeout=(10, 60),
         )
         if not (resp.ok and resp.json().get("success")):
             log_app(f"[vector] upsert failed batch {i//BATCH}: {resp.text}", "ERROR")

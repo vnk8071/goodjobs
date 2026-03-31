@@ -362,13 +362,17 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
             log_app(f"[warmup] {kw!r}/{loc!r} embedding {len(unembedded)} new jobs into Vectorize")
             ok = await asyncio.wait_for(
                 loop.run_in_executor(executor, upsert_jobs, unembedded),
-                timeout=60.0,
+                timeout=120.0,
             )
             if ok:
                 await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
                 log_app(f"[warmup] {kw!r}/{loc!r} embedded {len(unembedded)} jobs")
+            else:
+                log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert returned False — partial failure", "ERROR")
         else:
             log_app(f"[warmup] {kw!r}/{loc!r} all {len(merged)} jobs already embedded — skipping")
+    except asyncio.TimeoutError:
+        log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert timed out after 120s", "ERROR")
     except Exception as e:
         log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert error: {e}", "ERROR")
 
