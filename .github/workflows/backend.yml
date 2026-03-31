@@ -71,6 +71,8 @@ jobs:
             cd ~/goodjobs
             export IMAGE_NAME="${{ env.IMAGE_NAME }}"
             export CLOUDFLARE_TUNNEL_TOKEN="${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}"
+            export CLOUDFLARE_ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
+            export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
             export WARMUP_KEYWORDS="${{ secrets.WARMUP_KEYWORDS }}"
             docker compose -f docker-compose.server.yml pull backend
             docker compose -f docker-compose.server.yml up -d --remove-orphans --force-recreate
