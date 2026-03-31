@@ -93,7 +93,7 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
                 start += _LINKEDIN_PAGE_SIZE
             pages = start // _LINKEDIN_PAGE_SIZE + 1
             loc_label = f"geoId={geo_id}" if geo_id else f"location={mapped_location!r}"
-            log_app(f"[LinkedIn] '{kw}' {loc_label} → {len(all_jobs)} jobs across {pages} page(s){f' (f_TPR=r{since_seconds}s)' if since_seconds else ''}")
+        log_app(f"LinkedIn: found {len(all_jobs)} jobs for keyword={kw!r} at {loc_label} in {pages} page(s)")
         return all_jobs
 
     all_jobs: list[dict] = _fetch_all_pages(keyword)

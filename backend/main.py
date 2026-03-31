@@ -409,11 +409,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     def _process(jobs: list[dict]) -> list[dict]:
         filtered = []
         for j in jobs:
-            if title_matches(j.get("title", ""), keyword):
-                j["posted_ts"] = posted_ts(j)
-                j["posted"] = posted_relative(j["posted_ts"])
-                j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
-                filtered.append(j)
+            if is_warmup and not title_matches(j.get("title", ""), keyword):
+                continue
+            j["posted_ts"] = posted_ts(j)
+            j["posted"] = posted_relative(j["posted_ts"])
+            j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+            filtered.append(j)
         return filtered
 
     def _timed(site: str, fn, kw: str, loc: str):
