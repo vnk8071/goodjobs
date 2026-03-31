@@ -4,8 +4,9 @@ import random
 import time
 from datetime import datetime, timezone, timedelta
 
-from src.cache import cache_get, cache_set, get_redis, _key, cache_access_ts
-from src.constants import RECENT_DAYS
+from src.cache import cache_get, cache_set, get_redis, _key, cache_access_ts, vector_mark_warmup_seen, vector_get_expired_nonwarmup, vector_get_warmup_scores, vector_trim_warmup, embedded_links_add, embedded_links_filter
+from src.vector import upsert_jobs, delete_by_ids
+from src.constants import RECENT_DAYS, VECTOR_RETENTION_DAYS
 from src.logger import log_app
 from src.matching import title_matches, extract_skills, posted_ts
 
@@ -199,6 +200,8 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
     await cache_set(kw, loc, merged, time.time())
     log_app(f"[warmup] {kw!r}/{loc!r} cached — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total (pre-enrich)")
 
+    await vector_mark_warmup_seen([j["link"] for j in merged if j.get("link")], time.time())
+
     linkedin_batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc]
     linkedin_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
     linkedin_batch = linkedin_batch[:enrich_limit if enrich_limit is not None else 30]
@@ -348,7 +351,31 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
         merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
         await cache_set(kw, loc, merged, time.time())
 
+    await vector_mark_warmup_seen([j["link"] for j in merged if j.get("link")], time.time())
+
     log_app(f"[warmup] {kw!r}/{loc!r} done — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total ({time.perf_counter()-t0:.1f}s)")
+
+    from src.cache import embedded_links_add, embedded_links_filter
+    from src.vector import upsert_jobs
+    try:
+        unembedded = await embedded_links_filter(merged)
+        if unembedded:
+            log_app(f"[warmup] {kw!r}/{loc!r} embedding {len(unembedded)} new jobs into Vectorize")
+            ok = await asyncio.wait_for(
+                loop.run_in_executor(executor, upsert_jobs, unembedded),
+                timeout=120.0,
+            )
+            if ok:
+                await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
+                log_app(f"[warmup] {kw!r}/{loc!r} embedded {len(unembedded)} jobs")
+            else:
+                log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert returned False — partial failure", "ERROR")
+        else:
+            log_app(f"[warmup] {kw!r}/{loc!r} all {len(merged)} jobs already embedded — skipping")
+    except asyncio.TimeoutError:
+        log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert timed out after 120s", "ERROR")
+    except Exception as e:
+        log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert error: {e}", "ERROR")
 
 
 async def _cleanup_stale_keys() -> None:
@@ -411,6 +438,58 @@ async def _cleanup_nonwarmup_stale_keys() -> None:
         log_app(f"[warmup] non-warmup cleanup done — {deleted} key(s) removed")
     except Exception as e:
         log_app(f"[warmup] non-warmup cleanup error: {e}")
+
+
+async def _cleanup_nonwarmup_vectors(executor) -> None:
+    """Delete non-warmup vectors from Vectorize that have not been seen in 8 days.
+
+    Links protected by warmup (present in vector:warmup_last_seen with a recent score)
+    are never deleted.
+    """
+    try:
+        cutoff = time.time() - VECTOR_RETENTION_DAYS * 86400
+        BATCH = 200
+        total_deleted = 0
+        total_skipped = 0
+        loop = asyncio.get_event_loop()
+
+        while True:
+            candidates = await vector_get_expired_nonwarmup(cutoff, limit=BATCH)
+            if not candidates:
+                break
+
+            warmup_scores = await vector_get_warmup_scores(candidates)
+            to_delete: list[str] = []
+            for link in candidates:
+                ws = warmup_scores.get(link)
+                if ws is None or ws < cutoff:
+                    import hashlib
+                    to_delete.append(hashlib.sha1(link.encode()).hexdigest())
+                else:
+                    total_skipped += 1
+
+            if not to_delete:
+                break
+
+            ok = await loop.run_in_executor(executor, delete_by_ids, to_delete)
+            if ok:
+                redis = get_redis()
+                pipe = redis.pipeline()
+                for link in candidates:
+                    ws = warmup_scores.get(link)
+                    if ws is None or ws < cutoff:
+                        pipe.zrem("vector:nonwarmup_last_seen", link)
+                        pipe.srem("vector:embedded_links", link)
+                await pipe.execute()
+                total_deleted += len(to_delete)
+            else:
+                log_app(f"[warmup][vector-cleanup] delete_by_ids failed for {len(to_delete)} ids", "ERROR")
+                break
+
+        trimmed = await vector_trim_warmup(cutoff)
+        log_app(f"[warmup][vector-cleanup] done — deleted {total_deleted} vectors, skipped {total_skipped}, trimmed {trimmed} warmup entries")
+    except Exception as e:
+        log_app(f"[warmup][vector-cleanup] error: {e}", "ERROR")
 
 
 async def _cleanup_old_jobs() -> None:
@@ -553,6 +632,7 @@ async def warmup(executor, scrapers: dict) -> None:
             if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
                 await _cleanup_old_jobs()
                 await _cleanup_nonwarmup_stale_keys()
+                await _cleanup_nonwarmup_vectors(executor)
                 _last_cleanup_ts = time.time()
 
             await asyncio.sleep(CYCLE_INTERVAL)

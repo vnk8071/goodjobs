@@ -152,3 +152,115 @@ async def cache_access_ts(keyword: str, location: str) -> float:
     except Exception as e:
         log_app(f"cache access_ts error: {e}", "ERROR")
         return 0.0
+
+
+_EMBEDDED_LINKS_KEY = "vector:embedded_links"
+
+
+async def embedded_links_add(links: list[str]) -> None:
+    """Mark job links as having been embedded into Vectorize."""
+    if not links:
+        return
+    try:
+        await get_redis().sadd(_EMBEDDED_LINKS_KEY, *links)
+    except Exception as e:
+        log_app(f"embedded_links_add error: {e}", "ERROR")
+
+
+async def embedded_links_filter(jobs: list[dict]) -> list[dict]:
+    """Return only jobs whose links have NOT already been embedded into Vectorize."""
+    if not jobs:
+        return []
+    try:
+        pipe = get_redis().pipeline()
+        for j in jobs:
+            pipe.sismember(_EMBEDDED_LINKS_KEY, j.get("link", ""))
+        results = await pipe.execute()
+        return [j for j, seen in zip(jobs, results) if not seen]
+    except Exception as e:
+        log_app(f"embedded_links_filter error: {e}", "ERROR")
+        return jobs
+
+
+async def embedded_links_count() -> int:
+    """Return the number of job links tracked as embedded."""
+    try:
+        return await get_redis().scard(_EMBEDDED_LINKS_KEY)
+    except Exception as e:
+        log_app(f"embedded_links_count error: {e}", "ERROR")
+        return 0
+
+
+_VECMARK_WARMUP_KEY    = "vector:warmup_last_seen"
+_VECMARK_NONWARMUP_KEY = "vector:nonwarmup_last_seen"
+
+
+async def vector_mark_warmup_seen(links: list[str], ts: float) -> None:
+    """Record warmup last-seen timestamps and remove from non-warmup tracking."""
+    if not links:
+        return
+    try:
+        redis = get_redis()
+        pipe = redis.pipeline()
+        for link in links:
+            if link:
+                pipe.zadd(_VECMARK_WARMUP_KEY, {link: ts})
+                pipe.zrem(_VECMARK_NONWARMUP_KEY, link)
+        await pipe.execute()
+    except Exception as e:
+        log_app(f"vector_mark_warmup_seen error: {e}", "ERROR")
+
+
+async def vector_mark_nonwarmup_seen(links: list[str], ts: float) -> None:
+    """Record non-warmup last-seen timestamps."""
+    if not links:
+        return
+    try:
+        redis = get_redis()
+        pipe = redis.pipeline()
+        for link in links:
+            if link:
+                pipe.zadd(_VECMARK_NONWARMUP_KEY, {link: ts})
+        await pipe.execute()
+    except Exception as e:
+        log_app(f"vector_mark_nonwarmup_seen error: {e}", "ERROR")
+
+
+async def vector_get_expired_nonwarmup(cutoff: float, limit: int = 500) -> list[str]:
+    """Return non-warmup links whose last-seen score is <= cutoff."""
+    try:
+        return await get_redis().zrangebyscore(
+            _VECMARK_NONWARMUP_KEY, "-inf", cutoff, start=0, num=limit
+        )
+    except Exception as e:
+        log_app(f"vector_get_expired_nonwarmup error: {e}", "ERROR")
+        return []
+
+
+async def vector_get_warmup_scores(links: list[str]) -> dict[str, float | None]:
+    """Return a dict of link -> warmup score (None if not present)."""
+    result: dict[str, float | None] = {link: None for link in links}
+    if not links:
+        return result
+    try:
+        redis = get_redis()
+        pipe = redis.pipeline()
+        for link in links:
+            if link:
+                pipe.zscore(_VECMARK_WARMUP_KEY, link)
+        scores = await pipe.execute()
+        for link, score in zip(links, scores):
+            if link:
+                result[link] = score
+    except Exception as e:
+        log_app(f"vector_get_warmup_scores error: {e}", "ERROR")
+    return result
+
+
+async def vector_trim_warmup(cutoff: float) -> int:
+    """Remove warmup entries older than cutoff. Returns number removed."""
+    try:
+        return await get_redis().zremrangebyscore(_VECMARK_WARMUP_KEY, "-inf", cutoff)
+    except Exception as e:
+        log_app(f"vector_trim_warmup error: {e}", "ERROR")
+        return 0

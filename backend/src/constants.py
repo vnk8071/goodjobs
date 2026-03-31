@@ -64,10 +64,11 @@ CHROMIUM_ARGS = [
     *(["--no-zygote", "--single-process"] if sys.platform == "linux" else []),
 ]
 
-DESC_MAX_CHARS    = 10000
-RECENT_DAYS       = 8
-MAX_CONCURRENT    = 6
-REDIS_URL         = os.getenv("REDIS_URL", "redis://redis:6379")
+DESC_MAX_CHARS      = 10000
+RECENT_DAYS         = 8
+MAX_CONCURRENT      = 6
+REDIS_URL           = os.getenv("REDIS_URL", "redis://redis:6379")
+VECTOR_RETENTION_DAYS = 8
 
 # Summarizer configuration
 SUMMARIZER_MAX_LENGTH = int(os.getenv("SUMMARIZER_MAX_LENGTH", "300"))

@@ -9,10 +9,13 @@ function truncate(text: string, max: number): string {
   return plain.slice(0, max).replace(/\s+\S*$/, "") + "…";
 }
 
-const statusEl   = document.getElementById("status")    as HTMLDivElement;
-const resultsEl  = document.getElementById("results")   as HTMLDivElement;
-const jobsBody   = document.getElementById("jobsBody")  as HTMLTableSectionElement;
-const jobCountEl = document.getElementById("jobCount")  as HTMLSpanElement;
+const statusEl      = document.getElementById("status")       as HTMLDivElement;
+const resultsEl     = document.getElementById("results")      as HTMLDivElement;
+const jobsBody      = document.getElementById("jobsBody")     as HTMLTableSectionElement;
+const jobCountEl    = document.getElementById("jobCount")     as HTMLSpanElement;
+const relatedEl     = document.getElementById("related")      as HTMLDivElement;
+const relatedBody   = document.getElementById("relatedBody")  as HTMLTableSectionElement;
+const relatedCountEl = document.getElementById("relatedCount") as HTMLSpanElement;
 const filterBar    = document.getElementById("filterBar")   as HTMLDivElement;
 const titleFilter  = document.getElementById("titleFilter") as HTMLInputElement;
 
@@ -450,6 +453,21 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
   `;
   tr.addEventListener("click", () => openJobModal(job));
   return tr;
+}
+
+/** Render the related jobs section with the given jobs. */
+export function showRelated(jobs: Job[]): void {
+  relatedBody.innerHTML = "";
+  jobs.forEach((job, i) => relatedBody.appendChild(buildRow(job, i + 1)));
+  relatedCountEl.textContent = `${jobs.length} result${jobs.length !== 1 ? "s" : ""}`;
+  relatedEl.classList.remove("hidden");
+}
+
+/** Hide and clear the related jobs section. */
+export function hideRelated(): void {
+  relatedBody.innerHTML = "";
+  relatedCountEl.textContent = "";
+  relatedEl.classList.add("hidden");
 }
 
 /** Escape a string for safe insertion into HTML attribute or text contexts. */
