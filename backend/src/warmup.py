@@ -561,7 +561,7 @@ async def warmup(executor, scrapers: dict) -> None:
 
         log_app(f"[warmup] startup pass done — triggering background summarization")
         try:
-            stats = await run_background_summarization()  # keyword_filter=_TEST_KEYWORD)
+            stats = await run_background_summarization()
             log_app(f"[warmup] background summarization complete: {stats}")
         except Exception as e:
             log_app(f"[warmup] background summarization error: {e}", "ERROR")
@@ -611,19 +611,14 @@ async def warmup(executor, scrapers: dict) -> None:
 
                 for i, (kw, loc, ft) in enumerate(tasks):
                     await _scrape_one(kw, loc, ft)
-                    # Between-keyword cooldown: 15–30 s so back-to-back keyword
-                    # cycles don't look like a bot burst to LinkedIn/ITViec.
                     if i < len(tasks) - 1:
                         await asyncio.sleep(random.uniform(15, 30))
 
                 # Trigger background summarization after all scraping done
                 log_app(f"[warmup] cycle done — triggering background summarization")
                 try:
-                    stats = await run_background_summarization()  # keyword_filter=_TEST_KEYWORD)
+                    stats = await run_background_summarization()
                     log_app(f"[warmup] background summarization complete: {stats}")
-                    # TEMP: Exit after first summarization run for testing
-                    # log_app(f"[warmup] TEMP: Exiting after first summarization (remove this break later)")
-                    # break
                 except Exception as e:
                     log_app(f"[warmup] background summarization error: {e}", "ERROR")
             else:

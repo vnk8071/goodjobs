@@ -432,6 +432,10 @@ export function appendJobs(existing: Job[], incoming: Job[]): Job[] {
         jobModalDesc.innerHTML = openJob.description;
       }
       jobModalSkills.innerHTML = renderSkillTags(openJob.skills);
+      if (openJob.summary_description) {
+        jobModalSummary.textContent = openJob.summary_description;
+        jobModalSummary.classList.remove("hidden");
+      }
     }
   }
 

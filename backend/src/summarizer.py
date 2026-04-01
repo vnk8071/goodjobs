@@ -111,11 +111,10 @@ class SummarizerService:
         try:
             raw_responses = self._batch_call([p[1] for p in pending])
             if len(raw_responses) != len(pending):
-                log_app(f"[summarizer] response count mismatch: expected {len(pending)}, got {len(raw_responses)} — skipping batch", "WARNING")
-            else:
-                for (i, _), raw in zip(pending, raw_responses):
-                    summary, skills = self._parse_combined(raw)
-                    results[i] = (summary[: self.max_length] if summary else "", skills)
+                log_app(f"[summarizer] response count mismatch: expected {len(pending)}, got {len(raw_responses)}", "WARNING")
+            for (i, _), raw in zip(pending, raw_responses):
+                summary, skills = self._parse_combined(raw)
+                results[i] = (summary[: self.max_length] if summary else "", skills)
         except Exception as e:
             log_app(f"[summarizer] batch API failed: {e}, {len(pending)} jobs will be retried next cycle", "WARNING")
 
@@ -159,8 +158,9 @@ class SummarizerService:
 
         system_prompt = self._SYSTEM_PROMPT.format(max_len=self.max_length)
         requests_payload = []
-        for desc in descriptions:
+        for idx, desc in enumerate(descriptions):
             requests_payload.append({
+                "external_reference": str(idx),
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Phân tích tin tuyển dụng:\n{desc}"},
@@ -218,17 +218,34 @@ class SummarizerService:
             if responses:
                 log_app(f"[summarizer] batch completed: {len(responses)} responses, request_id={request_id}")
 
-                results = []
-                for i, r in enumerate(responses):
+                ordered: dict[int, str] = {}
+                for r in responses:
+                    ref = r.get("external_reference")
+                    try:
+                        idx = int(ref) if ref is not None else None
+                    except (ValueError, TypeError):
+                        idx = None
                     try:
                         message = r.get("result", {}).get("choices", [{}])[0].get("message", {})
-                        content = message.get("content", "")
-                        if not content:
-                            content = message.get("reasoning_content", "")
-                        results.append(content.strip() if content else "")
+                        content = message.get("content", "") or message.get("reasoning_content", "")
+                        content = content.strip() if content else ""
                     except (IndexError, KeyError, AttributeError) as e:
-                        log_app(f"[summarizer] failed to parse response[{i}]: {e}", "WARNING")
-                        results.append("")
+                        log_app(f"[summarizer] failed to parse response ref={ref}: {e}", "WARNING")
+                        content = ""
+                    if idx is not None:
+                        ordered[idx] = content
+                    else:
+                        log_app(f"[summarizer] response missing external_reference, falling back to positional", "WARNING")
+                        ordered = {i: "" for i in range(len(descriptions))}
+                        for i, r2 in enumerate(responses):
+                            try:
+                                m = r2.get("result", {}).get("choices", [{}])[0].get("message", {})
+                                c = m.get("content", "") or m.get("reasoning_content", "")
+                                ordered[i] = c.strip() if c else ""
+                            except Exception:
+                                ordered[i] = ""
+                        break
+                results = [ordered.get(i, "") for i in range(len(descriptions))]
                 return results
 
             result_status = result_data.get("status", "")
