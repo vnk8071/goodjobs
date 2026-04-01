@@ -1,4 +1,5 @@
 # src/summarizer.py
+import json
 import time
 import requests
 
@@ -38,8 +39,15 @@ class SummarizerService:
     _TOP_P = 0.3
     _TOP_K = 10
 
-    # System prompt — always Vietnamese, {max_len} is filled from SUMMARIZER_MAX_LENGTH
-    _SYSTEM_PROMPT = "Bạn là chuyên gia viết tóm tắt tin tuyển dụng. Tóm tắt bằng TIẾNG VIỆT, bất kể ngôn ngữ gốc. CHỈ tập trung vào YÊU CẦU ứng viên: kinh nghiệm, kỹ năng, yêu cầu về công cụ/tech stack, yêu cầu công việc. KHÔNG QUÁ {max_len} kí tự. Không dùng markdown, chỉ plain text. Viết trên 1 dòng duy nhất, không xuống dòng."
+    # Combined prompt: produces both Vietnamese summary and English skill list in one call.
+    # Output format: JSON object {"summary": "...", "skills": ["..."]}
+    _SYSTEM_PROMPT = (
+        "Bạn là chuyên gia phân tích tin tuyển dụng. Với mỗi tin, hãy trả về JSON object gồm 2 trường:\n"
+        '1. "summary": tóm tắt bằng TIẾNG VIỆT, CHỈ tập trung vào YÊU CẦU ứng viên (kinh nghiệm, kỹ năng, tech stack, yêu cầu công việc). '
+        "KHÔNG QUÁ {max_len} kí tự. Plain text, 1 dòng, không markdown.\n"
+        '2. "skills": mảng JSON tối đa 20 tên kỹ năng/công nghệ TIẾNG ANH ngắn gọn, ví dụ ["Python", "Docker", "AWS"].\n'
+        "Chỉ trả về JSON object, không giải thích thêm."
+    )
 
     def __init__(
         self,
@@ -71,43 +79,61 @@ class SummarizerService:
         return results[0] if results else self._truncate_output(truncated)
 
     def batch_summarize(self, descriptions: list[str]) -> list[str]:
-        """Summarize multiple descriptions using Cloudflare batch API.
+        """Summarize multiple descriptions. Returns list of Vietnamese summaries."""
+        return [summary for summary, _ in self.batch_analyze(descriptions)]
 
-        Returns list of summaries in same order as inputs.
+    def batch_analyze(self, descriptions: list[str]) -> list[tuple[str, list[str]]]:
+        """Analyze multiple descriptions in one API call.
+
+        Returns list of (summary, skills) tuples in same order as inputs.
+        summary: Vietnamese plain-text summary string.
+        skills: list of English skill name strings.
         """
         if not descriptions:
             return []
 
-        # Pre-process: handle empty/short descriptions
-        results: list[str] = []
-        pending: list[tuple[int, str]] = []  # (index, truncated_description)
+        results: list[tuple[str, list[str]]] = []
+        pending: list[tuple[int, str]] = []
 
         for i, desc in enumerate(descriptions):
             if not desc or not desc.strip():
-                results.append("")
+                results.append(("", []))
             elif len(desc) < SUMMARIZER_MIN_LENGTH:
-                results.append(desc[: self.max_length])
+                results.append((desc[: self.max_length], []))
             else:
                 truncated = self._truncate_input(desc)
                 pending.append((i, truncated))
-                results.append("")  # Placeholder
+                results.append(("", []))  # Placeholder
 
         if not pending:
             return results
 
-        # Batch API call
         try:
-            summaries = self._batch_call([p[1] for p in pending])
-            if len(summaries) != len(pending):
-                log_app(f"[summarizer] response count mismatch: expected {len(pending)}, got {len(summaries)} — skipping batch", "WARNING")
+            raw_responses = self._batch_call([p[1] for p in pending])
+            if len(raw_responses) != len(pending):
+                log_app(f"[summarizer] response count mismatch: expected {len(pending)}, got {len(raw_responses)} — skipping batch", "WARNING")
             else:
-                for (i, _), summary in zip(pending, summaries):
-                    results[i] = summary
+                for (i, _), raw in zip(pending, raw_responses):
+                    summary, skills = self._parse_combined(raw)
+                    results[i] = (summary[: self.max_length] if summary else "", skills)
         except Exception as e:
             log_app(f"[summarizer] batch API failed: {e}, {len(pending)} jobs will be retried next cycle", "WARNING")
-            # Leave results as "" so they get retried on next summarization run
 
         return results
+
+    def _parse_combined(self, content: str) -> tuple[str, list[str]]:
+        """Parse combined JSON response into (summary, skills)."""
+        try:
+            cleaned = content.strip().strip("`").lstrip("json").strip()
+            obj = json.loads(cleaned)
+            summary = obj.get("summary", "") or ""
+            skills_raw = obj.get("skills", [])
+            skills = [s for s in skills_raw if isinstance(s, str)][:20]
+            return summary.replace("\n", " ").replace("\r", " ").strip(), skills
+        except Exception:
+            # Fallback: treat entire content as summary, no skills
+            fallback = content.strip().replace("\n", " ").replace("\r", " ")
+            return fallback, []
 
     def _truncate_input(self, text: str, max_chars: int = 2000) -> str:
         """Truncate at sentence boundary."""
@@ -127,20 +153,19 @@ class SummarizerService:
         return text[: self.max_length].rsplit(" ", 1)[0] + "..."
 
     def _batch_call(self, descriptions: list[str]) -> list[str]:
-        """Make Cloudflare batch API call and poll for results."""
+        """Make Cloudflare batch API call and poll for results. Returns raw response strings."""
         if not self.account_id or not self.api_token:
             raise ValueError("Cloudflare credentials not configured")
 
-        # Build requests array using messages format
         system_prompt = self._SYSTEM_PROMPT.format(max_len=self.max_length)
         requests_payload = []
         for desc in descriptions:
             requests_payload.append({
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Tóm tắt tin tuyển dụng:\n{desc}"},
+                    {"role": "user", "content": f"Phân tích tin tuyển dụng:\n{desc}"},
                 ],
-                "max_tokens": 200,
+                "max_tokens": 400,
                 "temperature": self._TEMPERATURE,
                 "top_p": self._TOP_P,
                 "top_k": self._TOP_K,
@@ -149,7 +174,6 @@ class SummarizerService:
 
         log_app(f"[summarizer] batch API request: {len(requests_payload)} requests")
 
-        # Submit batch job with queueRequest=true for async processing
         response = requests.post(
             f"{self._run_url}?queueRequest=true",
             headers=self._headers,
@@ -157,7 +181,6 @@ class SummarizerService:
             timeout=30,
         )
 
-        # 200 = completed, 202 = queued (initial response is success)
         if response.status_code not in (200, 202):
             log_app(f"[summarizer] batch API error {response.status_code}: {response.text[:500]}", "ERROR")
             raise RuntimeError(f"Batch API error: {response.status_code} {response.text}")
@@ -173,7 +196,6 @@ class SummarizerService:
 
         log_app(f"[summarizer] batch submitted: {len(descriptions)} prompts, request_id={request_id}")
 
-        # Poll for results by posting to the same endpoint with request_id
         start_time = time.time()
 
         while time.time() - start_time < self._POLL_TIMEOUT:
@@ -192,7 +214,6 @@ class SummarizerService:
             poll_data = poll_response.json()
             result_data = poll_data.get("result", {})
 
-            # Primary check: if responses exist, we're done
             responses = result_data.get("responses", [])
             if responses:
                 log_app(f"[summarizer] batch completed: {len(responses)} responses, request_id={request_id}")
@@ -204,17 +225,12 @@ class SummarizerService:
                         content = message.get("content", "")
                         if not content:
                             content = message.get("reasoning_content", "")
-                        if content:
-                            content = content.strip().replace('\n', ' ').replace('\r', ' ')
-                        else:
-                            content = ""
-                        results.append(content[: self.max_length] if content else "")
+                        results.append(content.strip() if content else "")
                     except (IndexError, KeyError, AttributeError) as e:
                         log_app(f"[summarizer] failed to parse response[{i}]: {e}", "WARNING")
                         results.append("")
                 return results
 
-            # Check status field
             result_status = result_data.get("status", "")
 
             if result_status in ("queued", "202", "running"):
@@ -222,13 +238,11 @@ class SummarizerService:
                 time.sleep(self._POLL_INTERVAL)
                 continue
 
-            # Success but no responses yet - keep waiting
             if poll_data.get("success"):
                 log_app(f"[summarizer] batch processing (no responses yet), request_id={request_id}")
                 time.sleep(self._POLL_INTERVAL)
                 continue
 
-            # Error case
             log_app(f"[summarizer] poll error: {poll_data}", "WARNING")
             time.sleep(self._POLL_INTERVAL)
             continue
@@ -246,5 +260,4 @@ class SummarizerService:
                 return self._batch_call(descriptions)
             except Exception as e2:
                 log_app(f"[summarizer] batch API failed after retry: {e2}", "WARNING")
-                # Fallback: truncate descriptions
                 return [self._truncate_output(d[:2000]) for d in descriptions]

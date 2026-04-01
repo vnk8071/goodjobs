@@ -2,6 +2,7 @@
 """Background summarization task that runs after scraping completes."""
 
 import asyncio
+import json
 
 from src.cache import get_redis, _key
 from src.logger import log_app
@@ -30,7 +31,6 @@ async def get_jobs_without_summary(keyword_filter: str | None = None) -> list[di
                 if not raw:
                     continue
 
-                import json
                 data = json.loads(raw)
                 jobs = data.get("jobs", [])
 
@@ -51,8 +51,8 @@ async def get_jobs_without_summary(keyword_filter: str | None = None) -> list[di
         return []
 
 
-async def update_job_summary(keyword: str, location: str, job_id: str, summary: str) -> bool:
-    """Update a single job with its summary."""
+async def update_job_analysis(keyword: str, location: str, job_id: str, summary: str, skills: list[str]) -> bool:
+    """Update a single job with its summary and skills."""
     redis = get_redis()
     try:
         key = _key(keyword, location)
@@ -60,7 +60,6 @@ async def update_job_summary(keyword: str, location: str, job_id: str, summary: 
         if not raw:
             return False
 
-        import json
         data = json.loads(raw)
         jobs = data.get("jobs", [])
 
@@ -68,6 +67,8 @@ async def update_job_summary(keyword: str, location: str, job_id: str, summary: 
         for job in jobs:
             if job.get("link") == job_id:
                 job["summary_description"] = summary
+                if skills:
+                    job["skills"] = skills
                 updated = True
                 break
 
@@ -79,12 +80,12 @@ async def update_job_summary(keyword: str, location: str, job_id: str, summary: 
         return False
 
     except Exception as e:
-        log_app(f"[summarizer] error updating job summary: {e}", "ERROR")
+        log_app(f"[summarizer] error updating job analysis: {e}", "ERROR")
         return False
 
 
 async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | None = None) -> dict[str, int]:
-    """Summarize all jobs that don't have summaries yet.
+    """Summarize all jobs that don't have summaries yet, and extract skills in the same pass.
 
     batch_size: Number of jobs to process per API call (default: 25)
     keyword_filter: If set, only summarize jobs for this keyword.
@@ -114,21 +115,21 @@ async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | Non
         log_app(f"[summarizer] processing batch {batch_num}/{(len(jobs_to_summarize) + batch_size - 1) // batch_size}: {len(descriptions)} jobs ({skipped} empty) — {titles[:5]}{'...' if len(titles) > 5 else ''}")
 
         try:
-            summaries = summarizer.batch_summarize(descriptions)
+            results = summarizer.batch_analyze(descriptions)
 
-            for item, summary in zip(batch, summaries):
+            for item, (summary, skills) in zip(batch, results):
                 stats["processed"] += 1
 
-                # Skip empty summaries (API timeout/failure) — will retry next cycle
                 if not summary:
                     stats["skipped"] += 1
                     continue
 
-                success = await update_job_summary(
+                success = await update_job_analysis(
                     item["keyword"],
                     item["location"],
                     item["job_id"],
-                    summary
+                    summary,
+                    skills,
                 )
 
                 if success:
