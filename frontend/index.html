@@ -152,18 +152,26 @@
         }
 
         /* Company col: show logo only, no text — keep th visible for fixed-width sizing */
-        thead th:nth-child(3) { width: 2.4rem; font-size: 0; }
+        thead th:nth-child(3) { width: 2.8rem; font-size: 0; }
         tbody td:nth-child(3) {
-          padding: 0.3rem 0.25rem;
+          padding: 0.2rem 0;
           vertical-align: middle;
           text-align: center;
+          width: 2.8rem;
+          max-width: 2.8rem;
+          overflow: hidden;
+        }
+        tbody td:nth-child(3) .company-cell {
+          flex-shrink: 0;
+          width: 2.8rem;
+          max-width: 2.8rem;
         }
         tbody td:nth-child(3) .company-cell span { display: none; }
         tbody td:nth-child(3) .company-logo,
         tbody td:nth-child(3) .company-avatar {
-          width: 26px;
-          height: 26px;
-          font-size: 0.7rem;
+          width: 32px;
+          height: 32px;
+          font-size: 0.75rem;
         }
 
         td.title {
@@ -171,6 +179,8 @@
           word-break: break-word;
           max-height: 4rem;
           overflow: hidden;
+          flex: 1;
+          min-width: 0;
         }
         /* Company name under title */
         td.title::after {
@@ -189,10 +199,15 @@
 
         /* Fixed layout so columns don't overflow */
         .table-wrapper { overflow-x: hidden; }
-        table { table-layout: fixed; width: 100%; }
-        thead th:nth-child(1) { width: 1.4rem; }   /* # */
-        thead th:nth-child(5) { width: 4.5rem; }   /* Posted */
-        thead th:nth-child(8) { width: 4.5rem; }   /* Source — wide enough for badge */
+        table.jobs-table { table-layout: fixed; width: 100%; }
+        table.jobs-table thead th:nth-child(1) { width: 1.4rem; }   /* # */
+        table.jobs-table thead th:nth-child(2) { width: auto; }     /* Title — auto width */
+        table.jobs-table thead th:nth-child(3) { width: 1.8rem; }   /* Company logo */
+        table.jobs-table thead th:nth-child(5) { width: 4.5rem; }   /* Posted */
+        table.jobs-table thead th:nth-child(8) { width: 4.5rem; }   /* Source — wide enough for badge */
+        table.jobs-table thead th:nth-child(6),
+        table.jobs-table thead th:nth-child(7),
+        table.jobs-table thead th:nth-child(9) { width: 0; }        /* Hidden columns take no space */
 
         /* Source header: hide text, show nothing (badge in body makes it clear) */
         thead th:nth-child(8) { font-size: 0; }
@@ -432,13 +447,17 @@
         table-layout: fixed;
       }
 
-      /* Rebalance: narrower company, wider description */
-      table.jobs-table thead th:nth-child(1) { width: 2.8rem; }
-      table.jobs-table thead th:nth-child(3) { width: clamp(8.5rem, 12vw, 11rem); }
-      table.jobs-table thead th:nth-child(5) { width: 6.8rem; }
-      table.jobs-table thead th:nth-child(7) { width: clamp(20rem, 34vw, 36rem); }
-      table.jobs-table thead th:nth-child(8) { width: 6.2rem; }
-      table.jobs-table thead th:nth-child(9) { width: 4.8rem; }
+      /* Rebalance: narrower company, wider description — desktop only */
+      @media (min-width: 641px) {
+        table.jobs-table thead th:nth-child(1) { width: 2.8rem; }
+        table.jobs-table thead th:nth-child(2) { width: clamp(10rem, 12vw, 11rem); }
+        table.jobs-table thead th:nth-child(3) { width: clamp(8.5rem, 12vw, 11rem); }
+        table.jobs-table thead th:nth-child(5) { width: 6.8rem; }
+        table.jobs-table thead th:nth-child(6) { width: 16rem; }
+        table.jobs-table thead th:nth-child(7) { width: clamp(20rem, 34vw, 30rem); }
+        table.jobs-table thead th:nth-child(8) { width: 6.2rem; }
+        table.jobs-table thead th:nth-child(9) { width: 4.8rem; }
+      }
 
       thead th {
         background: #f8fafc;
