@@ -375,6 +375,7 @@ export function hideResults(): void {
   // Reset filter state
   _allJobs = [];
   _hiddenSources.clear();
+  _activeSkills.clear();
   titleFilter.value = "";
 }
 
@@ -387,15 +388,22 @@ export function openJobByLink(link: string): boolean {
 
 let _allJobs: Job[] = [];
 let _hiddenSources = new Set<string>();
+let _activeSkills = new Set<string>();
 
-/** Re-render the table rows based on the current _hiddenSources filter set and title words. */
+/** Re-render the table rows based on the current _hiddenSources filter set, title words, and active skills. */
 function _applyFilter(): void {
   const words = titleFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const visible = _allJobs.filter((j) => {
     if (_hiddenSources.has(j.source)) return false;
-    if (words.length === 0) return true;
-    const title = j.title.toLowerCase();
-    return words.every((w) => title.includes(w));
+    if (words.length > 0) {
+      const title = j.title.toLowerCase();
+      if (!words.every((w) => title.includes(w))) return false;
+    }
+    if (_activeSkills.size > 0) {
+      const jobSkills = (j.skills ?? []).map(s => s.toLowerCase());
+      if (![..._activeSkills].every(s => jobSkills.includes(s))) return false;
+    }
+    return true;
   });
 
   jobsBody.innerHTML = "";
@@ -456,6 +464,43 @@ function _rebuildFilterBar(): void {
 
     filterBar.appendChild(btn);
   });
+
+  // Skill filter row
+  const skillFreq = new Map<string, number>();
+  for (const j of _allJobs) {
+    for (const s of (j.skills ?? [])) {
+      const key = s.toLowerCase();
+      skillFreq.set(key, (skillFreq.get(key) ?? 0) + 1);
+    }
+  }
+  const topSkills = [...skillFreq.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([skill]) => skill);
+
+  if (topSkills.length > 0) {
+    const skillRow = document.createElement("div");
+    skillRow.className = "skill-filter-row";
+    topSkills.forEach((skill) => {
+      const pill = document.createElement("span");
+      const isActive = _activeSkills.has(skill);
+      pill.className = `skill-tag skill-filter-pill${isActive ? " active" : ""}`;
+      pill.textContent = `${skill} ×${skillFreq.get(skill)}`;
+      pill.addEventListener("click", () => {
+        if (_activeSkills.has(skill)) {
+          _activeSkills.delete(skill);
+          pill.classList.remove("active");
+        } else {
+          _activeSkills.add(skill);
+          pill.classList.add("active");
+        }
+        _applyFilter();
+      });
+      skillRow.appendChild(pill);
+    });
+    filterBar.appendChild(skillRow);
+  }
 }
 
 /**

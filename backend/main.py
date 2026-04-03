@@ -88,7 +88,7 @@ async def _upsert_and_track(jobs: list[dict]) -> None:
     unembedded = await embedded_links_filter(jobs)
     if not unembedded:
         return
-    to_embed = [j for j in unembedded if j.get("link") not in _inflight_embed_links]
+    to_embed = [j for j in unembedded if j.get("link") not in _inflight_embed_links and j.get("description", "").strip()]
     if not to_embed:
         return
     _inflight_embed_links.update(j["link"] for j in to_embed if j.get("link"))

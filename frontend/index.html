@@ -1108,6 +1108,29 @@
         border-color: var(--border);
       }
 
+      .skill-filter-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        width: 100%;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+        margin-top: 0.4rem;
+      }
+
+      .skill-filter-pill {
+        cursor: pointer;
+        opacity: 0.45;
+        transition: opacity 0.15s, background 0.15s;
+      }
+
+      .skill-filter-pill.active {
+        opacity: 1;
+        background: #dbeafe;
+        border-color: #93c5fd;
+        color: #1d4ed8;
+      }
+
       /* Queue banner */
       .queue-banner {
         display: flex;
