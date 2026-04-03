@@ -1,12 +1,15 @@
 # src/summarizer.py
 import json
 import time
+
 import requests
 
 from src.constants import (
     CLOUDFLARE_ACCOUNT_ID,
-    CLOUDFLARE_API_TOKEN,
+    CLOUDFLARE_ACCOUNT_IDS,
     CLOUDFLARE_API_BASE,
+    CLOUDFLARE_API_TOKEN,
+    CLOUDFLARE_API_TOKENS,
     CLOUDFLARE_MODEL,
     SUMMARIZER_MAX_LENGTH,
     SUMMARIZER_MIN_LENGTH,
@@ -63,9 +66,42 @@ class SummarizerService:
         self._headers = {
             "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json",
-            "x-session-affinity": "summarize-jobs",  # Prompt caching
+            "x-session-affinity": "summarize-jobs",
         }
         log_app(f"[summarizer] Cloudflare batch API initialized (account={self.account_id[:10] if self.account_id else 'NOT SET'}...)")
+
+    def _iter_ai_creds(self) -> list[tuple[str, str]]:
+        accounts_all = CLOUDFLARE_ACCOUNT_IDS or ([] if not self.account_id else [self.account_id])
+        tokens_all = CLOUDFLARE_API_TOKENS or ([] if not self.api_token else [self.api_token])
+
+        accounts = accounts_all[1:] if len(accounts_all) > 1 else accounts_all
+        tokens = tokens_all[1:] if len(tokens_all) > 1 else tokens_all
+
+        if not accounts or not tokens:
+            accounts = accounts_all
+            tokens = tokens_all
+        if not accounts or not tokens:
+            return []
+        if len(tokens) == 1 and len(accounts) > 1:
+            tokens = tokens * len(accounts)
+        if len(accounts) == 1 and len(tokens) > 1:
+            accounts = accounts * len(tokens)
+        n = min(len(accounts), len(tokens))
+        return list(zip(accounts[:n], tokens[:n]))
+
+    def _is_quota_error(self, response: requests.Response) -> bool:
+        if response.status_code == 429:
+            return True
+        try:
+            data = response.json()
+        except Exception:
+            return False
+        errors = data.get("errors")
+        if isinstance(errors, list):
+            for e in errors:
+                if isinstance(e, dict) and e.get("code") == 4006:
+                    return True
+        return False
 
     def summarize(self, description: str) -> str:
         """Summarize single description using batch API."""
@@ -153,7 +189,8 @@ class SummarizerService:
 
     def _batch_call(self, descriptions: list[str]) -> list[str]:
         """Make Cloudflare batch API call and poll for results. Returns raw response strings."""
-        if not self.account_id or not self.api_token:
+        creds = self._iter_ai_creds()
+        if not creds:
             raise ValueError("Cloudflare credentials not configured")
 
         system_prompt = self._SYSTEM_PROMPT.format(max_len=self.max_length)
@@ -174,25 +211,47 @@ class SummarizerService:
 
         log_app(f"[summarizer] batch API request: {len(requests_payload)} requests")
 
-        response = requests.post(
-            f"{self._run_url}?queueRequest=true",
-            headers=self._headers,
-            json={"requests": requests_payload},
-            timeout=30,
-        )
+        last_err = None
+        request_id = None
+        run_url = None
+        headers = None
+        for idx, (account_id, api_token) in enumerate(creds):
+            run_url = f"{CLOUDFLARE_API_BASE}/{account_id}/ai/run/{CLOUDFLARE_MODEL}"
+            headers = {
+                "Authorization": f"Bearer {api_token}",
+                "Content-Type": "application/json",
+                "x-session-affinity": "summarize-jobs",
+            }
 
-        if response.status_code not in (200, 202):
-            log_app(f"[summarizer] batch API error {response.status_code}: {response.text[:500]}", "ERROR")
-            raise RuntimeError(f"Batch API error: {response.status_code} {response.text}")
+            response = requests.post(
+                f"{run_url}?queueRequest=true",
+                headers=headers,
+                json={"requests": requests_payload},
+                timeout=30,
+            )
 
-        data = response.json()
-        if not data.get("success"):
-            log_app(f"[summarizer] batch API success=false: {data}", "ERROR")
-            raise RuntimeError(f"Batch API failed: {data}")
+            if response.status_code in (200, 202):
+                data = response.json()
+                if data.get("success"):
+                    request_id = data.get("result", {}).get("request_id")
+                    if request_id:
+                        break
+                    last_err = RuntimeError("No request_id in batch response")
+                else:
+                    last_err = RuntimeError(f"Batch API failed: {data}")
+            else:
+                if idx < len(creds) - 1 and self._is_quota_error(response):
+                    log_app(f"[summarizer] quota-limited, trying next CF account ({response.status_code})", "WARN")
+                    continue
+                last_err = RuntimeError(f"Batch API error: {response.status_code} {response.text}")
 
-        request_id = data.get("result", {}).get("request_id")
+            # Non-quota errors should stop immediately.
+            break
+
         if not request_id:
-            raise RuntimeError("No request_id in batch response")
+            if last_err is None:
+                last_err = RuntimeError("Batch API failed without request_id")
+            raise last_err
 
         log_app(f"[summarizer] batch submitted: {len(descriptions)} prompts, request_id={request_id}")
 
@@ -200,8 +259,8 @@ class SummarizerService:
 
         while time.time() - start_time < self._POLL_TIMEOUT:
             poll_response = requests.post(
-                f"{self._run_url}?queueRequest=true",
-                headers=self._headers,
+                f"{run_url}?queueRequest=true",
+                headers=headers,
                 json={"request_id": request_id},
                 timeout=30,
             )

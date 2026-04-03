@@ -74,10 +74,21 @@ VECTOR_RETENTION_DAYS = 8
 SUMMARIZER_MAX_LENGTH = int(os.getenv("SUMMARIZER_MAX_LENGTH", "400"))
 SUMMARIZER_MIN_LENGTH = int(os.getenv("SUMMARIZER_MIN_LENGTH", "50"))
 
-# Cloudflare AI configuration
-CLOUDFLARE_ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "")
-CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN", "")
 CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
+
+
+def _split_csv(value: str) -> list[str]:
+    parts = [p.strip() for p in (value or "").split(",")]
+    return [p for p in parts if p]
+
+
+# Cloudflare AI configuration
+# Supports comma-separated lists, e.g. CLOUDFLARE_ACCOUNT_ID="id1,id2" and CLOUDFLARE_API_TOKEN="tok1,tok2".
+CLOUDFLARE_ACCOUNT_IDS = _split_csv(os.getenv("CLOUDFLARE_ACCOUNT_ID", ""))
+CLOUDFLARE_API_TOKENS = _split_csv(os.getenv("CLOUDFLARE_API_TOKEN", ""))
+
+CLOUDFLARE_ACCOUNT_ID = CLOUDFLARE_ACCOUNT_IDS[0] if CLOUDFLARE_ACCOUNT_IDS else ""
+CLOUDFLARE_API_TOKEN = CLOUDFLARE_API_TOKENS[0] if CLOUDFLARE_API_TOKENS else ""
 CLOUDFLARE_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
 
 SYNONYMS: list[set[str]] = [
