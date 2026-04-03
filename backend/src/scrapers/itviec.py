@@ -24,6 +24,9 @@ def scrape_itviec(keyword: str, location: str = "Ho Chi Minh City", max_results:
     Fetches description from /content endpoint via the same browser session.
     Only returns jobs posted within RECENT_DAYS days, sorted newest first.
     """
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_slug    = _itviec_city_slug(location or "Ho Chi Minh City")
     if city_slug is None:

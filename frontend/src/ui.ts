@@ -32,7 +32,6 @@ const jobModalDesc     = document.getElementById("jobModalDesc")     as HTMLDivE
 const jobModalLink     = document.getElementById("jobModalLink")     as HTMLAnchorElement;
 const jobModalShareBtn = document.getElementById("jobModalShareBtn") as HTMLButtonElement;
 const jobModalClose    = document.getElementById("jobModalClose")    as HTMLButtonElement;
-const jobModalCloseBtn = document.getElementById("jobModalCloseBtn") as HTMLButtonElement;
 const jobModalSkills   = document.getElementById("jobModalSkills")   as HTMLDivElement;
 const jobModalSummary  = document.getElementById("jobModalSummary")  as HTMLDivElement;
 const jobModalBody     = document.querySelector(".job-modal-body")    as HTMLDivElement;
@@ -77,7 +76,7 @@ async function _copyToClipboard(text: string): Promise<boolean> {
 function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
   const original = btn.textContent ?? "";
   void _copyToClipboard(text).then((ok) => {
-    btn.textContent = ok ? "Đã sao chép" : "Không thể sao chép";
+    btn.textContent = ok ? "Đã sao chép" : "Không thể chia sẻ";
     btn.disabled = true;
     window.setTimeout(() => {
       btn.textContent = original;
@@ -188,7 +187,6 @@ function closeJobModal(): void {
 }
 
 jobModalClose.addEventListener("click", closeJobModal);
-jobModalCloseBtn.addEventListener("click", closeJobModal);
 jobModal.addEventListener("click", (e) => {
   if (e.target === jobModal) closeJobModal();
 });

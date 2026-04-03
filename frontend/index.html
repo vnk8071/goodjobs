@@ -936,7 +936,7 @@
 
       .job-modal-footer {
         display: flex;
-        justify-content: flex-end;
+        justify-content: center;
         gap: 0.5rem;
         padding-top: 0.75rem;
         border-top: 1px solid var(--border);
@@ -1352,7 +1352,6 @@
             </div>
             <p>
               Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳
-              &emsp;
               <span id="weeklyStats" class="weekly-stats hidden"></span>
             </p>
           </div>
@@ -1435,7 +1434,7 @@
       <div id="results" class="hidden">
         <div class="results-header">
           <h2>Kết quả <span id="jobCount"></span></h2>
-          <button id="resultsShareBtn" type="button" class="btn btn-ghost">Sao chép link kết quả</button>
+          <button id="resultsShareBtn" type="button" class="btn btn-ghost">Chia sẻ kết quả</button>
         </div>
 
         <div id="filterBar" class="filter-bar hidden">
@@ -1536,7 +1535,7 @@
             <li><strong>Sử dụng từ khóa tiếng Anh:</strong> Ngành IT và đa số công ty đa quốc gia dùng chức danh tiếng Anh. Ví dụ: "AI Engineer", "Data Scientist" sẽ ra nhiều kết quả hơn tiếng Việt.</li>
             <li><strong>Lọc theo trình độ:</strong> Nhập thêm "Senior", "Junior" hoặc "Intern" vào tên chức danh để thu hẹp kết quả phù hợp với số năm kinh nghiệm.</li>
             <li><strong>Tìm việc từ xa (Work from home):</strong> Chọn địa điểm là "Remote" để xem các vị trí không yêu cầu lên văn phòng.</li>
-            <li><strong>Chia sẻ nhanh:</strong> Bạn có thể sao chép link <strong>kết quả tìm kiếm</strong> hoặc link <strong>1 job cụ thể</strong> để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
+            <li><strong>Chia sẻ nhanh:</strong> Bạn có thể chia sẻ link <strong>kết quả tìm kiếm</strong> hoặc link <strong>1 job cụ thể</strong> để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
           </ul>
         </div>
 
@@ -1579,8 +1578,7 @@
           <div id="jobModalDesc" class="job-desc-full"></div>
         </div>
         <div class="job-modal-footer">
-          <button id="jobModalCloseBtn" class="btn btn-ghost">Đóng</button>
-          <button id="jobModalShareBtn" type="button" class="btn btn-ghost">Sao chép link job</button>
+          <button id="jobModalShareBtn" type="button" class="btn btn-ghost">Chia sẻ link</button>
           <a id="jobModalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">
             Mở liên kết
           </a>

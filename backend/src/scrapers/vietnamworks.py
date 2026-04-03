@@ -24,6 +24,9 @@ def scrape_vietnamworks(keyword: str, location: str = "Ho Chi Minh City", max_re
     Scrapes VietnamWorks (React SPA) using Playwright.
     Only returns jobs posted within RECENT_DAYS days.
     """
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_code    = _vietnamworks_city_code(location or "Ho Chi Minh City")
     if city_code is None:

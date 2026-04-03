@@ -19,6 +19,9 @@ _CAREERLINK_CITY_PARAMS: dict[str, tuple[str, str]] = {
 
 
 def scrape_careerlink(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     params = _careerlink_city_params(location or "Ho Chi Minh City")
     if params is None:

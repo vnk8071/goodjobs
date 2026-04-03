@@ -34,6 +34,9 @@ def scrape_topcv(keyword: str, location: str = "Ho Chi Minh City", max_results: 
     Scrapes TopCV using Playwright (Vue-rendered page).
     Only returns jobs posted within RECENT_DAYS days.
     """
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug              = keyword.strip().lower().replace(" ", "-")
     result = _topcv_city_params(location or "Ho Chi Minh City")
     if result is None:

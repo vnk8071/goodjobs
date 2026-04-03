@@ -478,6 +478,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
                 unique_jobs = list(all_cached_jobs_by_link.values())
                 unique_jobs = [j for j in unique_jobs if title_matches(j.get("title", ""), keyword)]
+                age_cutoff = time.time() - 8 * 86400
+                unique_jobs = [j for j in unique_jobs if j.get("posted_ts", 0) >= age_cutoff]
                 log_app(f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering")
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
@@ -491,19 +493,19 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
                     return
 
-                # Non-warmup cache hit: keep streaming and run a fresh scrape inline.
+                # Non-warmup cache hit: show cached jobs immediately, then scrape fresh inline.
                 await cache_touch(cache_keyword, req.location)
                 await vector_mark_nonwarmup_seen(
                     [str(j["link"]) for j in unique_jobs if j.get("link")], time.time()
                 )
-
                 cached_prefill_jobs = unique_jobs
                 cached_prefill_latest_ts = latest_ts
 
             fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
             if fuzzy:
                 fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
-                refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword)]
+                age_cutoff_fuzzy = time.time() - 8 * 86400
+                refiltered = [j for j in fuzzy_jobs if title_matches(j.get("title", ""), keyword) and j.get("posted_ts", 0) >= age_cutoff_fuzzy]
                 if refiltered:
                     log_app(f"cache fuzzy — streaming {len(refiltered)} jobs for {keyword!r}, done")
                     _refresh_posted_times(refiltered)

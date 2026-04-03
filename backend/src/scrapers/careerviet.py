@@ -36,6 +36,9 @@ def scrape_careerviet(keyword: str, location: str = "Ho Chi Minh City", max_resu
     Scrapes CareerViet (Next.js SSR) using Playwright.
     Only returns jobs posted within RECENT_DAYS days.
     """
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city = _careerviet_city(location or "Ho Chi Minh City")
     if city is None:

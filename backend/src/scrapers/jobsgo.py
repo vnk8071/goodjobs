@@ -21,6 +21,9 @@ _JOBSGO_CITY_SLUGS: dict[str, str] = {
 
 
 def scrape_jobsgo(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_slug    = _jobsgo_city_slug(location or "Ho Chi Minh City")
     if city_slug is None:

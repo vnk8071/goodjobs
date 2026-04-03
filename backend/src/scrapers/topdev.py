@@ -26,6 +26,9 @@ def scrape_topdev(keyword: str, location: str = "Ho Chi Minh City", max_results:
     Scrapes TopDev using Playwright (Next.js SSR).
     Only returns jobs posted within RECENT_DAYS days.
     """
+    if location.strip().lower() == "remote":
+        keyword  = f"remote {keyword}"
+        location = "Ho Chi Minh City"
     keyword_enc = quote_plus(keyword)
     region_id   = _topdev_region_id(location or "Ho Chi Minh City")
     if region_id is None:
