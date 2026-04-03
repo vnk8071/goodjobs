@@ -306,7 +306,11 @@ def posted_ts(j: dict) -> float:
 
 
 def posted_relative(posted_ts_val: float) -> str:
-    """Return a human-readable relative time string (e.g. '2 hours ago') from a Unix timestamp."""
+    """Return a human-readable time string from a Unix timestamp.
+
+    Within 7 days: relative (e.g. '2 hours ago').
+    Older: exact date (e.g. '28/03/2025').
+    """
     if posted_ts_val <= 0:
         return ""
     now = datetime.now(timezone.utc).timestamp()
@@ -324,5 +328,5 @@ def posted_relative(posted_ts_val: float) -> str:
     delta_days = delta_hours // 24
     if delta_days < 7:
         return f"{delta_days} day{'s' if delta_days != 1 else ''} ago"
-    delta_weeks = delta_days // 7
-    return f"{delta_weeks} week{'s' if delta_weeks != 1 else ''} ago"
+    dt = datetime.fromtimestamp(posted_ts_val, tz=timezone.utc)
+    return dt.strftime("%d/%m/%Y")

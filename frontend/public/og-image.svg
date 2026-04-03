@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e40af"/>
+      <stop offset="100%" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <rect width="1200" height="630" fill="none" stroke="white" stroke-opacity="0.04" stroke-width="1">
+    <animate attributeName="opacity" values="1" dur="0s"/>
+  </rect>
+  <line x1="0" y1="210" x2="1200" y2="210" stroke="white" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="0" y1="420" x2="1200" y2="420" stroke="white" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="400" y1="0" x2="400" y2="630" stroke="white" stroke-opacity="0.05" stroke-width="1"/>
+  <line x1="800" y1="0" x2="800" y2="630" stroke="white" stroke-opacity="0.05" stroke-width="1"/>
+
+  <!-- Logo circle -->
+  <circle cx="140" cy="220" r="72" fill="white" fill-opacity="0.12"/>
+  <text x="113" y="242" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="54" font-weight="800" fill="white" text-anchor="middle">G</text>
+  <text x="167" y="242" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="54" font-weight="800" fill="white" text-anchor="middle" opacity="0.7">J</text>
+
+  <!-- Main title -->
+  <text x="248" y="204" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="72" font-weight="800" fill="white">Good Jobs</text>
+  <text x="248" y="256" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="32" font-weight="400" fill="white" opacity="0.8">Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳</text>
+
+  <!-- Divider -->
+  <rect x="100" y="310" width="1000" height="2" fill="white" fill-opacity="0.15" rx="1"/>
+
+  <!-- Feature pills -->
+  <rect x="100" y="350" width="280" height="56" rx="28" fill="white" fill-opacity="0.12"/>
+  <text x="240" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" fill="white" text-anchor="middle">LinkedIn · ITViec · TopCV</text>
+
+  <rect x="402" y="350" width="220" height="56" rx="28" fill="white" fill-opacity="0.12"/>
+  <text x="512" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" fill="white" text-anchor="middle">VietnamWorks</text>
+
+  <rect x="644" y="350" width="200" height="56" rx="28" fill="white" fill-opacity="0.12"/>
+  <text x="744" y="385" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="24" fill="white" text-anchor="middle">CareerViet</text>
+
+  <!-- URL -->
+  <text x="600" y="510" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="26" fill="white" opacity="0.6" text-anchor="middle">goodjobs.io.vn</text>
+</svg>

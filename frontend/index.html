@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Good Jobs</title>
+    <meta name="description" content="Tìm kiếm việc làm gần đây tại Việt Nam — tổng hợp từ LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet và nhiều nguồn khác." />
+
+    <!-- Open Graph -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:url"         content="https://goodjobs.io.vn/" />
+    <meta property="og:title"       content="Good Jobs — Tìm kiếm việc làm tại Việt Nam 🇻🇳" />
+    <meta property="og:description" content="Tổng hợp tin tuyển dụng mới nhất từ LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet và nhiều nguồn khác." />
+    <meta property="og:image"       content="https://goodjobs.io.vn/og-image.svg" />
+    <meta property="og:image:width"  content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale"      content="vi_VN" />
+    <meta property="og:site_name"   content="Good Jobs" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="Good Jobs — Tìm kiếm việc làm tại Việt Nam 🇻🇳" />
+    <meta name="twitter:description" content="Tổng hợp tin tuyển dụng mới nhất từ LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet và nhiều nguồn khác." />
+    <meta name="twitter:image"       content="https://goodjobs.io.vn/og-image.svg" />
+
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%232563eb'/><text x='3' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'>G</text><text x='16' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white' opacity='0.75'>J</text></svg>" />
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1563090184756838"
      crossorigin="anonymous"></script>
@@ -95,6 +114,18 @@
       }
 
       /* Card */
+      .weekly-stats {
+        text-align: center;
+        font-size: 0.95rem;
+        color: var(--muted);
+        margin-bottom: 0.85rem;
+      }
+      .weekly-stats strong {
+        color: var(--primary);
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+
       .card {
         background: var(--card);
         border: 1px solid var(--border);
@@ -452,6 +483,8 @@
         table.jobs-table thead th:nth-child(1) { width: 2.8rem; }
         table.jobs-table thead th:nth-child(2) { width: clamp(10rem, 12vw, 11rem); }
         table.jobs-table thead th:nth-child(3) { width: clamp(8.5rem, 12vw, 11rem); }
+        table.jobs-table thead th:nth-child(4),
+        tbody td:nth-child(4) { display: none; }   /* Location — hidden on all sizes */
         table.jobs-table thead th:nth-child(5) { width: 6.8rem; }
         table.jobs-table thead th:nth-child(6) { width: 16rem; }
         table.jobs-table thead th:nth-child(7) { width: clamp(20rem, 34vw, 30rem); }
@@ -1247,17 +1280,22 @@
   <body>
     <div class="container">
       <header>
-        <div class="logo" aria-hidden="true">
-          <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <text x="8" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
-            <text x="22" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
-          </svg>
-        </div>
-        <div class="header-text">
-          <h1>Good Jobs</h1>
-          <p>Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳</p>
-        </div>
+        <a id="homeLink" href="#" style="display:contents;text-decoration:none;cursor:pointer;" aria-label="Về trang chủ">
+          <div class="logo" aria-hidden="true">
+            <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <text x="8" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
+              <text x="22" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
+            </svg>
+          </div>
+          <div class="header-text">
+            <h1>Good Jobs</h1>
+            <p>Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳</p>
+          </div>
+        </a>
       </header>
+
+      <!-- Weekly stats -->
+      <div id="weeklyStats" class="weekly-stats hidden"></div>
 
       <!-- Search Card -->
       <div class="card">

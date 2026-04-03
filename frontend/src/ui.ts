@@ -109,8 +109,10 @@ function openJobModal(job: Job): void {
   } else {
     jobModalSkills.innerHTML = renderSkillTags(job.skills);
   }
-  if (job.summary_description) {
-    jobModalSummary.textContent = job.summary_description;
+  const isMobile = window.innerWidth <= 640;
+  const summaryText = job.summary_description || (isMobile ? truncate(job.description ?? "", 300) : "");
+  if (summaryText) {
+    jobModalSummary.textContent = summaryText;
     jobModalSummary.classList.remove("hidden");
   } else {
     jobModalSummary.textContent = "";
@@ -432,8 +434,10 @@ export function appendJobs(existing: Job[], incoming: Job[]): Job[] {
         jobModalDesc.innerHTML = openJob.description;
       }
       jobModalSkills.innerHTML = renderSkillTags(openJob.skills);
-      if (openJob.summary_description) {
-        jobModalSummary.textContent = openJob.summary_description;
+      const isMobile = window.innerWidth <= 640;
+      const refreshSummary = openJob.summary_description || (isMobile ? truncate(openJob.description ?? "", 300) : "");
+      if (refreshSummary) {
+        jobModalSummary.textContent = refreshSummary;
         jobModalSummary.classList.remove("hidden");
       }
     }

@@ -242,6 +242,32 @@ async def cache_status():
     return await _cache_status_data()
 
 
+@app.get("/stats")
+async def stats():
+    """Return total unique jobs posted in the last 7 days across all cached keys."""
+    cutoff = time.time() - 7 * 86400
+    seen_links: set[str] = set()
+    count = 0
+    try:
+        async for key in get_redis().scan_iter("jobs:*"):
+            raw = await get_redis().get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+                for job in data.get("jobs", []):
+                    link = job.get("link", "")
+                    ts = job.get("posted_ts", 0.0)
+                    if ts >= cutoff and link and link not in seen_links:
+                        seen_links.add(link)
+                        count += 1
+            except Exception:
+                continue
+    except Exception as e:
+        log_app(f"[stats] error: {e}", "ERROR")
+    return {"jobs_this_week": count}
+
+
 @app.get("/cache/scrape")
 async def cache_scrape(keyword: str | None = None, location: str | None = None):
     """Trigger a background scrape. Optionally filter by keyword and/or location.

@@ -27,6 +27,17 @@ function getLocation(): string {
   return locationSelect.value;
 }
 
+const homeLink = document.getElementById("homeLink") as HTMLAnchorElement;
+homeLink.addEventListener("click", (e) => {
+  e.preventDefault();
+  hideResults();
+  clearStatus();
+  currentJobs = [];
+  keywordEl.value = "";
+  suggestionChips.forEach(c => c.classList.remove("active"));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
 const suggestionChips = document.querySelectorAll<HTMLElement>(".suggestion-chip");
 suggestionChips.forEach((chip) => {
   chip.addEventListener("click", () => {
@@ -48,6 +59,25 @@ keywordEl.addEventListener("input", () => {
 keywordEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") fetchBtn.click();
 });
+
+const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLDivElement;
+
+(async () => {
+  try {
+    const res = await fetch("/stats");
+    if (res.ok) {
+      const data = await res.json() as { jobs_this_week: number };
+      if (data.jobs_this_week > 0) {
+        const rounded = Math.floor(data.jobs_this_week / 100) * 100;
+        const display = rounded > 0 ? rounded.toLocaleString("vi-VN") : data.jobs_this_week;
+        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> việc làm được đăng trong tuần này`;
+        weeklyStatsEl.classList.remove("hidden");
+      }
+    }
+  } catch {
+    // silently ignore — stats are non-critical
+  }
+})();
 
 let abortController: AbortController | null = null;
 
