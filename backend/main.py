@@ -79,16 +79,26 @@ def _get_related_keywords(cache_keyword: str) -> list[str]:
     return [cache_keyword.lower()]
 
 
+_inflight_embed_links: set[str] = set()
+
+
 async def _upsert_and_track(jobs: list[dict]) -> None:
     """Embed and upsert only jobs not already in Vectorize, then mark them as embedded."""
     loop = asyncio.get_event_loop()
     unembedded = await embedded_links_filter(jobs)
     if not unembedded:
         return
-    ok = await loop.run_in_executor(_executor, upsert_jobs, unembedded)
-    if ok:
-        await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
-        log_app(f"[vector] tracked {len(unembedded)} newly embedded links")
+    to_embed = [j for j in unembedded if j.get("link") not in _inflight_embed_links]
+    if not to_embed:
+        return
+    _inflight_embed_links.update(j["link"] for j in to_embed if j.get("link"))
+    try:
+        ok = await loop.run_in_executor(_executor, upsert_jobs, to_embed)
+        if ok:
+            await embedded_links_add([j["link"] for j in to_embed if j.get("link")])
+            log_app(f"[vector] tracked {len(to_embed)} newly embedded links")
+    finally:
+        _inflight_embed_links.difference_update(j["link"] for j in to_embed if j.get("link"))
 
 
 async def _fetch_vector_supplement(query: str, seen_links: set[str], location: str, warmup_keywords: list[str], top_k: int = 20) -> list[dict]:
@@ -159,7 +169,7 @@ _SCRAPERS = {
     "careerlink":   scrape_careerlink,
 }
 
-NON_WARMUP_ENRICH_LIMIT = 5
+NON_WARMUP_ENRICH_LIMIT = 10
 _active_bg_rescrapes: set[str] = set()
 
 
@@ -533,15 +543,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 fetch_ts = time.time()
 
                 scrape_kw = fuzzy_matched_kw if fuzzy_matched_kw else cache_keyword
-                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
-                futures: dict = {
-                    loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location): site
-                    for site, fn in other_scrapers.items()
-                }
                 linkedin_fut = loop.run_in_executor(
                     _executor, _timed, "linkedin", scrape_linkedin, scrape_kw, req.location
                 )
-                futures[linkedin_fut] = "linkedin"
+                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
+                futures: dict = {linkedin_fut: "linkedin"}
+                for site, fn in other_scrapers.items():
+                    futures[loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location)] = site
 
                 linkedin_jobs: list[dict] = []
                 topcv_jobs: list[dict] = []
