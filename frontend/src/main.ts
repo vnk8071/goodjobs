@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated, setSearchContext, openJobByLink } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -8,7 +8,6 @@ const fetchBtn        = document.getElementById("fetchBtn")        as HTMLButton
 const keywordEl       = document.getElementById("keyword")         as HTMLInputElement;
 const locationSelect  = document.getElementById("locationSelect")  as HTMLSelectElement;
 const locationCustom  = document.getElementById("locationCustom")  as HTMLInputElement;
-const aboutSection    = document.getElementById("aboutSection")    as HTMLElement;
 
 locationSelect.addEventListener("change", () => {
   if (locationSelect.value === "_custom") {
@@ -60,17 +59,19 @@ keywordEl.addEventListener("keydown", (e) => {
   if (e.key === "Enter") fetchBtn.click();
 });
 
-const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLDivElement;
+const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
 
 (async () => {
   try {
-    const res = await fetch("/stats");
+    // Prefer remote API base when configured; fall back to Vite proxy in local dev.
+    const apiBase = import.meta.env.VITE_API_URL ?? "";
+    const res = await fetch(`${apiBase}/stats`);
     if (res.ok) {
       const data = await res.json() as { jobs_this_week: number };
       if (data.jobs_this_week > 0) {
         const rounded = Math.floor(data.jobs_this_week / 100) * 100;
         const display = rounded > 0 ? rounded.toLocaleString("vi-VN") : data.jobs_this_week;
-        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> việc làm được đăng trong tuần này`;
+        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> việc làm mới tuần này`;
         weeklyStatsEl.classList.remove("hidden");
       }
     }
@@ -81,7 +82,21 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLDivElement;
 
 let abortController: AbortController | null = null;
 
+let _pendingSharedJobLink: string | null = null;
+
+function _setUrlSearchParams(params: Record<string, string | undefined | null>): void {
+  const url = new URL(window.location.href);
+  for (const [k, v] of Object.entries(params)) {
+    if (!v) url.searchParams.delete(k);
+    else url.searchParams.set(k, v);
+  }
+  history.replaceState({}, "", url);
+}
+
 fetchBtn.addEventListener("click", async () => {
+  const sharedJobLink = _pendingSharedJobLink;
+  _pendingSharedJobLink = null;
+
   const keyword = keywordEl.value.trim();
   if (!keyword) {
     setStatus("Vui lòng nhập tên công việc.", "error");
@@ -98,9 +113,12 @@ fetchBtn.addEventListener("click", async () => {
 
   const location = getLocation() || undefined;
 
+  setSearchContext(keyword, location);
+  _setUrlSearchParams({ kw: keyword, loc: location ?? null, job: sharedJobLink });
+
   fetchBtn.disabled = true;
   currentJobs = [];
-  aboutSection.classList.add("hidden");
+  // Keep publisher content visible for AdSense and first-time users.
   hideResults();
   hideRelated();
   hideProgress();
@@ -126,13 +144,28 @@ fetchBtn.addEventListener("click", async () => {
         }
         currentJobs = appendJobs(currentJobs, batch);
         updateProgressCount(currentJobs);
+
+        const jobLink = new URL(window.location.href).searchParams.get("job") ?? "";
+        if (jobLink) {
+          const opened = openJobByLink(jobLink);
+          if (opened) _setUrlSearchParams({ job: jobLink });
+        }
       },
       () => {
         hideProgress();
         const count = currentJobs.length;
+        const jobLink = new URL(window.location.href).searchParams.get("job") ?? "";
         if (count === 0) {
           setStatus("Không tìm thấy việc làm phù hợp trong tuần qua. Thử từ khóa khác.", "error");
-        } else if (_isCacheHit) {
+          return;
+        }
+
+        if (jobLink && !openJobByLink(jobLink)) {
+          setStatus("Không tìm thấy job từ link chia sẻ (có thể đã hết hạn).", "error");
+          return;
+        }
+
+        if (_isCacheHit) {
           setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
         } else {
           setStatus(`Tìm thấy ${count} việc làm — đang tải mô tả…`, "success");
@@ -207,6 +240,32 @@ fetchBtn.addEventListener("click", async () => {
     fetchBtn.disabled = false;
   }
 });
+
+// Deep-link support: /?kw=...&loc=... and optional &job=... to auto-open modal.
+(() => {
+  const url = new URL(window.location.href);
+  const kw = (url.searchParams.get("kw") ?? "").trim();
+  const loc = (url.searchParams.get("loc") ?? "").trim();
+  _pendingSharedJobLink = (url.searchParams.get("job") ?? "").trim() || null;
+
+  if (!kw) return;
+
+  keywordEl.value = kw;
+  if (loc) {
+    const option = [...locationSelect.options].find((o) => o.value === loc);
+    if (option) {
+      locationSelect.value = loc;
+      locationCustom.classList.add("hidden");
+    } else {
+      locationSelect.value = "_custom";
+      locationCustom.classList.remove("hidden");
+      locationCustom.value = loc;
+    }
+  }
+
+  // Kick off the search after the initial DOM is ready.
+  queueMicrotask(() => fetchBtn.click());
+})();
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && fetchBtn.disabled) {

@@ -28,20 +28,20 @@
      crossorigin="anonymous"></script>
     <style>
       :root {
-        --primary: #2563eb;
-        --primary-hover: #1d4ed8;
-        --success-bg: #dcfce7;
-        --success-text: #15803d;
-        --error-bg: #fee2e2;
-        --error-text: #b91c1c;
-        --loading-bg: #dbeafe;
-        --loading-text: #1d4ed8;
-        --bg: #f1f5f9;
+        --primary: #3b82f6;
+        --primary-hover: #2563eb;
+        --success-bg: #ecfdf5;
+        --success-text: #065f46;
+        --error-bg: #fef2f2;
+        --error-text: #991b1b;
+        --loading-bg: #eff6ff;
+        --loading-text: #1e40af;
+        --bg: #f8fafc;
         --card: #ffffff;
         --border: #e2e8f0;
-        --text: #1e293b;
-        --muted: #64748b;
-        --radius: 10px;
+        --text: #0f172a;
+        --muted: #475569;
+        --radius: 12px;
       }
 
       * {
@@ -67,24 +67,37 @@
 
       /* Header */
       header {
-        margin-bottom: 1.75rem;
+        margin-bottom: 1.5rem;
         display: flex;
         flex-direction: row;
         align-items: center;
         text-align: left;
         gap: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .header-row {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        flex-wrap: wrap;
       }
 
       .logo {
         flex-shrink: 0;
-        width: 48px;
-        height: 48px;
-        background: var(--primary);
-        border-radius: 50%;
+        width: 52px;
+        height: 52px;
+        background: linear-gradient(135deg, var(--primary), #2563eb);
+        border-radius: 14px;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+        transform: rotate(-2deg);
+        transition: transform 0.2s;
+      }
+      .logo:hover {
+        transform: rotate(0deg) scale(1.05);
       }
 
       .logo svg {
@@ -93,18 +106,21 @@
       }
 
       .header-text h1 {
-        font-size: 1.8rem;
-        font-weight: 700;
+        font-size: 2.1rem;
+        font-weight: 800;
+        letter-spacing: -0.03em;
         display: flex;
         align-items: baseline;
         gap: 0.6rem;
         line-height: 1.1;
+        color: #0f172a;
       }
 
       .header-text h1 .subtitle {
-        font-size: 1rem;
-        font-weight: 400;
+        font-size: 1.05rem;
+        font-weight: 500;
         color: var(--muted);
+        letter-spacing: 0;
       }
 
       .header-text p {
@@ -115,24 +131,38 @@
 
       /* Card */
       .weekly-stats {
-        text-align: center;
-        font-size: 0.95rem;
-        color: var(--muted);
-        margin-bottom: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.85rem;
+        color: #1e40af;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-weight: 500;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        margin: 0;
+        width: auto;
+        white-space: nowrap;
+        flex-shrink: 0;
       }
       .weekly-stats strong {
-        color: var(--primary);
-        font-size: 1.15rem;
-        font-weight: 700;
+        color: #1d4ed8;
+        font-size: 0.95rem;
+        font-weight: 800;
       }
 
       .card {
         background: var(--card);
-        border: 1px solid var(--border);
+        border: 1px solid rgba(226, 232, 240, 0.8);
         border-radius: var(--radius);
-        padding: 1.75rem 2rem 1.25rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        padding: 2rem 2.25rem 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 8px -2px rgba(0, 0, 0, 0.02);
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .card:hover {
+        box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.05), 0 4px 10px -4px rgba(0, 0, 0, 0.03);
       }
 
       /* Search form */
@@ -262,31 +292,38 @@
 
       .field label {
         display: block;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
-        margin-bottom: 0.45rem;
+        margin-bottom: 0.5rem;
         color: var(--muted);
       }
 
       .field input[type="text"],
       .field select {
         width: 100%;
-        padding: 0.7rem 1rem;
-        font-size: 0.97rem;
-        border: 1.5px solid var(--border);
-        border-radius: 8px;
+        padding: 0.85rem 1.1rem;
+        font-size: 1rem;
+        border: 1px solid rgba(203, 213, 225, 0.8);
+        border-radius: 10px;
         outline: none;
-        transition: border-color 0.15s, box-shadow 0.15s;
-        background: #fff;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        background: #f8fafc;
         color: var(--text);
+        box-shadow: inset 0 1px 2px rgba(0,0,0,0.01);
       }
 
       .field input[type="text"]:focus,
       .field select:focus {
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        background: #ffffff;
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), inset 0 1px 2px rgba(0,0,0,0.01);
+      }
+
+      .field input[type="text"]:hover,
+      .field select:hover {
+        border-color: #cbd5e1;
       }
 
       .field select {
@@ -304,80 +341,99 @@
 
       .suggestions {
         display: flex;
-        flex-wrap: wrap;
-        gap: 0.4rem;
-        margin-top: 0.75rem;
-        padding-top: 0.65rem;
-        border-top: 1px solid var(--border);
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 0.6rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        padding-bottom: 0.25rem;
+        border-top: 1px solid rgba(226, 232, 240, 0.6);
+      }
+      .suggestions::-webkit-scrollbar {
+        display: none;
       }
 
       @media (max-width: 640px) {
         .suggestions {
-          flex-wrap: nowrap;
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scrollbar-width: none;
-          padding-bottom: 0.25rem;
+          /* properties moved to base class */
         }
-        .suggestions::-webkit-scrollbar { display: none; }
-        .suggestion-chip { flex-shrink: 0; }
       }
 
       .suggestion-chip {
         display: inline-flex;
         align-items: center;
-        padding: 0.25rem 0.7rem;
-        font-size: 0.78rem;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.85rem;
         font-weight: 500;
         border-radius: 999px;
-        background: #f1f5f9;
+        background: #f8fafc;
         color: var(--muted);
         cursor: pointer;
-        border: 1.5px solid var(--border);
-        transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+        border: 1px solid rgba(203, 213, 225, 0.6);
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         user-select: none;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.01);
+        white-space: nowrap;
+        flex-shrink: 0;
       }
 
       .suggestion-chip:hover {
-        background: #e0e7ff;
-        border-color: #a5b4fc;
-        color: #3730a3;
-        transform: translateY(-1px);
+        background: #eff6ff;
+        border-color: #bfdbfe;
+        color: #1e40af;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
       }
 
       .suggestion-chip.active {
         background: var(--primary);
         border-color: var(--primary);
         color: #fff;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
       }
 
       /* Buttons */
       .btn {
         display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.65rem 1.4rem;
-        font-size: 0.95rem;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.6rem;
+        font-size: 1rem;
         font-weight: 600;
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         cursor: pointer;
-        transition: background 0.15s, opacity 0.15s;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         white-space: nowrap;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
       }
 
       .btn:disabled {
-        opacity: 0.5;
+        opacity: 0.6;
         cursor: not-allowed;
+        transform: none !important;
+        box-shadow: none !important;
       }
 
       .btn-primary {
-        background: var(--primary);
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
         color: #fff;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
 
       .btn-primary:hover:not(:disabled) {
-        background: var(--primary-hover);
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+        transform: translateY(-1px);
+      }
+      
+      .btn-primary:active:not(:disabled) {
+        transform: translateY(1px);
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
       }
 
       /* Status bar */
@@ -446,7 +502,10 @@
         justify-content: space-between;
         align-items: center;
         margin-bottom: 0.85rem;
+        gap: 0.75rem;
       }
+
+      .results-header > * { min-width: 0; }
 
 
       .results-header h2 {
@@ -1280,7 +1339,7 @@
   <body>
     <div class="container">
       <header>
-        <a id="homeLink" href="#" style="display:contents;text-decoration:none;cursor:pointer;" aria-label="Về trang chủ">
+        <a id="homeLink" href="#" style="display:flex; align-items:center; gap:1.25rem; text-decoration:none; color:inherit; cursor:pointer;" aria-label="Về trang chủ">
           <div class="logo" aria-hidden="true">
             <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
               <text x="8" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
@@ -1288,14 +1347,17 @@
             </svg>
           </div>
           <div class="header-text">
-            <h1>Good Jobs</h1>
-            <p>Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳</p>
+            <div class="header-row">
+              <h1>Good Jobs</h1>
+            </div>
+            <p>
+              Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳
+              &emsp;
+              <span id="weeklyStats" class="weekly-stats hidden"></span>
+            </p>
           </div>
         </a>
       </header>
-
-      <!-- Weekly stats -->
-      <div id="weeklyStats" class="weekly-stats hidden"></div>
 
       <!-- Search Card -->
       <div class="card">
@@ -1355,55 +1417,6 @@
         </div>
       </div>
 
-      <!-- About section — visible before any search, helps AdSense see publisher content -->
-      <section id="aboutSection" class="about-section">
-        <h2>Tổng hợp việc làm tại Việt Nam</h2>
-        <p>
-          Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm lớn nhất Việt Nam —
-          LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet — vào một trang duy nhất.
-          Kết quả được cập nhật mỗi 2 giờ, giúp bạn không bỏ lỡ cơ hội nào.
-        </p>
-        <div class="about-features">
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <div>
-              <strong>Tìm kiếm đa nguồn</strong>
-              <span>Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet cùng lúc.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            <div>
-              <strong>Dữ liệu mới nhất</strong>
-              <span>Tin tuyển dụng được làm mới tự động mỗi 2 giờ, chỉ hiển thị bài đăng trong 7 ngày gần nhất.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            <div>
-              <strong>Lọc theo kỹ năng</strong>
-              <span>Xem ngay kỹ năng yêu cầu, mô tả công việc và thông tin công ty trực tiếp trên trang.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <div>
-              <strong>Tóm tắt nội dung công việc</strong>
-              <span>Sử dụng AI để tóm tắt nhanh mô tả công việc dài dòng, giúp bạn nắm bắt yêu cầu chính chỉ trong vài giây.</span>
-            </div>
-          </div>
-        </div>
-        <p class="about-tip">
-          <strong>Mẹo:</strong>
-          <br>
-          - Nhập chức danh bằng tiếng Anh để có kết quả tốt nhất. Ví dụ: <strong>"AI Engineer", "Backend Engineer", "Data Scientist".</strong>
-          <br>
-          - Sử dụng bộ lọc theo trình độ để thu hẹp kết quả. Ví dụ: nhập <strong>"Senior"</strong> để chỉ xem các vị trí cao cấp, hoặc <strong>"Intern"</strong> để tìm việc thực tập.
-          <br>
-          - Tìm việc làm từ xa? Chọn <strong></strong>"Remote"</strong> trong phần địa điểm hoặc nhập <strong>"Remote"</strong> vào bộ lọc title để xem các vị trí làm việc từ xa.
-        </p>
-      </section>
-
       <!-- Status -->
       <div id="status" class="status hidden"></div>
 
@@ -1422,6 +1435,7 @@
       <div id="results" class="hidden">
         <div class="results-header">
           <h2>Kết quả <span id="jobCount"></span></h2>
+          <button id="resultsShareBtn" type="button" class="btn btn-ghost">Sao chép link kết quả</button>
         </div>
 
         <div id="filterBar" class="filter-bar hidden">
@@ -1477,6 +1491,57 @@
         </div>
       </div>
 
+      <!-- About section — visible before any search, stays below results after searching -->
+      <section id="aboutSection" class="about-section">
+        <h2>Tổng hợp việc làm tại Việt Nam</h2>
+        <p>
+          Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm công khai tại Việt Nam —
+          LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet — vào một trang duy nhất.
+          Kết quả được cập nhật mỗi 2 giờ, giúp bạn không bỏ lỡ cơ hội nào.
+        </p>
+        <div class="about-features">
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <div>
+              <strong>Tìm kiếm đa nguồn</strong>
+              <span>Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet cùng lúc.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            <div>
+              <strong>Dữ liệu mới nhất</strong>
+              <span>Tin tuyển dụng được làm mới tự động mỗi 2 giờ, chỉ hiển thị bài đăng trong 7 ngày gần nhất.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <div>
+              <strong>Lọc theo kỹ năng</strong>
+              <span>Xem ngay kỹ năng yêu cầu, mô tả công việc và thông tin công ty trực tiếp trên trang.</span>
+            </div>
+          </div>
+          <div class="about-feature">
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <div>
+              <strong>Tóm tắt nội dung công việc</strong>
+              <span>Sử dụng AI để tóm tắt nhanh mô tả công việc dài dòng, giúp bạn nắm bắt yêu cầu chính chỉ trong vài giây.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="about-popular">
+          <h3>Hướng dẫn tìm việc hiệu quả trên Good Jobs:</h3>
+          <ul>
+            <li><strong>Sử dụng từ khóa tiếng Anh:</strong> Ngành IT và đa số công ty đa quốc gia dùng chức danh tiếng Anh. Ví dụ: "AI Engineer", "Data Scientist" sẽ ra nhiều kết quả hơn tiếng Việt.</li>
+            <li><strong>Lọc theo trình độ:</strong> Nhập thêm "Senior", "Junior" hoặc "Intern" vào tên chức danh để thu hẹp kết quả phù hợp với số năm kinh nghiệm.</li>
+            <li><strong>Tìm việc từ xa (Work from home):</strong> Chọn địa điểm là "Remote" để xem các vị trí không yêu cầu lên văn phòng.</li>
+            <li><strong>Chia sẻ nhanh:</strong> Bạn có thể sao chép link <strong>kết quả tìm kiếm</strong> hoặc link <strong>1 job cụ thể</strong> để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
+          </ul>
+        </div>
+
+      </section>
+
     </div>
 
     <!-- Job Detail Modal -->
@@ -1515,6 +1580,7 @@
         </div>
         <div class="job-modal-footer">
           <button id="jobModalCloseBtn" class="btn btn-ghost">Đóng</button>
+          <button id="jobModalShareBtn" type="button" class="btn btn-ghost">Sao chép link job</button>
           <a id="jobModalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">
             Mở liên kết
           </a>
@@ -1522,13 +1588,20 @@
       </div>
     </div>
 
-    <footer style="text-align:center;margin-top:3rem;padding:1.25rem 1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.8rem;">
-      &copy; 2026 Good Jobs | Làm mới mỗi 2 giờ
+    <footer style="text-align:center;margin-top:3rem;padding:2rem 1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.85rem;">
+      <div style="display:flex; justify-content:center; gap:1.5rem; margin-bottom:1rem;">
+        <a href="/privacy/" style="color:inherit; text-decoration:none; font-weight:500;">Chính sách bảo mật</a>
+        <a href="/terms/" style="color:inherit; text-decoration:none; font-weight:500;">Điều khoản dịch vụ</a>
+        <a href="/contact/" style="color:inherit; text-decoration:none; font-weight:500;">Liên hệ</a>
+      </div>
+      <div>&copy; 2026 Good Jobs | Hệ thống tìm kiếm việc làm tự động | Dữ liệu được làm mới mỗi 2 giờ</div>
+      <div style="margin-top:0.5rem; font-size:0.75rem; opacity:0.8;">
+        Good Jobs là một công cụ tìm kiếm độc lập. Chúng tôi tổng hợp các danh sách việc làm công khai để giúp người tìm việc tìm kiếm cơ hội hiệu quả hơn.
+      </div>
     </footer>
 
     <script type="module" src="/src/main.ts"></script>
     <script>
-      document.addEventListener("contextmenu", (e) => e.preventDefault());
       // Prevent background page scroll when modal overlay is touched on mobile
       document.getElementById("jobModal").addEventListener("touchmove", (e) => {
         if (!e.target.closest(".job-modal-body")) e.preventDefault();

@@ -30,11 +30,71 @@ const jobModalPosted   = document.getElementById("jobModalPosted")   as HTMLSpan
 const jobModalSource   = document.getElementById("jobModalSource")   as HTMLSpanElement;
 const jobModalDesc     = document.getElementById("jobModalDesc")     as HTMLDivElement;
 const jobModalLink     = document.getElementById("jobModalLink")     as HTMLAnchorElement;
+const jobModalShareBtn = document.getElementById("jobModalShareBtn") as HTMLButtonElement;
 const jobModalClose    = document.getElementById("jobModalClose")    as HTMLButtonElement;
 const jobModalCloseBtn = document.getElementById("jobModalCloseBtn") as HTMLButtonElement;
 const jobModalSkills   = document.getElementById("jobModalSkills")   as HTMLDivElement;
 const jobModalSummary  = document.getElementById("jobModalSummary")  as HTMLDivElement;
 const jobModalBody     = document.querySelector(".job-modal-body")    as HTMLDivElement;
+
+const resultsShareBtn = document.getElementById("resultsShareBtn") as HTMLButtonElement;
+
+let _searchKeyword = "";
+let _searchLocation: string | undefined;
+
+export function setSearchContext(keyword: string, location?: string): void {
+  _searchKeyword = keyword;
+  _searchLocation = location;
+}
+
+function _setUrlParams(params: Record<string, string | undefined | null>, mode: "replace" | "push" = "replace"): void {
+  const url = new URL(window.location.href);
+  for (const [k, v] of Object.entries(params)) {
+    if (!v) url.searchParams.delete(k);
+    else url.searchParams.set(k, v);
+  }
+  if (mode === "push") history.pushState({}, "", url);
+  else history.replaceState({}, "", url);
+}
+
+async function _copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall back below
+  }
+
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.left = "-1000px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
+  const original = btn.textContent ?? "";
+  void _copyToClipboard(text).then((ok) => {
+    btn.textContent = ok ? "Đã sao chép" : "Không thể sao chép";
+    btn.disabled = true;
+    window.setTimeout(() => {
+      btn.textContent = original;
+      btn.disabled = false;
+    }, 1000);
+  });
+}
 
 /** Render skill tags as HTML spans, collapsing extras into a "+N" pill. */
 function renderSkillTags(skills: string[] | undefined, max = 10): string {
@@ -119,6 +179,14 @@ function openJobModal(job: Job): void {
     jobModalSummary.classList.add("hidden");
   }
   jobModalLink.href            = job.link;
+  _setUrlParams(
+    {
+      kw: _searchKeyword || undefined,
+      loc: _searchLocation || undefined,
+      job: job.link,
+    },
+    "replace",
+  );
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const descHtml = (!job.description && isEnriching)
@@ -135,6 +203,7 @@ function closeJobModal(): void {
   jobModal.classList.add("hidden");
   document.body.style.overflow = "";
   _openModalLink = "";
+  _setUrlParams({ job: null }, "replace");
 }
 
 jobModalClose.addEventListener("click", closeJobModal);
@@ -330,6 +399,13 @@ export function hideResults(): void {
   titleFilter.value = "";
 }
 
+export function openJobByLink(link: string): boolean {
+  const job = _allJobs.find((j) => j.link === link);
+  if (!job) return false;
+  openJobModal(job);
+  return true;
+}
+
 let _allJobs: Job[] = [];
 let _hiddenSources = new Set<string>();
 
@@ -488,6 +564,27 @@ export function hideRelated(): void {
   relatedCountEl.textContent = "";
   relatedEl.classList.add("hidden");
 }
+
+resultsShareBtn?.addEventListener("click", () => {
+  const url = new URL(window.location.href);
+  if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);
+  else url.searchParams.delete("kw");
+  if (_searchLocation) url.searchParams.set("loc", _searchLocation);
+  else url.searchParams.delete("loc");
+  url.searchParams.delete("job");
+  _copyWithFeedback(resultsShareBtn, url.toString());
+});
+
+jobModalShareBtn?.addEventListener("click", () => {
+  if (!_openModalLink) return;
+  const url = new URL(window.location.href);
+  if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);
+  else url.searchParams.delete("kw");
+  if (_searchLocation) url.searchParams.set("loc", _searchLocation);
+  else url.searchParams.delete("loc");
+  url.searchParams.set("job", _openModalLink);
+  _copyWithFeedback(jobModalShareBtn, url.toString());
+});
 
 /** Escape a string for safe insertion into HTML attribute or text contexts. */
 function esc(str: string): string {
