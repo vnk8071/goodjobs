@@ -47,16 +47,6 @@ export function setSearchContext(keyword: string, location?: string): void {
   _searchLocation = location;
 }
 
-function _setUrlParams(params: Record<string, string | undefined | null>, mode: "replace" | "push" = "replace"): void {
-  const url = new URL(window.location.href);
-  for (const [k, v] of Object.entries(params)) {
-    if (!v) url.searchParams.delete(k);
-    else url.searchParams.set(k, v);
-  }
-  if (mode === "push") history.pushState({}, "", url);
-  else history.replaceState({}, "", url);
-}
-
 async function _copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -179,14 +169,6 @@ function openJobModal(job: Job): void {
     jobModalSummary.classList.add("hidden");
   }
   jobModalLink.href            = job.link;
-  _setUrlParams(
-    {
-      kw: _searchKeyword || undefined,
-      loc: _searchLocation || undefined,
-      job: job.link,
-    },
-    "replace",
-  );
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const descHtml = (!job.description && isEnriching)
@@ -203,7 +185,6 @@ function closeJobModal(): void {
   jobModal.classList.add("hidden");
   document.body.style.overflow = "";
   _openModalLink = "";
-  _setUrlParams({ job: null }, "replace");
 }
 
 jobModalClose.addEventListener("click", closeJobModal);
@@ -566,7 +547,7 @@ export function hideRelated(): void {
 }
 
 resultsShareBtn?.addEventListener("click", () => {
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.origin + window.location.pathname);
   if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);
   else url.searchParams.delete("kw");
   if (_searchLocation) url.searchParams.set("loc", _searchLocation);
@@ -577,7 +558,7 @@ resultsShareBtn?.addEventListener("click", () => {
 
 jobModalShareBtn?.addEventListener("click", () => {
   if (!_openModalLink) return;
-  const url = new URL(window.location.href);
+  const url = new URL(window.location.origin + window.location.pathname);
   if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);
   else url.searchParams.delete("kw");
   if (_searchLocation) url.searchParams.set("loc", _searchLocation);

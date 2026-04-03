@@ -85,6 +85,11 @@ def embed_texts(texts: list[str]) -> list[list[float]] | None:
                 return result.get("data")
             if idx < len(creds) - 1 and _is_quota_error(resp):
                 log_app(f"[vector] embed quota-limited, trying next CF account ({resp.status_code})", "WARN")
+                next_account_id = creds[idx + 1][0]
+                log_app(
+                    f"[vector] embed fallback → account {idx + 2}/{len(creds)} ({next_account_id[:8]}...)",
+                    "WARN",
+                )
                 continue
             log_app(f"[vector] embed error {resp.status_code}: {resp.text}", "ERROR")
             return None

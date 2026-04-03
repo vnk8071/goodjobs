@@ -29,6 +29,8 @@ function getLocation(): string {
 const homeLink = document.getElementById("homeLink") as HTMLAnchorElement;
 homeLink.addEventListener("click", (e) => {
   e.preventDefault();
+  // Reset deep-link URL (/ ?kw=&loc=&job=...) back to the homepage.
+  history.replaceState({}, "", window.location.pathname);
   hideResults();
   clearStatus();
   currentJobs = [];
@@ -84,15 +86,6 @@ let abortController: AbortController | null = null;
 
 let _pendingSharedJobLink: string | null = null;
 
-function _setUrlSearchParams(params: Record<string, string | undefined | null>): void {
-  const url = new URL(window.location.href);
-  for (const [k, v] of Object.entries(params)) {
-    if (!v) url.searchParams.delete(k);
-    else url.searchParams.set(k, v);
-  }
-  history.replaceState({}, "", url);
-}
-
 fetchBtn.addEventListener("click", async () => {
   const sharedJobLink = _pendingSharedJobLink;
   _pendingSharedJobLink = null;
@@ -114,7 +107,6 @@ fetchBtn.addEventListener("click", async () => {
   const location = getLocation() || undefined;
 
   setSearchContext(keyword, location);
-  _setUrlSearchParams({ kw: keyword, loc: location ?? null, job: sharedJobLink });
 
   fetchBtn.disabled = true;
   currentJobs = [];
@@ -145,22 +137,19 @@ fetchBtn.addEventListener("click", async () => {
         currentJobs = appendJobs(currentJobs, batch);
         updateProgressCount(currentJobs);
 
-        const jobLink = new URL(window.location.href).searchParams.get("job") ?? "";
-        if (jobLink) {
-          const opened = openJobByLink(jobLink);
-          if (opened) _setUrlSearchParams({ job: jobLink });
+        if (sharedJobLink) {
+          openJobByLink(sharedJobLink);
         }
       },
       () => {
         hideProgress();
         const count = currentJobs.length;
-        const jobLink = new URL(window.location.href).searchParams.get("job") ?? "";
         if (count === 0) {
           setStatus("Không tìm thấy việc làm phù hợp trong tuần qua. Thử từ khóa khác.", "error");
           return;
         }
 
-        if (jobLink && !openJobByLink(jobLink)) {
+        if (sharedJobLink && !openJobByLink(sharedJobLink)) {
           setStatus("Không tìm thấy job từ link chia sẻ (có thể đã hết hạn).", "error");
           return;
         }
@@ -247,6 +236,10 @@ fetchBtn.addEventListener("click", async () => {
   const kw = (url.searchParams.get("kw") ?? "").trim();
   const loc = (url.searchParams.get("loc") ?? "").trim();
   _pendingSharedJobLink = (url.searchParams.get("job") ?? "").trim() || null;
+
+  if (kw || loc || _pendingSharedJobLink) {
+    history.replaceState({}, "", window.location.pathname);
+  }
 
   if (!kw) return;
 

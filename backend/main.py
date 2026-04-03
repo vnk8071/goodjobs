@@ -459,6 +459,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         sem = _get_sem()
         ip_active_inc(ip)
         try:
+            cached_prefill_jobs: list[dict] = []
+            cached_prefill_latest_ts = 0.0
+            fuzzy_matched_kw = None
+
             all_cached_jobs: list[dict] = []
             cache_fetched_ts_list = []
             related_keywords = _get_related_keywords(cache_keyword)
@@ -478,23 +482,23 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
-                yield "event: done\ndata: {}\n\n"
 
-                seen_links = {j.get("link") for j in unique_jobs if j.get("link")}
-                vector_supplement = await _fetch_vector_supplement(keyword, seen_links, req.location, warmup_kws)
-                if vector_supplement:
-                    yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
+                if is_warmup:
+                    yield "event: done\ndata: {}\n\n"
+                    seen_links = {str(j["link"]) for j in unique_jobs if j.get("link")}
+                    vector_supplement = await _fetch_vector_supplement(keyword, seen_links, req.location, warmup_kws)
+                    if vector_supplement:
+                        yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
+                    return
 
-                if not is_warmup:
-                    await cache_touch(cache_keyword, req.location)
-                    asyncio.create_task(
-                        _background_rescrape(cache_keyword, req.location, latest_ts)
-                    )
-                    await vector_mark_nonwarmup_seen(
-                        [str(j["link"]) for j in unique_jobs if j.get("link")], time.time()
-                    )
+                # Non-warmup cache hit: keep streaming and run a fresh scrape inline.
+                await cache_touch(cache_keyword, req.location)
+                await vector_mark_nonwarmup_seen(
+                    [str(j["link"]) for j in unique_jobs if j.get("link")], time.time()
+                )
 
-                return
+                cached_prefill_jobs = unique_jobs
+                cached_prefill_latest_ts = latest_ts
 
             fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
             if fuzzy:
@@ -504,8 +508,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     log_app(f"cache fuzzy — streaming {len(refiltered)} jobs for {keyword!r}, done")
                     _refresh_posted_times(refiltered)
                     yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
-                    yield "event: done\ndata: {}\n\n"
-                    return
+                    if is_warmup:
+                        yield "event: done\ndata: {}\n\n"
+                        return
+                    cached_prefill_jobs = cached_prefill_jobs or refiltered
+                    cached_prefill_latest_ts = cached_prefill_latest_ts or fuzzy_fetched_ts
                 else:
                     log_app(f"cache fuzzy — 0 jobs matched {keyword!r} after re-filter, skipping fuzzy")
 
@@ -521,7 +528,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
                 fetch_ts = time.time()
 
-                scrape_kw = fuzzy_matched_kw if fuzzy else cache_keyword
+                scrape_kw = fuzzy_matched_kw if fuzzy_matched_kw else cache_keyword
                 other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
                 futures: dict = {
                     loop.run_in_executor(_executor, _timed, site, fn, scrape_kw, req.location): site
@@ -538,7 +545,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 topdev_jobs: list[dict] = []
                 jobsgo_jobs: list[dict] = []
                 careerlink_jobs: list[dict] = []
-                all_jobs: list[dict] = []
+                all_jobs: list[dict] = list(cached_prefill_jobs) if cached_prefill_jobs else []
                 pending = set(futures.keys())
                 deadline = loop.time() + 120.0
 
@@ -823,10 +830,15 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
                     yield f"event: careerlink-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
+                # Deduplicate before persisting/upserting (cache prefill + live scrape may overlap).
+                by_link = {j.get("link"): j for j in all_jobs if j.get("link")}
+                all_jobs = list(by_link.values())
+                all_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+
                 asyncio.create_task(_upsert_and_track(all_jobs))
 
                 if not is_warmup:
-                    seen_links_for_supplement = {j.get("link") for j in all_jobs if j.get("link")}
+                    seen_links_for_supplement = {str(j["link"]) for j in all_jobs if j.get("link")}
                     vector_supplement = await _fetch_vector_supplement(keyword, seen_links_for_supplement, req.location, warmup_kws)
                     if vector_supplement:
                         yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
