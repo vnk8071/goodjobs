@@ -431,7 +431,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     cache_keyword = strip_level(keyword_normalized)
 
     loop = asyncio.get_event_loop()
-    is_warmup = any(cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws)
+    _is_warmup_kw = any(cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws)
+    _is_warmup_loc = any(req.location.strip().lower() == loc.strip().lower() for loc in _WARMUP_LOCATIONS)
+    is_warmup = _is_warmup_kw and _is_warmup_loc
 
     def _process(jobs: list[dict]) -> list[dict]:
         filtered = []
@@ -485,7 +487,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
 
-                if is_warmup:
+                if is_warmup and unique_jobs:
                     yield "event: done\ndata: {}\n\n"
                     seen_links = {str(j["link"]) for j in unique_jobs if j.get("link")}
                     vector_supplement = await _fetch_vector_supplement(keyword, seen_links, req.location, warmup_kws)
@@ -493,7 +495,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
                     return
 
-                # Non-warmup cache hit: show cached jobs immediately, then scrape fresh inline.
+                # Cache hit but jobs empty or non-warmup: show cached jobs then scrape fresh inline.
                 await cache_touch(cache_keyword, req.location)
                 await vector_mark_nonwarmup_seen(
                     [str(j["link"]) for j in unique_jobs if j.get("link")], time.time()
