@@ -131,9 +131,10 @@ async def _fetch_vector_supplement(query: str, seen_links: set[str], location: s
             return
         try:
             data = json.loads(raw)
+            age_cutoff = time.time() - 8 * 86400
             for job in data.get("jobs", []):
                 link = job.get("link", "")
-                if link in target:
+                if link in target and job.get("posted_ts", 0) >= age_cutoff:
                     job["_vector_score"] = target.pop(link)
                     job["_from_vector"] = True
                     hydrated.append(job)
@@ -502,6 +503,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     seen_links = {str(j["link"]) for j in unique_jobs if j.get("link")}
                     vector_supplement = await _fetch_vector_supplement(keyword, seen_links, req.location, warmup_kws)
                     if vector_supplement:
+                        _refresh_posted_times(vector_supplement)
                         yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
                     return
 
@@ -525,6 +527,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     if is_warmup:
                         yield "event: done\ndata: {}\n\n"
                         return
+                    asyncio.create_task(cache_set(cache_keyword, req.location, refiltered, fuzzy_fetched_ts))
                     cached_prefill_jobs = cached_prefill_jobs or refiltered
                     cached_prefill_latest_ts = cached_prefill_latest_ts or fuzzy_fetched_ts
                 else:
@@ -853,6 +856,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     seen_links_for_supplement = {str(j["link"]) for j in all_jobs if j.get("link")}
                     vector_supplement = await _fetch_vector_supplement(keyword, seen_links_for_supplement, req.location, warmup_kws)
                     if vector_supplement:
+                        _refresh_posted_times(vector_supplement)
                         yield f"event: vector-results\ndata: {json.dumps({'jobs': vector_supplement, 'count': len(vector_supplement)}, ensure_ascii=False)}\n\n"
                         all_jobs = all_jobs + vector_supplement
                         log_app(f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}")

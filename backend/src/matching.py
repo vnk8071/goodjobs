@@ -12,8 +12,12 @@ _LEVEL_WORDS = {
 # Common job-related English vocabulary for typo correction
 _JOB_VOCABULARY = {
     # Roles & positions
-    "engineer", "developer", "architect", "manager", "director", "lead", "lead",
+    "engineer", "developer", "architect", "manager", "director", "lead",
     "specialist", "analyst", "consultant", "coordinator", "officer", "executive",
+    # Marketing & business roles
+    "marketing", "sales", "finance", "accounting", "operations", "logistics",
+    "procurement", "legal", "compliance", "audit", "hr", "recruitment",
+    "communications", "branding", "advertising", "strategy", "planning",
     # Engineering roles
     "backend", "frontend", "fullstack", "devops", "platform", "infrastructure",
     "reliability", "security", "quality", "automation", "database", "cloud",
@@ -24,7 +28,7 @@ _JOB_VOCABULARY = {
     "scientist", "researcher", "designer", "product", "business", "data",
     "machine", "learning", "artificial", "intelligence", "ai", "ml",
     # Additional common words
-    "tech", "technical", "lead", "head", "manager",
+    "tech", "technical", "head",
 }
 
 

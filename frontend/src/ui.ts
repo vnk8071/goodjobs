@@ -467,10 +467,12 @@ function _rebuildFilterBar(): void {
 
   // Skill filter row
   const skillFreq = new Map<string, number>();
+  const skillDisplay = new Map<string, string>();
   for (const j of _allJobs) {
     for (const s of (j.skills ?? [])) {
       const key = s.toLowerCase();
       skillFreq.set(key, (skillFreq.get(key) ?? 0) + 1);
+      if (!skillDisplay.has(key)) skillDisplay.set(key, s);
     }
   }
   const topSkills = [...skillFreq.entries()]
@@ -486,7 +488,7 @@ function _rebuildFilterBar(): void {
       const pill = document.createElement("span");
       const isActive = _activeSkills.has(skill);
       pill.className = `skill-tag skill-filter-pill${isActive ? " active" : ""}`;
-      pill.textContent = `${skill} ×${skillFreq.get(skill)}`;
+      pill.textContent = `${skillDisplay.get(skill) ?? skill} ×${skillFreq.get(skill)}`;
       pill.addEventListener("click", () => {
         if (_activeSkills.has(skill)) {
           _activeSkills.delete(skill);
