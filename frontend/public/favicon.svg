@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <circle cx="16" cy="16" r="16" fill="#2563eb"/>
+  <text x="3" y="23" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="white">G</text>
+  <text x="16" y="23" font-family="system-ui,sans-serif" font-size="15" font-weight="800" fill="white" opacity="0.75">J</text>
+</svg>

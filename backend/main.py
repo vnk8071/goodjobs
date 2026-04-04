@@ -36,9 +36,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Job Scraper API", lifespan=lifespan)
 
+_ALLOWED_ORIGINS = [
+    "https://goodjobs.io.vn",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

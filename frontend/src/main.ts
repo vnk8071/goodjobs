@@ -29,11 +29,17 @@ function getLocation(): string {
 const homeLink = document.getElementById("homeLink") as HTMLAnchorElement;
 homeLink.addEventListener("click", (e) => {
   e.preventDefault();
+  abortController?.abort();
+  abortController = null;
   // Reset deep-link URL (/ ?kw=&loc=&job=...) back to the homepage.
   history.replaceState({}, "", window.location.pathname);
   hideResults();
+  hideProgress();
   clearStatus();
+  setLinkedInEnriching(false);
+  setTopCVEnriching(false);
   currentJobs = [];
+  fetchBtn.disabled = false;
   keywordEl.value = "";
   suggestionChips.forEach(c => c.classList.remove("active"));
   window.scrollTo({ top: 0, behavior: "smooth" });
