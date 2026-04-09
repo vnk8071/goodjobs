@@ -15,7 +15,14 @@ def get_redis() -> Redis:
     """Return the shared Redis client, creating it on first call."""
     global _redis
     if _redis is None:
-        _redis = Redis.from_url(REDIS_URL, decode_responses=True)
+        _redis = Redis.from_url(
+            REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=5.0,  # 5 second connection timeout
+            socket_timeout=5.0,  # 5 second socket timeout
+            retry_on_timeout=False,  # Don't retry on timeout - fail fast
+            health_check_interval=30,  # Health check every 30 seconds
+        )
     return _redis
 
 
@@ -42,17 +49,23 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
         return None
 
 
-async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = 8) -> None:
+async def cache_set(
+    keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = 8
+) -> None:
     """Store jobs in cache with a TTL (default 8 days) to prevent unbounded Redis growth."""
     try:
-        payload = json.dumps({"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False)
+        payload = json.dumps(
+            {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
+        )
         await get_redis().set(_key(keyword, location), payload, ex=ttl_days * 86400)
         log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
     except Exception as e:
         log_app(f"cache set error: {e}", "ERROR")
 
 
-async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) -> tuple[list[dict], float, str] | None:
+async def cache_fuzzy_get(
+    keyword: str, location: str, threshold: float = 0.85
+) -> tuple[list[dict], float, str] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
     Scans all keys matching jobs:*:<location> and picks the one whose keyword
@@ -73,13 +86,23 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) 
         best_score = 0.0
 
         for key in keys:
-            cached_kw = key[len("jobs:") : -len(f":{loc}")] if loc else key[len("jobs:"):]
+            cached_kw = (
+                key[len("jobs:") : -len(f":{loc}")] if loc else key[len("jobs:") :]
+            )
             cached_core = strip_level(cached_kw)
             cached_core_words = list(cached_core.split())
 
             # Each word in the shorter phrase must fuzzy-match a word in the longer phrase
-            shorter_words = kw_core_words if len(kw_core_words) <= len(cached_core_words) else set(cached_core_words)
-            longer_words  = cached_core_words if len(kw_core_words) <= len(cached_core_words) else list(kw_core_words)
+            shorter_words = (
+                kw_core_words
+                if len(kw_core_words) <= len(cached_core_words)
+                else set(cached_core_words)
+            )
+            longer_words = (
+                cached_core_words
+                if len(kw_core_words) <= len(cached_core_words)
+                else list(kw_core_words)
+            )
             if not all(
                 any(SequenceMatcher(None, sw, lw).ratio() >= 0.8 for lw in longer_words)
                 for sw in shorter_words
@@ -101,8 +124,14 @@ async def cache_fuzzy_get(keyword: str, location: str, threshold: float = 0.85) 
         jobs = data["jobs"]
         if not jobs:
             return None
-        matched_kw = best_key[len("jobs:") : -len(f":{loc}")] if loc else best_key[len("jobs:"):]
-        log_app(f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)")
+        matched_kw = (
+            best_key[len("jobs:") : -len(f":{loc}")]
+            if loc
+            else best_key[len("jobs:") :]
+        )
+        log_app(
+            f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)"
+        )
         return jobs, float(data["fetched_ts"]), matched_kw
     except Exception as e:
         log_app(f"cache fuzzy_get error: {e}", "ERROR")
@@ -118,7 +147,9 @@ async def cache_ttl(keyword: str, location: str) -> int:
         return -2
 
 
-async def cache_merge(keyword: str, location: str, new_jobs: list[dict], fetched_ts: float) -> None:
+async def cache_merge(
+    keyword: str, location: str, new_jobs: list[dict], fetched_ts: float
+) -> None:
     """Merge new_jobs into existing cache, deduplicate by link, update fetched_ts."""
     try:
         existing = await cache_get(keyword, location)
@@ -130,7 +161,9 @@ async def cache_merge(keyword: str, location: str, new_jobs: list[dict], fetched
                 seen.add(j["link"])
                 deduped.append(j)
         await cache_set(keyword, location, deduped, fetched_ts)
-        log_app(f"cache merged {len(new_jobs)} new + {len(existing[0]) if existing else 0} cached = {len(deduped)} total")
+        log_app(
+            f"cache merged {len(new_jobs)} new + {len(existing[0]) if existing else 0} cached = {len(deduped)} total"
+        )
     except Exception as e:
         log_app(f"cache merge error: {e}", "ERROR")
 
@@ -191,7 +224,7 @@ async def embedded_links_count() -> int:
         return 0
 
 
-_VECMARK_WARMUP_KEY    = "vector:warmup_last_seen"
+_VECMARK_WARMUP_KEY = "vector:warmup_last_seen"
 _VECMARK_NONWARMUP_KEY = "vector:nonwarmup_last_seen"
 
 
