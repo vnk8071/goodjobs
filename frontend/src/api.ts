@@ -145,31 +145,23 @@ export async function scrapeJobsStream(
         eventType = line.slice(6).trim();
       } else if (line.startsWith("data:")) {
         const payload = line.slice(5).trim();
+        // Map backend site keys to display names for enriching/done events
+        const _SITE_DISPLAY: Record<string, string> = {
+          linkedin:   "LinkedIn",
+          topcv:      "TopCV",
+          itviec:     "ITViec",
+          topdev:     "TopDev",
+          jobsgo:     "JobsGo",
+          careerlink: "CareerLink",
+        };
+
+        // Special lifecycle events
         if (eventType === "done") {
-          if (onSiteDone) {
-            siteCounts.forEach((count, site) => onSiteDone!(site, count));
-          }
+          if (onSiteDone) siteCounts.forEach((count, site) => onSiteDone!(site, count));
           onDone();
           _doneFired = true;
           eventType = "message";
           continue; // keep reading for Phase 2 enrichment
-        }
-        if (eventType === "linkedin-done") {
-          if (onSiteDone) onSiteDone("LinkedIn", siteCounts.get("LinkedIn") ?? 0);
-          if (onLinkedInDone) onLinkedInDone();
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "topcv-done") {
-          if (onSiteDone) onSiteDone("TopCV", siteCounts.get("TopCV") ?? 0);
-          if (onTopCVDone) onTopCVDone();
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "itviec-done") {
-          if (onSiteDone) onSiteDone("ITViec", siteCounts.get("ITViec") ?? 0);
-          eventType = "message";
-          continue;
         }
         if (eventType === "queued") {
           try {
@@ -200,74 +192,36 @@ export async function scrapeJobsStream(
           eventType = "message";
           continue;
         }
-        if (eventType === "linkedin-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("LinkedIn", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "topcv-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("TopCV", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "itviec-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("ITViec", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "topdev-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("TopDev", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "topdev-done") {
-          if (onSiteDone) onSiteDone("TopDev", siteCounts.get("TopDev") ?? 0);
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "jobsgo-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("JobsGo", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "jobsgo-done") {
-          if (onSiteDone) onSiteDone("JobsGo", siteCounts.get("JobsGo") ?? 0);
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "careerlink-enriching") {
-          try {
-            const { count } = JSON.parse(payload) as { count: number };
-            if (onSiteLoading) onSiteLoading("CareerLink", count);
-          } catch { /* ignore */ }
-          eventType = "message";
-          continue;
-        }
-        if (eventType === "careerlink-done") {
-          if (onSiteDone) onSiteDone("CareerLink", siteCounts.get("CareerLink") ?? 0);
-          eventType = "message";
-          continue;
-        }
         if (eventType === "vector-results") {
           try {
             const { jobs } = JSON.parse(payload) as { jobs: Job[]; count: number };
             if (jobs.length > 0 && onVectorResults) onVectorResults(jobs);
           } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+
+        // Per-site enriching / done events
+        const enrichingMatch = eventType.match(/^(.+)-enriching$/);
+        if (enrichingMatch) {
+          const display = _SITE_DISPLAY[enrichingMatch[1]];
+          if (display) {
+            try {
+              const { count } = JSON.parse(payload) as { count: number };
+              if (onSiteLoading) onSiteLoading(display, count);
+            } catch { /* ignore */ }
+          }
+          eventType = "message";
+          continue;
+        }
+        const doneMatch = eventType.match(/^(.+)-done$/);
+        if (doneMatch) {
+          const display = _SITE_DISPLAY[doneMatch[1]];
+          if (display) {
+            if (onSiteDone) onSiteDone(display, siteCounts.get(display) ?? 0);
+            if (display === "LinkedIn" && onLinkedInDone) onLinkedInDone();
+            if (display === "TopCV" && onTopCVDone) onTopCVDone();
+          }
           eventType = "message";
           continue;
         }

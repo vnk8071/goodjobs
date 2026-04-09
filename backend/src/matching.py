@@ -186,6 +186,29 @@ def normalize_keyword(text: str) -> str:
     return text
 
 
+def _match_index(kw: str, core_words: list[str]) -> int:
+    """Return the earliest core_words index that matches kw, or -1 if none."""
+    is_level = kw in _LEVEL_WORDS
+    kw_variants = _expand(kw)
+    for i, tw in enumerate(core_words):
+        for variant in kw_variants:
+            if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
+                return i
+        if not is_level and _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
+            return i
+    return -1
+
+
+def _parse_core(title: str, keyword: str) -> tuple[str, list[str], list[str]]:
+    """Return (kw_phrase, kw_words, core_words) for a title+keyword pair."""
+    kw_phrase = normalize_keyword(keyword.strip().lower())
+    t = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title.strip().lower())
+    core_title = normalize_keyword(re.split(r"\s*[\(\[|]|\s+-\s+", t)[0].strip())
+    kw_words = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
+    core_words = [w for w in re.split(r"[\s/\-,\.&_]+", core_title) if w]
+    return kw_phrase, kw_words, core_words
+
+
 def title_matches(title: str, keyword: str) -> bool:
     """Return True if the job title is relevant to the keyword phrase.
 
@@ -193,94 +216,43 @@ def title_matches(title: str, keyword: str) -> bool:
     A keyword word found only inside parentheses does not count as a primary match.
     Falls back to exact phrase match and Jaccard similarity on the core title only.
     """
-    kw_phrase  = normalize_keyword(keyword.strip().lower())
+    kw_phrase, kw_words, core_words = _parse_core(title, keyword)
 
-    # Strip leading bracket tags like [Remote], [HCM], [Urgent] from the title.
-    # e.g. "[Remote] Python Developer" → "Python Developer"
-    t = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title.strip().lower())
-
-    # Split off parenthetical qualifiers and dash-separated suffixes — use only the core role.
-    # e.g. "Data Engineer (AI Platform)" → "data engineer"
-    # e.g. "Python Developer - Machine Learning Focus" → "python developer"
-    core_title = normalize_keyword(re.split(r"\s*[\(\[|]|\s+-\s+", t)[0].strip())
-
-    if kw_phrase in core_title:
+    if kw_phrase in " ".join(core_words):
         return True
-
-    kw_words    = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
-    core_words  = re.split(r"[\s/\-,\.&_]+", core_title)
-    core_words  = [w for w in core_words if w]
-
     if not kw_words:
         return True
 
-    def _match_index(kw: str) -> int:
-        """Return the earliest core_words index that matches kw, or -1 if none."""
-        is_level = kw in _LEVEL_WORDS
-        kw_variants = _expand(kw)
-        for i, tw in enumerate(core_words):
-            for variant in kw_variants:
-                if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
-                    return i
-            if not is_level and _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
-                return i
-        return -1
-
-    # All keyword words must match in the core title (any order).
-    indices = [_match_index(kw) for kw in kw_words]
+    indices = [_match_index(kw, core_words) for kw in kw_words]
     if all(idx >= 0 for idx in indices):
         return True
 
-    # Level words in the keyword are hard requirements — if any failed to match, reject.
     level_kw_words = [w for w in kw_words if w in _LEVEL_WORDS]
-    if any(_match_index(w) < 0 for w in level_kw_words):
+    if any(_match_index(w, core_words) < 0 for w in level_kw_words):
         return False
 
-    kw_set   = set(kw_words)
-    core_set = set(core_words)
-    overlap  = len(kw_set & core_set) / len(kw_set | core_set)
+    overlap = len(set(kw_words) & set(core_words)) / len(set(kw_words) | set(core_words))
     return overlap >= 0.5
 
 
 def title_matches_loose(title: str, keyword: str) -> bool:
     """Looser version of title_matches for non-warmup keywords (Jaccard threshold 0.3)."""
-    kw_phrase  = normalize_keyword(keyword.strip().lower())
+    kw_phrase, kw_words, core_words = _parse_core(title, keyword)
 
-    t = re.sub(r"^\s*(\[[^\]]*\]\s*)+", "", title.strip().lower())
-    core_title = normalize_keyword(re.split(r"\s*[\(\[|]|\s+-\s+", t)[0].strip())
-
-    if kw_phrase in core_title:
+    if kw_phrase in " ".join(core_words):
         return True
-
-    kw_words    = [w for w in re.split(r"\s+", kw_phrase) if len(w) >= 2]
-    core_words  = re.split(r"[\s/\-,\.&_]+", core_title)
-    core_words  = [w for w in core_words if w]
-
     if not kw_words:
         return True
 
-    def _match_index(kw: str) -> int:
-        is_level = kw in _LEVEL_WORDS
-        kw_variants = _expand(kw)
-        for i, tw in enumerate(core_words):
-            for variant in kw_variants:
-                if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
-                    return i
-            if not is_level and _word_similarity(kw, tw) > 0.6 and abs(len(tw) - len(kw)) <= 2:
-                return i
-        return -1
-
-    indices = [_match_index(kw) for kw in kw_words]
+    indices = [_match_index(kw, core_words) for kw in kw_words]
     if all(idx >= 0 for idx in indices):
         return True
 
     level_kw_words = [w for w in kw_words if w in _LEVEL_WORDS]
-    if any(_match_index(w) < 0 for w in level_kw_words):
+    if any(_match_index(w, core_words) < 0 for w in level_kw_words):
         return False
 
-    kw_set   = set(kw_words)
-    core_set = set(core_words)
-    overlap  = len(kw_set & core_set) / len(kw_set | core_set)
+    overlap = len(set(kw_words) & set(core_words)) / len(set(kw_words) | set(core_words))
     return overlap >= 0.3
 
 

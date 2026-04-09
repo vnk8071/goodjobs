@@ -42,11 +42,11 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
         return None
 
 
-async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: float) -> None:
-    """Store jobs in cache permanently (no TTL)."""
+async def cache_set(keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = 8) -> None:
+    """Store jobs in cache with a TTL (default 8 days) to prevent unbounded Redis growth."""
     try:
         payload = json.dumps({"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False)
-        await get_redis().set(_key(keyword, location), payload)
+        await get_redis().set(_key(keyword, location), payload, ex=ttl_days * 86400)
         log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
     except Exception as e:
         log_app(f"cache set error: {e}", "ERROR")

@@ -205,150 +205,46 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     await vector_mark_warmup_seen([j["link"] for j in merged if j.get("link")], time.time())
 
-    linkedin_batch = [j for j in linkedin_jobs if j.get("link") not in cached_with_desc]
-    linkedin_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-    linkedin_batch = linkedin_batch[:enrich_limit if enrich_limit is not None else 30]
-    if linkedin_batch:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(linkedin_batch)} LinkedIn jobs without description...")
-        await asyncio.sleep(1.0)
-        enriched_linkedin = 0
-        for i, job in enumerate(linkedin_batch):
+    # Per-site enrich config: (display_name, source_jobs, detail_fn, default_limit, is_linkedin)
+    _site_enrich_cfg = [
+        ("LinkedIn",     linkedin_jobs,     scrape_linkedin_detail_one,    30,  True),
+        ("TopCV",        topcv_jobs,        scrape_topcv_detail_one,       10,  False),
+        ("ITViec",       itviec_jobs,       scrape_itviec_detail_one,      10,  False),
+        ("VietnamWorks", vietnamworks_jobs, scrape_vietnamworks_detail_one, 10, False),
+        ("CareerViet",   careerviet_jobs,   scrape_careerviet_detail_one,  10,  False),
+        ("JobsGo",       jobsgo_jobs,       scrape_jobsgo_detail_one,      10,  False),
+        ("CareerLink",   careerlink_jobs,   scrape_careerlink_detail_one,  10,  False),
+    ]
+
+    any_enriched = False
+    for display, site_jobs, detail_fn, default_limit, is_linkedin in _site_enrich_cfg:
+        batch = [j for j in site_jobs if j.get("link") not in cached_with_desc]
+        batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
+        batch = batch[:enrich_limit if enrich_limit is not None else default_limit]
+        if not batch:
+            continue
+        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} {display} jobs without description...")
+        if is_linkedin:
+            await asyncio.sleep(1.0)
+        enriched = 0
+        for i, job in enumerate(batch):
             cooldown = 1.0 if i > 0 else 0.0
             try:
                 ok = await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_linkedin_detail_one, job, cooldown),
+                    loop.run_in_executor(executor, detail_fn, job, cooldown),
                     timeout=60.0,
                 )
-                if not ok:
+                if is_linkedin and not ok:
                     break
-                enriched_linkedin += 1
+                enriched += 1
             except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] linkedin detail timeout: {job.get('link')}")
+                log_app(f"[warmup][{kw}][{loc}] {display} detail timeout: {job.get('link')}")
             except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] linkedin detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] LinkedIn enrich done — {enriched_linkedin}/{len(linkedin_batch)} jobs enriched")
+                log_app(f"[warmup][{kw}][{loc}] {display} detail error: {e}")
+        log_app(f"[warmup][{kw}][{loc}] {display} enrich done — {enriched}/{len(batch)} jobs enriched")
+        any_enriched = True
 
-    topcv_batch = [j for j in topcv_jobs if j.get("link") not in cached_with_desc]
-    topcv_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-    topcv_batch = topcv_batch[:enrich_limit if enrich_limit is not None else 10]
-    if topcv_batch:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(topcv_batch)} TopCV jobs without description...")
-        enriched_topcv = 0
-        for i, job in enumerate(topcv_batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_topcv_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_topcv += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] topcv detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] topcv detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] TopCV enrich done — {enriched_topcv}/{len(topcv_batch)} jobs enriched")
-
-    itviec_batch = [j for j in itviec_jobs if j.get("link") not in cached_with_desc]
-    itviec_batch.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-    itviec_batch = itviec_batch[:enrich_limit if enrich_limit is not None else 10]
-    if itviec_batch:
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(itviec_batch)} ITViec jobs without description...")
-        enriched_itviec = 0
-        for i, job in enumerate(itviec_batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_itviec_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_itviec += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] itviec detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] itviec detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] ITViec enrich done — {enriched_itviec}/{len(itviec_batch)} jobs enriched")
-
-    vw_to_enrich = [j for j in vietnamworks_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
-    if vw_to_enrich:
-        vw_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = vw_to_enrich[:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} VietnamWorks jobs...")
-        enriched_vw = 0
-        for i, job in enumerate(batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_vietnamworks_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_vw += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] vietnamworks detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] vietnamworks detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] VietnamWorks enrich done — {enriched_vw}/{len(batch)} jobs enriched")
-
-    cv_to_enrich = [j for j in careerviet_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
-    if cv_to_enrich:
-        cv_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = cv_to_enrich[:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} CareerViet jobs...")
-        enriched_cv = 0
-        for i, job in enumerate(batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_careerviet_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_cv += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] careerviet detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] careerviet detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] CareerViet enrich done — {enriched_cv}/{len(batch)} jobs enriched")
-
-    jobsgo_to_enrich = [j for j in jobsgo_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
-    if jobsgo_to_enrich:
-        jobsgo_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = jobsgo_to_enrich[:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} JobsGo jobs...")
-        enriched_jobsgo = 0
-        for i, job in enumerate(batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_jobsgo_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_jobsgo += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] jobsgo detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] jobsgo detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] JobsGo enrich done — {enriched_jobsgo}/{len(batch)} jobs enriched")
-
-    careerlink_to_enrich = [j for j in careerlink_jobs if not j.get("description") and j.get("link") not in cached_with_desc]
-    if careerlink_to_enrich:
-        careerlink_to_enrich.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-        batch = careerlink_to_enrich[:enrich_limit if enrich_limit is not None else 10]
-        log_app(f"[warmup][{kw}][{loc}] enriching {len(batch)} CareerLink jobs...")
-        enriched_cl = 0
-        for i, job in enumerate(batch):
-            cooldown = 1.0 if i > 0 else 0.0
-            try:
-                await asyncio.wait_for(
-                    loop.run_in_executor(executor, scrape_careerlink_detail_one, job, cooldown),
-                    timeout=60.0,
-                )
-                enriched_cl += 1
-            except asyncio.TimeoutError:
-                log_app(f"[warmup][{kw}][{loc}] careerlink detail timeout: {job.get('link')}")
-            except Exception as e:
-                log_app(f"[warmup][{kw}][{loc}] careerlink detail error: {e}")
-        log_app(f"[warmup][{kw}][{loc}] CareerLink enrich done — {enriched_cl}/{len(batch)} jobs enriched")
-
-    if linkedin_batch or topcv_batch or itviec_batch or vw_to_enrich or cv_to_enrich or jobsgo_to_enrich or careerlink_to_enrich:
+    if any_enriched:
         for j in new_jobs_recent:
             j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
         merged.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
