@@ -11,14 +11,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch, embedded_links_add, embedded_links_filter, get_redis, vector_mark_nonwarmup_seen
+from src.cache import cache_get, cache_set, cache_fuzzy_get, cache_touch, get_redis, vector_mark_nonwarmup_seen
 from src.constants import MAX_CONCURRENT
 from src.logger import log_search, log_app
 from src.matching import title_matches, title_matches_loose, extract_skills, posted_ts, posted_relative, strip_level, correct_keyword_typos, normalize_keyword
 from src.models import Job, ScrapeRequest
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
-from src.vector import ensure_index, upsert_jobs, search as vector_search, rerank_jobs_by_vector
+from src.vector import ensure_index, search as vector_search
 from src.warmup import warmup, _WARMUP_LOCATIONS, _WARMUP_KEYWORDS, _scrape_keyword, get_warmup_keywords, add_warmup_keyword, remove_warmup_keyword
 
 
@@ -83,27 +83,6 @@ def _get_related_keywords(cache_keyword: str) -> list[str]:
     """Return the canonical cache key. All alias jobs are stored in the canonical cache."""
     return [cache_keyword.lower()]
 
-
-_inflight_embed_links: set[str] = set()
-
-
-async def _upsert_and_track(jobs: list[dict]) -> None:
-    """Embed and upsert only jobs not already in Vectorize, then mark them as embedded."""
-    loop = asyncio.get_event_loop()
-    unembedded = await embedded_links_filter(jobs)
-    if not unembedded:
-        return
-    to_embed = [j for j in unembedded if j.get("link") not in _inflight_embed_links and j.get("description", "").strip()]
-    if not to_embed:
-        return
-    _inflight_embed_links.update(j["link"] for j in to_embed if j.get("link"))
-    try:
-        ok = await loop.run_in_executor(_executor, upsert_jobs, to_embed)
-        if ok:
-            await embedded_links_add([j["link"] for j in to_embed if j.get("link")])
-            log_app(f"[vector] tracked {len(to_embed)} newly embedded links")
-    finally:
-        _inflight_embed_links.difference_update(j["link"] for j in to_embed if j.get("link"))
 
 
 async def _fetch_vector_supplement(query: str, seen_links: set[str], location: str, warmup_keywords: list[str], top_k: int = 20) -> list[dict]:
@@ -397,7 +376,6 @@ async def scrape(req: ScrapeRequest, request: Request):
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
     await cache_set(cache_keyword, req.location, jobs, time.time())
-    asyncio.create_task(_upsert_and_track(jobs))
     _refresh_posted_times(jobs)
     return jobs
 
@@ -851,11 +829,22 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     yield f"event: careerlink-done\ndata: {json.dumps({'count': enriched_count})}\n\n"
 
                 # Deduplicate before persisting/upserting (cache prefill + live scrape may overlap).
-                by_link = {j.get("link"): j for j in all_jobs if j.get("link")}
+                # For jobsgo/vietnamworks, posted_date is derived from relative text ("3 days ago")
+                # and resets on every scrape. Preserve the oldest known posted_ts for these sources.
+                _RELATIVE_DATE_SOURCES = {"JobsGo", "VietnamWorks"}
+                by_link: dict[str, dict] = {}
+                for j in all_jobs:
+                    link = j.get("link")
+                    if not link:
+                        continue
+                    if link in by_link and j.get("source") in _RELATIVE_DATE_SOURCES:
+                        prev_ts = by_link[link].get("posted_ts", 0.0)
+                        new_ts = j.get("posted_ts", 0.0)
+                        if prev_ts > 0 and (new_ts == 0 or prev_ts < new_ts):
+                            j = {**j, "posted_ts": prev_ts, "posted_date": by_link[link].get("posted_date", j.get("posted_date", ""))}
+                    by_link[link] = j
                 all_jobs = list(by_link.values())
                 all_jobs.sort(key=lambda j: j.get("posted_ts", 0.0), reverse=True)
-
-                asyncio.create_task(_upsert_and_track(all_jobs))
 
                 if not is_warmup:
                     seen_links_for_supplement = {str(j["link"]) for j in all_jobs if j.get("link")}

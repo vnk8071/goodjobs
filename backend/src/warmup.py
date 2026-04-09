@@ -70,20 +70,23 @@ async def remove_warmup_keyword(keyword: str) -> bool:
     return bool(removed)
 
 _TZ_ICT = timezone(timedelta(hours=7))
-_QUIET_START = 22
-_QUIET_END   = 10
+_SCRAPE_HOURS = (10, 17)   # full scrape: 10:00 and 17:00 ICT
+_ENRICH_HOURS = (3, 14)    # description enrich + summarize + embed: 03:00 and 14:00 ICT
+
+_ALL_SCHEDULED_HOURS = sorted(set(_SCRAPE_HOURS) | set(_ENRICH_HOURS))
 
 
-def _seconds_until_active() -> float:
-    """Return seconds to sleep until the quiet period ends (0 if currently active hours)."""
+def _seconds_until_next_scheduled() -> tuple[float, int]:
+    """Return (seconds_to_wait, hour) for the next scheduled run across all events."""
     now = datetime.now(_TZ_ICT)
-    hour = now.hour
-    if _QUIET_START <= hour or hour < _QUIET_END:
-        wake = now.replace(hour=_QUIET_END, minute=0, second=0, microsecond=0)
-        if hour >= _QUIET_START:
-            wake = wake + timedelta(days=1)
-        return (wake - now).total_seconds()
-    return 0.0
+    candidates = []
+    for hour in _ALL_SCHEDULED_HOURS:
+        t = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+        if t <= now:
+            t += timedelta(days=1)
+        candidates.append((t, hour))
+    next_t, next_hour = min(candidates, key=lambda x: x[0])
+    return (next_t - now).total_seconds(), next_hour
 
 
 async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, last_fetched_ts: float = 0.0, blocked_sites: set | None = None, enrich_limit: int | None = None) -> None:
@@ -355,27 +358,46 @@ async def _scrape_keyword(kw: str, loc: str, loop, executor, scrapers: dict, las
 
     log_app(f"[warmup] {kw!r}/{loc!r} done — {len(new_jobs_recent)} new + {len(kept_cached)} kept = {len(merged)} total ({time.perf_counter()-t0:.1f}s)")
 
-    from src.cache import embedded_links_add, embedded_links_filter
-    from src.vector import upsert_jobs
+
+async def _embed_cached_jobs(executor) -> None:
+    """Embed all cached warmup jobs that have descriptions but haven't been embedded yet.
+
+    Should be called after summarization so jobs have their summaries before embedding.
+    """
+    loop = asyncio.get_event_loop()
+    redis = get_redis()
     try:
-        unembedded = await embedded_links_filter(merged)
-        if unembedded:
-            log_app(f"[warmup] {kw!r}/{loc!r} embedding {len(unembedded)} new jobs into Vectorize")
-            ok = await asyncio.wait_for(
-                loop.run_in_executor(executor, upsert_jobs, unembedded),
-                timeout=120.0,
-            )
-            if ok:
-                await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
-                log_app(f"[warmup] {kw!r}/{loc!r} embedded {len(unembedded)} jobs")
-            else:
-                log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert returned False — partial failure", "ERROR")
+        all_jobs: list[dict] = []
+        for kw in await get_warmup_keywords():
+            for loc in _WARMUP_LOCATIONS:
+                raw = await redis.get(_key(kw, loc))
+                if not raw:
+                    continue
+                import json
+                data = json.loads(raw)
+                for job in data.get("jobs", []):
+                    if job.get("description", "").strip():
+                        all_jobs.append(job)
+
+        unembedded = await embedded_links_filter(all_jobs)
+        if not unembedded:
+            log_app("[warmup][embed] all cached jobs already embedded — skipping")
+            return
+
+        log_app(f"[warmup][embed] embedding {len(unembedded)} cached jobs into Vectorize...")
+        ok = await asyncio.wait_for(
+            loop.run_in_executor(executor, upsert_jobs, unembedded),
+            timeout=180.0,
+        )
+        if ok:
+            await embedded_links_add([j["link"] for j in unembedded if j.get("link")])
+            log_app(f"[warmup][embed] embedded {len(unembedded)} jobs")
         else:
-            log_app(f"[warmup] {kw!r}/{loc!r} all {len(merged)} jobs already embedded — skipping")
+            log_app("[warmup][embed] vectorize upsert returned False — partial failure", "ERROR")
     except asyncio.TimeoutError:
-        log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert timed out after 120s", "ERROR")
+        log_app("[warmup][embed] vectorize upsert timed out after 180s", "ERROR")
     except Exception as e:
-        log_app(f"[warmup] {kw!r}/{loc!r} vectorize upsert error: {e}", "ERROR")
+        log_app(f"[warmup][embed] error: {e}", "ERROR")
 
 
 async def _cleanup_stale_keys() -> None:
@@ -513,124 +535,169 @@ async def _cleanup_old_jobs() -> None:
     log_app(f"[warmup] daily cleanup done — {cleaned} old job(s) removed")
 
 
-async def warmup(executor, scrapers: dict) -> None:
-    """Background loop that keeps all warmup keys fresh.
+async def _enrich_cycle(executor, loop) -> None:
+    """For every cached warmup job missing a description, fetch it, then summarize and embed."""
+    import json
 
-    Every CYCLE_INTERVAL seconds, scrapes any keyword×location whose fetched_ts
-    is stale. Sleeps during quiet hours (20–8 ICT). Keys are stored permanently.
+    redis = get_redis()
+    _DETAIL_FN = {
+        "LinkedIn":     scrape_linkedin_detail_one,
+        "TopCV":        scrape_topcv_detail_one,
+        "ITViec":       scrape_itviec_detail_one,
+        "VietnamWorks": scrape_vietnamworks_detail_one,
+        "CareerViet":   scrape_careerviet_detail_one,
+        "JobsGo":       scrape_jobsgo_detail_one,
+        "CareerLink":   scrape_careerlink_detail_one,
+    }
+
+    log_app("[warmup][enrich] starting description enrich pass over cached jobs...")
+    total_enriched = 0
+
+    for kw in await get_warmup_keywords():
+        for loc in _WARMUP_LOCATIONS:
+            key = _key(kw, loc)
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            data = json.loads(raw)
+            jobs = data.get("jobs", [])
+            needs_desc = [j for j in jobs if not j.get("description", "").strip()]
+            if not needs_desc:
+                continue
+
+            log_app(f"[warmup][enrich] {kw!r}/{loc!r}: {len(needs_desc)} jobs need description")
+            changed = False
+            for i, job in enumerate(needs_desc):
+                fn = _DETAIL_FN.get(job.get("source", ""))
+                if not fn:
+                    continue
+                cooldown = 1.5 if i > 0 else 0.0
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(executor, fn, job, cooldown),
+                        timeout=60.0,
+                    )
+                    if job.get("description", "").strip():
+                        job["skills"] = extract_skills(job.get("title", ""), job["description"])
+                        changed = True
+                        total_enriched += 1
+                except asyncio.TimeoutError:
+                    log_app(f"[warmup][enrich] timeout: {job.get('link')}")
+                except Exception as e:
+                    log_app(f"[warmup][enrich] error: {e}")
+
+            if changed:
+                payload = json.dumps({"jobs": jobs, "fetched_ts": data["fetched_ts"]}, ensure_ascii=False)
+                await redis.set(key, payload)
+
+    log_app(f"[warmup][enrich] done — {total_enriched} jobs enriched")
+
+    log_app("[warmup][enrich] triggering summarization...")
+    try:
+        stats = await run_background_summarization()
+        log_app(f"[warmup][enrich] summarization complete: {stats}")
+    except Exception as e:
+        log_app(f"[warmup][enrich] summarization error: {e}", "ERROR")
+
+    log_app("[warmup][enrich] embedding cached jobs...")
+    try:
+        await _embed_cached_jobs(executor)
+    except Exception as e:
+        log_app(f"[warmup][enrich] embed error: {e}", "ERROR")
+
+
+async def _run_scrape_cycle(executor, scrapers: dict, loop, last_fetched_ts: float = 0.0) -> None:
+    """Scrape all warmup keyword×location pairs, then summarize and embed."""
+    warmup_kws = await get_warmup_keywords()
+    pairs = [(kw, loc) for kw in warmup_kws for loc in _WARMUP_LOCATIONS]
+    log_app(f"[warmup] cycle: scraping {len(pairs)} keyword×location pairs")
+
+    for i, (kw, loc) in enumerate(pairs):
+        try:
+            log_app(f"[warmup] scraping {kw!r}/{loc!r}...")
+            await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=last_fetched_ts)
+        except Exception as e:
+            log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
+        if i < len(pairs) - 1:
+            await asyncio.sleep(random.uniform(15, 30))
+
+    log_app("[warmup] cycle done — triggering background summarization")
+    try:
+        stats = await run_background_summarization()
+        log_app(f"[warmup] background summarization complete: {stats}")
+    except Exception as e:
+        log_app(f"[warmup] background summarization error: {e}", "ERROR")
+
+    log_app("[warmup] embedding cached jobs after summarization")
+    try:
+        await _embed_cached_jobs(executor)
+    except Exception as e:
+        log_app(f"[warmup] embed error: {e}", "ERROR")
+
+
+async def warmup(executor, scrapers: dict) -> None:
+    """Background loop that scrapes all warmup keys at 10:00 and 17:00 ICT.
+
+    On startup, scrapes any keyword×location pairs with no cache at all.
+    Then sleeps until the next scheduled run time.
     """
     loop = asyncio.get_event_loop()
 
-    CYCLE_INTERVAL = 3600
-    SCRAPE_INTERVAL = 25200
+    _CLEANUP_INTERVAL = 86400
+    _last_cleanup_ts = 0.0
 
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
 
-    log_app(f"[warmup] startup pass — checking for missing or stale keys...")
+    # Startup: only scrape pairs that have never been cached
+    log_app("[warmup] startup — checking for missing cache entries...")
     warmup_kws = await get_warmup_keywords()
-    now = time.time()
-    startup_tasks = []
+    missing = []
     for kw in warmup_kws:
         for loc in _WARMUP_LOCATIONS:
-            existing = await cache_get(kw, loc)
-            if existing is None or now - existing[1] >= SCRAPE_INTERVAL:
-                startup_tasks.append((kw, loc, existing[1] if existing else 0.0))
+            if await cache_get(kw, loc) is None:
+                missing.append((kw, loc))
 
-    if startup_tasks:
-        log_app(f"[warmup] startup pass: scraping {len(startup_tasks)} missing/stale entries...")
-
-        async def _startup_scrape(kw: str, loc: str, fetched_ts: float) -> None:
-            sleep_secs = _seconds_until_active()
-            if sleep_secs > 0:
-                wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
-                log_app(f"[warmup] startup: quiet hours — waiting until {wake.strftime('%H:%M')} ICT")
-                while True:
-                    remaining = _seconds_until_active()
-                    if remaining <= 0:
-                        break
-                    await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
-                log_app(f"[warmup] startup: quiet hours over — resuming")
+    if missing:
+        log_app(f"[warmup] startup: scraping {len(missing)} missing entries...")
+        for i, (kw, loc) in enumerate(missing):
             try:
-                await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
+                await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=0.0)
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
+            if i < len(missing) - 1:
+                await asyncio.sleep(random.uniform(15, 30))
 
-        for kw, loc, ft in startup_tasks:
-            await _startup_scrape(kw, loc, ft)
-
-        log_app(f"[warmup] startup pass done — triggering background summarization")
+        log_app("[warmup] startup scrape done — summarizing and embedding")
         try:
             stats = await run_background_summarization()
-            log_app(f"[warmup] background summarization complete: {stats}")
+            log_app(f"[warmup] startup summarization complete: {stats}")
         except Exception as e:
-            log_app(f"[warmup] background summarization error: {e}", "ERROR")
+            log_app(f"[warmup] startup summarization error: {e}", "ERROR")
+        try:
+            await _embed_cached_jobs(executor)
+        except Exception as e:
+            log_app(f"[warmup] startup embed error: {e}", "ERROR")
     else:
-        log_app(f"[warmup] startup pass: all keys present, skipping")
-
-    _last_cleanup_ts = 0.0
-    _CLEANUP_INTERVAL = 86400
+        log_app("[warmup] startup: all cache entries present, skipping initial scrape")
 
     while True:
         try:
-            sleep_secs = _seconds_until_active()
-            if sleep_secs > 0:
-                wake = datetime.now(_TZ_ICT) + timedelta(seconds=sleep_secs)
-                log_app(f"[warmup] quiet hours — sleeping until {wake.strftime('%H:%M')} ICT ({sleep_secs/3600:.1f}h)")
-                while True:
-                    remaining = _seconds_until_active()
-                    if remaining <= 0:
-                        break
-                    await asyncio.sleep(min(CYCLE_INTERVAL, remaining))
-                log_app(f"[warmup] quiet hours over — resuming")
+            secs, next_hour = _seconds_until_next_scheduled()
+            next_run = datetime.now(_TZ_ICT) + timedelta(seconds=secs)
+            log_app(f"[warmup] sleeping until {next_run.strftime('%H:%M')} ICT ({secs/3600:.1f}h)")
+            await asyncio.sleep(secs)
 
-            now = time.time()
-            tasks = []
-            for kw in await get_warmup_keywords():
-                for loc in _WARMUP_LOCATIONS:
-                    existing = await cache_get(kw, loc)
-                    if existing is None:
-                        log_app(f"[warmup] URGENT: {_key(kw, loc)!r} missing — scraping immediately")
-                        tasks.append((kw, loc, 0.0))
-                    else:
-                        _, fetched_ts = existing
-                        if now - fetched_ts >= SCRAPE_INTERVAL:
-                            tasks.append((kw, loc, fetched_ts))
-
-            if tasks:
-                missing_count = sum(1 for _, _, ft in tasks if ft == 0.0)
-                log_app(f"[warmup] cycle: {len(tasks)} keys need refresh ({missing_count} missing)")
-
-                async def _scrape_one(kw: str, loc: str, fetched_ts: float) -> None:
-                    age = "missing" if fetched_ts == 0.0 else f"age={int(now - fetched_ts)}s"
-                    try:
-                        log_app(f"[warmup] scraping {kw!r}/{loc!r} ({age})...")
-                        await _scrape_keyword(kw, loc, loop, executor, scrapers, last_fetched_ts=fetched_ts)
-                    except Exception as e:
-                        log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
-
-                for i, (kw, loc, ft) in enumerate(tasks):
-                    await _scrape_one(kw, loc, ft)
-                    if i < len(tasks) - 1:
-                        await asyncio.sleep(random.uniform(15, 30))
-
-                # Trigger background summarization after all scraping done
-                log_app(f"[warmup] cycle done — triggering background summarization")
-                try:
-                    stats = await run_background_summarization()
-                    log_app(f"[warmup] background summarization complete: {stats}")
-                except Exception as e:
-                    log_app(f"[warmup] background summarization error: {e}", "ERROR")
+            if next_hour in _SCRAPE_HOURS:
+                await _run_scrape_cycle(executor, scrapers, loop, last_fetched_ts=time.time() - 86400)
             else:
-                log_app(f"[warmup] cycle: all keys fresh, nothing to scrape")
+                await _enrich_cycle(executor, loop)
 
             if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
                 await _cleanup_old_jobs()
                 await _cleanup_nonwarmup_stale_keys()
                 await _cleanup_nonwarmup_vectors(executor)
                 _last_cleanup_ts = time.time()
-
-            await asyncio.sleep(CYCLE_INTERVAL)
 
         except Exception as e:
             log_app(f"[warmup] cycle crashed: {e}")
