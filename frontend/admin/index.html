@@ -288,10 +288,10 @@
       </div>
     </div>
 
-    <script>
-      const API_BASE = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+    <script type="module">
+      const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
         ? "http://localhost:8000"
-        : "";
+        : (import.meta.env.VITE_API_URL ?? "https://api.goodjobs.io.vn");
 
       function getSecret() {
         let s = sessionStorage.getItem("admin_secret");
@@ -520,6 +520,15 @@
           : _embeddedJobs;
         renderEmbedded(filtered);
       }
+
+      // Expose handlers for inline onclick/oninput attributes.
+      window.switchTab = switchTab;
+      window.loadData = loadData;
+      window.filterTable = filterTable;
+      window.sortTable = sortTable;
+      window.loadEmbeddedJobs = loadEmbeddedJobs;
+      window.toggleDesc = toggleDesc;
+      window.filterEmbedded = filterEmbedded;
 
       // Manual-only: do not auto-fetch on page load.
     </script>
