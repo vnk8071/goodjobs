@@ -685,13 +685,9 @@ async def scrape(req: ScrapeRequest, request: Request):
         raise HTTPException(status_code=400, detail="keyword is required")
     log_search(request, keyword, req.location)
 
-    warmup_kws = await get_warmup_keywords()
-    keyword_corrected = correct_keyword_typos(keyword, warmup_kws)
-    if keyword_corrected != keyword.lower():
-        log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
-
+    # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
     keyword_normalized = " ".join(
-        re.sub(r"\d+", " ", normalize_keyword(keyword_corrected)).split()
+        re.sub(r"\d+", " ", normalize_keyword(keyword)).split()
     )
     cache_keyword = strip_level(keyword_normalized)
 
@@ -791,13 +787,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     # Record this search in IP history for future intent suggestions (fire-and-forget)
     asyncio.ensure_future(record_search(ip, keyword, req.location))
 
-    warmup_kws = await get_warmup_keywords()
-    keyword_corrected = correct_keyword_typos(keyword, warmup_kws)
-    if keyword_corrected != keyword.lower():
-        log_app(f"typo correction: {keyword!r} → {keyword_corrected!r}")
-
+    # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
     keyword_normalized = " ".join(
-        re.sub(r"\d+", " ", normalize_keyword(keyword_corrected)).split()
+        re.sub(r"\d+", " ", normalize_keyword(keyword)).split()
     )
     cache_keyword = strip_level(keyword_normalized)
 

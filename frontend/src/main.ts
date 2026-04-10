@@ -232,6 +232,12 @@ fetchBtn.addEventListener("click", async () => {
     return;
   }
 
+  // Predefined chips are already curated; skip AI typo/suggestion round-trip.
+  if (isChip) {
+    void runSearch(keyword, getLocation(), sharedJobLink);
+    return;
+  }
+
   const location = getLocation() || undefined;
 
   // Fire AI suggestion check in parallel — race with 2s timeout so it never blocks.
