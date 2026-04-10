@@ -521,10 +521,7 @@
         renderEmbedded(filtered);
       }
 
-      loadData();
-      loadEmbeddedJobs();
-      // Auto-refresh every 60 seconds
-      setInterval(loadData, 60_000);
+      // Manual-only: do not auto-fetch on page load.
     </script>
   </body>
 </html>

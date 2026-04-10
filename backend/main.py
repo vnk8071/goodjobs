@@ -75,8 +75,10 @@ graphql_app = GraphQLRouter(schema)
 app.include_router(graphql_app, prefix="/graphql")
 
 _ALLOWED_ORIGINS = [
-    "https://goodjobs.io.vn",
     "http://localhost:5173",
+    "https://goodjobs.io.vn",
+    "https://www.goodjobs.io.vn",
+    "https://vnk8071.github.io",
 ]
 
 app.add_middleware(
