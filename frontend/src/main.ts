@@ -221,24 +221,33 @@ fetchBtn.addEventListener("click", async () => {
   const sharedJobLink = _pendingSharedJobLink;
   _pendingSharedJobLink = null;
 
+  if (locationSelect.value === "_custom" && !locationCustom.value.trim()) {
+    setStatus("Vui lòng nhập địa điểm.", "error");
+    locationCustom.classList.remove("hidden");
+    locationCustom.focus();
+    return;
+  }
+
   const keyword = keywordEl.value.trim();
   if (!keyword) {
     setStatus("Vui lòng nhập tên công việc.", "error");
     return;
   }
-  const isChip = [...suggestionChips].some(c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase());
-  if (!isChip && keyword.split(/\s+/).length < 2) {
+  const isWarmupKeyword = [...suggestionChips].some(
+    c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase(),
+  );
+  if (!isWarmupKeyword && keyword.split(/\s+/).length < 2) {
     setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\").", "error");
     return;
   }
 
-  // Predefined chips are already curated; skip AI typo/suggestion round-trip.
-  if (isChip) {
-    void runSearch(keyword, getLocation(), sharedJobLink);
+  const location = getLocation() || undefined;
+
+  // Warmup keywords are curated; skip AI typo/suggestion round-trip.
+  if (isWarmupKeyword) {
+    void runSearch(keyword, location, sharedJobLink);
     return;
   }
-
-  const location = getLocation() || undefined;
 
   // Fire AI suggestion check in parallel — race with 2s timeout so it never blocks.
   const suggestionTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 2000));
