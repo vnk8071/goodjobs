@@ -13,9 +13,7 @@ const statusEl      = document.getElementById("status")       as HTMLDivElement;
 const resultsEl     = document.getElementById("results")      as HTMLDivElement;
 const jobsBody      = document.getElementById("jobsBody")     as HTMLTableSectionElement;
 const jobCountEl    = document.getElementById("jobCount")     as HTMLSpanElement;
-const relatedEl     = document.getElementById("related")      as HTMLDivElement;
-const relatedBody   = document.getElementById("relatedBody")  as HTMLTableSectionElement;
-const relatedCountEl = document.getElementById("relatedCount") as HTMLSpanElement;
+// Related jobs section removed (feature gated for later release).
 const filterBar    = document.getElementById("filterBar")   as HTMLDivElement;
 const titleFilter  = document.getElementById("titleFilter") as HTMLInputElement;
 
@@ -466,11 +464,14 @@ function _rebuildFilterBar(): void {
   });
 
   // Skill filter row
+  const sourceKeys = new Set(sources.map(s => s.toLowerCase()));
   const skillFreq = new Map<string, number>();
   const skillDisplay = new Map<string, string>();
   for (const j of _allJobs) {
     for (const s of (j.skills ?? [])) {
       const key = s.toLowerCase();
+      // Don't treat job sources (LinkedIn/TopCV/...) as skills.
+      if (sourceKeys.has(key)) continue;
       skillFreq.set(key, (skillFreq.get(key) ?? 0) + 1);
       if (!skillDisplay.has(key)) skillDisplay.set(key, s);
     }
@@ -576,20 +577,7 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
   return tr;
 }
 
-/** Render the related jobs section with the given jobs. */
-export function showRelated(jobs: Job[]): void {
-  relatedBody.innerHTML = "";
-  jobs.forEach((job, i) => relatedBody.appendChild(buildRow(job, i + 1)));
-  relatedCountEl.textContent = `${jobs.length} result${jobs.length !== 1 ? "s" : ""}`;
-  relatedEl.classList.remove("hidden");
-}
-
-/** Hide and clear the related jobs section. */
-export function hideRelated(): void {
-  relatedBody.innerHTML = "";
-  relatedCountEl.textContent = "";
-  relatedEl.classList.add("hidden");
-}
+// (showRelated/hideRelated removed)
 
 // ─── Query suggestion banner ──────────────────────────────────────────────────
 

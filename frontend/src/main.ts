@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, suggestQuery } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated, setSearchContext, openJobByLink, showSuggestionBanner, hideSuggestionBanner } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, openJobByLink, showSuggestionBanner, hideSuggestionBanner } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -105,7 +105,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   fetchBtn.disabled = true;
   currentJobs = [];
   hideResults();
-  hideRelated();
+  // related jobs feature is disabled for now
   hideProgress();
   clearStatus();
   showProgress();
@@ -175,14 +175,8 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
       },
-      (relatedJobs) => {
-        if (location) {
-          for (const j of relatedJobs) {
-            if (!j.location) j.location = location;
-          }
-        }
-        showRelated(relatedJobs);
-      },
+      // onVectorResults (related jobs) is disabled for now
+      () => {},
     );
   } catch (err) {
     hideProgress();
