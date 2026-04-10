@@ -365,17 +365,19 @@ async def cache_overview(secret: str = ""):
             is_warmup = kw_part.lower().strip() in warmup_kws
             is_stale = fetched_ts == 0 or (now - fetched_ts >= STALE_THRESHOLD)
 
-            keys_data.append({
-                "key": key,
-                "keyword": kw_part,
-                "location": loc_part,
-                "job_count": len(fresh_jobs),
-                "fetched_ts": fetched_ts,
-                "fetched_ago": fetched_ago,
-                "stale": is_stale,
-                "warmup": is_warmup,
-                "embedded_count": 0,  # filled in pass 2
-            })
+            keys_data.append(
+                {
+                    "key": key,
+                    "keyword": kw_part,
+                    "location": loc_part,
+                    "job_count": len(fresh_jobs),
+                    "fetched_ts": fetched_ts,
+                    "fetched_ago": fetched_ago,
+                    "stale": is_stale,
+                    "warmup": is_warmup,
+                    "embedded_count": 0,  # filled in pass 2
+                }
+            )
     except Exception as e:
         log_app(f"[cache/overview] scan error: {e}", "ERROR")
 
@@ -437,17 +439,19 @@ async def admin_embedded_jobs(secret: str = ""):
             if not link or link in seen_links:
                 continue
             seen_links.add(link)
-            jobs_out.append({
-                "title": job.get("title", ""),
-                "company": job.get("company", ""),
-                "location": job.get("location", ""),
-                "source": job.get("source", ""),
-                "posted": job.get("posted", ""),
-                "posted_ts": job.get("posted_ts", 0),
-                "link": link,
-                "description": job.get("description", "").strip(),
-                "has_description": bool(job.get("description", "").strip()),
-            })
+            jobs_out.append(
+                {
+                    "title": job.get("title", ""),
+                    "company": job.get("company", ""),
+                    "location": job.get("location", ""),
+                    "source": job.get("source", ""),
+                    "posted": job.get("posted", ""),
+                    "posted_ts": job.get("posted_ts", 0),
+                    "link": link,
+                    "description": job.get("description", "").strip(),
+                    "has_description": bool(job.get("description", "").strip()),
+                }
+            )
 
     if not jobs_out:
         return {"count": 0, "jobs": []}
@@ -492,7 +496,11 @@ async def admin_embed_test(secret: str = "", n: int = 3):
             except Exception:
                 continue
             for job in data.get("jobs", []):
-                if job.get("posted_ts", 0) >= age_cutoff and job.get("link") and job.get("title"):
+                if (
+                    job.get("posted_ts", 0) >= age_cutoff
+                    and job.get("link")
+                    and job.get("title")
+                ):
                     candidates.append(job)
                     if len(candidates) >= n * 5:
                         break
@@ -505,7 +513,9 @@ async def admin_embed_test(secret: str = "", n: int = 3):
     # Filter out already-embedded jobs
     loop = asyncio.get_event_loop()
     unembedded = await embedded_links_filter(candidates)
-    sample = unembedded[:n] or candidates[:n]  # fallback to re-embed if all already done
+    sample = (
+        unembedded[:n] or candidates[:n]
+    )  # fallback to re-embed if all already done
 
     # Run upsert in executor (blocking HTTP calls)
     t0 = time.perf_counter()
@@ -562,23 +572,38 @@ async def stats():
 
 
 @app.get("/cache/scrape")
-async def cache_scrape(keyword: str | None = None, location: str | None = None):
+async def cache_scrape(
+    secret: str = "",
+    keyword: str | None = None,
+    location: str | None = None,
+    warmup_only: bool = False,
+):
     """Trigger a background scrape. Optionally filter by keyword and/or location.
 
     Examples:
       /cache/scrape
       /cache/scrape?keyword=AI Engineer
       /cache/scrape?keyword=AI Engineer&location=Ho Chi Minh City
+      /cache/scrape?warmup_only=true
     """
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
     loop = asyncio.get_event_loop()
     status = await _cache_status_data()
 
-    keys_to_scrape = [
-        k
-        for k in status["keys"]
-        if (keyword is None or k["keyword"].lower() == keyword.lower())
-        and (location is None or k["location"].lower() == location.lower())
-    ]
+    warmup_kws = set(kw.lower().strip() for kw in await get_warmup_keywords())
+
+    keys_to_scrape = []
+    for k in status["keys"]:
+        if keyword is not None and k["keyword"].lower() != keyword.lower():
+            continue
+        if location is not None and k["location"].lower() != location.lower():
+            continue
+        is_warmup = k["keyword"].lower().strip() in warmup_kws
+        if warmup_only and not is_warmup:
+            continue
+        keys_to_scrape.append(k)
 
     if not keys_to_scrape:
         return {"triggered": 0, "message": "no matching keys found"}
@@ -696,7 +721,9 @@ async def scrape(req: ScrapeRequest, request: Request):
     loop = asyncio.get_event_loop()
 
     tasks = [
-        loop.run_in_executor(_executor, timed_scrape, site, fn, cache_keyword, req.location)
+        loop.run_in_executor(
+            _executor, timed_scrape, site, fn, cache_keyword, req.location
+        )
         for site, fn in _SCRAPERS.items()
     ]
 

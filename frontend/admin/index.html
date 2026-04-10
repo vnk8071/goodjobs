@@ -190,6 +190,9 @@
             </svg>
             Refresh
           </button>
+          <button id="warmupAllBtn" class="refresh-btn" onclick="warmupAll()" style="background:#0f172a;">
+            Warmup All
+          </button>
         </div>
       </header>
 
@@ -263,6 +266,8 @@
             <h2>Embedded Jobs <span id="embeddedCount" style="font-weight:400;color:var(--muted);font-size:0.82rem;"></span></h2>
             <div style="display:flex;align-items:center;gap:0.6rem;">
               <input id="embeddedFilter" class="filter-input" type="text" placeholder="Filter title, company…" oninput="filterEmbedded()" />
+              <input id="embeddedSemantic" class="filter-input" type="text" placeholder="Semantic search (embeddings)…" onkeydown="if(event.key==='Enter') searchEmbeddedJobs()" />
+              <button class="refresh-btn" onclick="searchEmbeddedJobs()">Search</button>
               <button id="embeddedLoadBtn" class="refresh-btn" onclick="loadEmbeddedJobs()">Refresh</button>
             </div>
           </div>
@@ -374,8 +379,8 @@
             ? `<span class="badge badge-warmup">warmup</span>`
             : `<span class="badge badge-nonwarmup">non-warmup</span>`;
           const statusBadge = k.stale
-            ? `<span class="badge badge-stale"><span class="dot dot-amber"></span>stale</span>`
-            : `<span class="badge badge-fresh"><span class="dot dot-green"></span>fresh</span>`;
+            ? `<button class="badge badge-stale" style="border:0;cursor:pointer;" title="Scrape this key now" onclick="scrapeKey('${escAttr(k.keyword)}','${escAttr(k.location)}')"><span class="dot dot-amber"></span>stale</button>`
+            : `<button class="badge badge-fresh" style="border:0;cursor:pointer;" title="Scrape this key now" onclick="scrapeKey('${escAttr(k.keyword)}','${escAttr(k.location)}')"><span class="dot dot-green"></span>fresh</button>`;
           const embeddedPct = k.job_count > 0
             ? Math.round(k.embedded_count / k.job_count * 100)
             : 0;
@@ -435,7 +440,55 @@
           ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
       }
 
+      function escAttr(s) {
+        // Escape for single-quoted HTML attributes.
+        return String(s).replace(/[\\']/g, c => (c === "\\" ? "\\\\" : "\\'"));
+      }
+
+      async function scrapeKey(keyword, location) {
+        const secret = getSecret();
+        if (!secret) return;
+        try {
+          const res = await fetch(`${API_BASE}/cache/scrape?secret=${encodeURIComponent(secret)}&keyword=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}`);
+          if (res.status === 403) {
+            sessionStorage.removeItem("admin_secret");
+            alert("Invalid secret key.");
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Optimistic UI: refresh overview after triggering.
+          await loadData();
+        } catch (e) {
+          alert(`Scrape failed: ${e.message}`);
+        }
+      }
+
+      async function warmupAll() {
+        const secret = getSecret();
+        if (!secret) return;
+        const btn = document.getElementById("warmupAllBtn");
+        const prev = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Warming…";
+        try {
+          const res = await fetch(`${API_BASE}/cache/scrape?secret=${encodeURIComponent(secret)}&warmup_only=true`);
+          if (res.status === 403) {
+            sessionStorage.removeItem("admin_secret");
+            alert("Invalid secret key.");
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          await loadData();
+        } catch (e) {
+          alert(`Warmup failed: ${e.message}`);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = prev;
+        }
+      }
+
       let _embeddedJobs = [];
+      let _embeddedView = "all"; // "all" | "semantic"
 
       async function loadEmbeddedJobs() {
         const secret = getSecret();
@@ -455,6 +508,7 @@
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
           _embeddedJobs = data.jobs || [];
+          _embeddedView = "all";
           const embeddedN = _embeddedJobs.filter(j => j.embedded).length;
           document.getElementById("embeddedCount").textContent =
             `— ${data.count.toLocaleString()} jobs, ${embeddedN} embedded`;
@@ -464,6 +518,40 @@
         } finally {
           btn.disabled = false;
           btn.textContent = "Load";
+        }
+      }
+
+      async function searchEmbeddedJobs() {
+        const q = document.getElementById("embeddedSemantic").value.trim();
+        const tbody = document.getElementById("embeddedBody");
+        if (!q) {
+          // Empty query: go back to the full cached list (if loaded).
+          _embeddedView = "all";
+          filterEmbedded();
+          return;
+        }
+
+        tbody.innerHTML = `<tr><td colspan="7" class="loading">Searching embeddings…</td></tr>`;
+        try {
+          const res = await fetch(`${API_BASE}/search-semantic?q=${encodeURIComponent(q)}&top_k=50`);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          const results = (data.results || []).map(r => ({
+            title: r.title || "",
+            company: r.company || "",
+            location: r.location || "",
+            source: r.source || "",
+            posted: r.posted || "",
+            link: r.link || "",
+            embedded: true,
+            _vector_score: r.score,
+          }));
+          _embeddedView = "semantic";
+          document.getElementById("embeddedCount").textContent =
+            `— semantic: ${results.length.toLocaleString()} matches`;
+          renderEmbedded(results);
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Error: ${escHtml(e.message)}</td></tr>`;
         }
       }
 
@@ -481,6 +569,9 @@
             : j.has_description
               ? `<span class="badge badge-stale"><span class="dot dot-amber"></span>pending</span>`
               : `<span class="badge badge-nonwarmup">no desc</span>`;
+          const scoreHtml = (typeof j._vector_score === "number")
+            ? ` <span class="text-muted" title="Vector score">(${j._vector_score.toFixed(4)})</span>`
+            : "";
           const mainRow = `
             <tr>
               <td style="width:28px;">
@@ -491,7 +582,7 @@
               <td class="text-muted">${escHtml(j.location || "—")}</td>
               <td><span class="badge badge-nonwarmup">${escHtml(j.source || "—")}</span></td>
               <td class="text-right text-muted">${escHtml(j.posted || "—")}</td>
-              <td>${embeddedBadge}</td>
+              <td>${embeddedBadge}${scoreHtml}</td>
             </tr>`;
           const descRow = hasDesc ? `
             <tr id="${descId}" class="desc-row" style="display:none;">
@@ -512,6 +603,11 @@
 
       function filterEmbedded() {
         const q = document.getElementById("embeddedFilter").value.trim().toLowerCase();
+        if (_embeddedView === "semantic") {
+          // In semantic mode, the table is owned by the semantic results.
+          // Clearing the semantic query returns to the full list.
+          return;
+        }
         const filtered = q
           ? _embeddedJobs.filter(j =>
               (j.title || "").toLowerCase().includes(q) ||
@@ -527,8 +623,11 @@
       window.filterTable = filterTable;
       window.sortTable = sortTable;
       window.loadEmbeddedJobs = loadEmbeddedJobs;
+      window.searchEmbeddedJobs = searchEmbeddedJobs;
       window.toggleDesc = toggleDesc;
       window.filterEmbedded = filterEmbedded;
+      window.scrapeKey = scrapeKey;
+      window.warmupAll = warmupAll;
 
       // Manual-only: do not auto-fetch on page load.
     </script>
