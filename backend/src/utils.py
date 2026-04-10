@@ -1,10 +1,15 @@
 import re
+import time
 from datetime import date, timedelta
 from html import unescape
+from typing import Callable, TypeVar
 
 from bs4 import BeautifulSoup
 
 from .constants import DESC_MAX_CHARS
+from .logger import log_app
+
+T = TypeVar("T")
 
 
 def _fmt_num(val) -> str:
@@ -87,3 +92,24 @@ def _truncate(text: str, max_chars: int = DESC_MAX_CHARS) -> str:
     if last_close != -1:
         cut = cut[: last_close + 1]
     return cut
+
+
+def timed_scrape(site: str, fn: Callable[..., T], kw: str, loc: str, *args, **kwargs) -> T:
+    """Execute a scraper function with timing and logging.
+
+    Args:
+        site: Display name of the site being scraped
+        fn: The scraper function to execute
+        kw: Keyword being searched
+        loc: Location being searched
+        *args: Additional positional args to pass to fn
+        **kwargs: Additional keyword args to pass to fn
+
+    Returns:
+        The result of fn(kw, loc, *args, **kwargs)
+    """
+    t0 = time.perf_counter()
+    result = fn(kw, loc, *args, **kwargs)
+    elapsed = time.perf_counter() - t0
+    log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result) if isinstance(result, (list, tuple)) else 'N/A'} jobs")
+    return result

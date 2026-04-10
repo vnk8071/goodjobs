@@ -74,5 +74,6 @@ jobs:
             export CLOUDFLARE_ACCOUNT_ID="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
             export CLOUDFLARE_API_TOKEN="${{ secrets.CLOUDFLARE_API_TOKEN }}"
             export WARMUP_KEYWORDS="${{ secrets.WARMUP_KEYWORDS }}"
+            export ADMIN_SECRET="${{ secrets.ADMIN_SECRET }}"
             docker compose -f docker-compose.server.yml pull backend
             docker compose -f docker-compose.server.yml up -d --remove-orphans --force-recreate

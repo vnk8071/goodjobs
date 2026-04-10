@@ -1,4 +1,4 @@
-import type { Job, ScrapeRequest } from "./types";
+import type { Job, ScrapeRequest, QuerySuggestion } from "./types";
 
 const _LINKEDIN_BASE =
   "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search";
@@ -72,6 +72,30 @@ export async function scrapeLinkedInFallback(
 }
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "";
+
+/**
+ * Pre-verify user query with AI spell-check and intent mapping.
+ * Returns a suggestion with corrected text and best matching cached keyword.
+ * Resolves to null on network error or timeout so the search can proceed unblocked.
+ */
+export async function suggestQuery(
+  keyword: string,
+  location?: string,
+  signal?: AbortSignal,
+): Promise<QuerySuggestion | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/suggest-query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword, location }),
+      signal,
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as QuerySuggestion;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Streams job results from the backend via SSE (VPS) or plain JSON (Lambda).

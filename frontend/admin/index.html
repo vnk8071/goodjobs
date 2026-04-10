@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Good Jobs — Admin</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%232563eb'/><text x='3' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'>G</text><text x='16' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white' opacity='0.75'>J</text></svg>" />
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --primary-dark: #2563eb;
+        --bg: #f1f5f9;
+        --card: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #64748b;
+        --success: #16a34a;
+        --warning: #d97706;
+        --danger: #dc2626;
+        --radius: 10px;
+        --mono: "JetBrains Mono", "Fira Code", monospace;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 1.5rem 1rem 4rem;
+        font-size: 0.9rem;
+      }
+      a { color: var(--primary); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      /* ── Layout ────────────────────────────────────── */
+      .container { max-width: 1200px; margin: 0 auto; }
+      header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;
+      }
+      .header-left { display: flex; align-items: center; gap: 0.85rem; }
+      .logo {
+        width: 40px; height: 40px; flex-shrink: 0;
+        background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+        border-radius: 10px; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+      }
+      header h1 { font-size: 1.3rem; font-weight: 800; }
+      header p { font-size: 0.8rem; color: var(--muted); margin-top: 1px; }
+      .refresh-btn {
+        display: flex; align-items: center; gap: 0.4rem;
+        padding: 0.45rem 1rem; background: var(--primary); color: #fff;
+        border: none; border-radius: 7px; font-size: 0.85rem; font-weight: 600;
+        cursor: pointer; transition: opacity 0.15s;
+      }
+      .refresh-btn:hover { opacity: 0.85; }
+      .refresh-btn:disabled { opacity: 0.5; cursor: default; }
+
+      /* ── Stat cards ────────────────────────────────── */
+      .stats-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 1rem; margin-bottom: 1.5rem;
+      }
+      .stat-card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      }
+      .stat-card .label { font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+      .stat-card .value { font-size: 1.9rem; font-weight: 800; margin-top: 0.2rem; line-height: 1; }
+      .stat-card .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+
+      /* ── Table card ────────────────────────────────── */
+      .table-card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        overflow: hidden; margin-bottom: 1.5rem;
+      }
+      .table-card-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border);
+        flex-wrap: wrap; gap: 0.5rem;
+      }
+      .table-card-header h2 { font-size: 0.95rem; font-weight: 700; }
+      .filter-input {
+        padding: 0.3rem 0.7rem; border: 1px solid var(--border);
+        border-radius: 6px; font-size: 0.82rem; outline: none; width: 220px;
+      }
+      .filter-input:focus { border-color: var(--primary); }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+      th {
+        text-align: left; padding: 0.6rem 0.85rem;
+        background: #f8fafc; border-bottom: 1px solid var(--border);
+        font-size: 0.75rem; font-weight: 700; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap;
+        cursor: pointer; user-select: none;
+      }
+      th:hover { color: var(--text); }
+      th .sort-icon { margin-left: 0.25rem; opacity: 0.4; }
+      th.sorted .sort-icon { opacity: 1; color: var(--primary); }
+      td { padding: 0.55rem 0.85rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+      tr:last-child td { border-bottom: none; }
+      tr:hover td { background: #f8fafc; }
+
+      /* ── Badges ────────────────────────────────────── */
+      .badge {
+        display: inline-flex; align-items: center; gap: 0.2rem;
+        padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.72rem; font-weight: 600;
+      }
+      .badge-warmup   { background: #dbeafe; color: #1d4ed8; }
+      .badge-nonwarmup { background: #f1f5f9; color: var(--muted); }
+      .badge-stale    { background: #fef3c7; color: #92400e; }
+      .badge-fresh    { background: #dcfce7; color: var(--success); }
+      .badge-embedded { background: #ede9fe; color: #6d28d9; }
+
+      .dot {
+        display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .dot-green  { background: var(--success); }
+      .dot-amber  { background: var(--warning); }
+      .dot-red    { background: var(--danger); }
+
+      /* ── Tabs ─────────────────────────────────────── */
+      .tabs {
+        display: flex; gap: 0; border-bottom: 2px solid var(--border);
+        margin-bottom: 1.25rem;
+      }
+      .tab-btn {
+        padding: 0.6rem 1.25rem; background: none; border: none;
+        font-size: 0.88rem; font-weight: 600; color: var(--muted);
+        cursor: pointer; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; transition: color 0.15s, border-color 0.15s;
+      }
+      .tab-btn:hover { color: var(--text); }
+      .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+      .tab-panel { display: none; }
+      .tab-panel.active { display: block; }
+
+      /* ── Description expand ───────────────────────── */
+      .expand-btn {
+        background: none; border: none; cursor: pointer;
+        color: var(--muted); font-size: 0.75rem; padding: 0.1rem 0.3rem;
+        border-radius: 4px; line-height: 1;
+      }
+      .expand-btn:hover { background: var(--border); color: var(--text); }
+      .desc-row td {
+        padding: 0.5rem 0.85rem 0.75rem 2.5rem;
+        border-bottom: 1px solid #f1f5f9;
+        background: #f8fafc;
+        font-size: 0.8rem; color: var(--muted);
+        white-space: pre-wrap; line-height: 1.5;
+      }
+
+      /* ── Misc ──────────────────────────────────────── */
+      .mono { font-family: var(--mono); font-size: 0.78rem; }
+      .text-muted { color: var(--muted); }
+      .text-right { text-align: right; }
+      .loading { color: var(--muted); padding: 2rem; text-align: center; }
+      .error-msg { color: var(--danger); padding: 2rem; text-align: center; }
+      .last-updated { font-size: 0.75rem; color: var(--muted); }
+
+      @media (max-width: 600px) {
+        .filter-input { width: 100%; }
+        .stat-card .value { font-size: 1.5rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <div class="header-left">
+          <a href="/" class="logo" aria-label="Good Jobs home">
+            <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:24px;height:24px;">
+              <text x="8" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
+              <text x="22" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
+            </svg>
+          </a>
+          <div>
+            <h1>Good Jobs — Admin</h1>
+            <p>Cache &amp; Embedding Dashboard</p>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <span id="lastUpdated" class="last-updated"></span>
+          <button id="refreshBtn" class="refresh-btn" onclick="loadData()">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </header>
+
+      <!-- Summary stats -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">Cache Keys</div>
+          <div class="value" id="statKeys">—</div>
+          <div class="sub" id="statStale"></div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Cached Jobs</div>
+          <div class="value" id="statJobs">—</div>
+          <div class="sub">fresh (&lt;8 days)</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Unique Links</div>
+          <div class="value" id="statLinks">—</div>
+          <div class="sub">across all keys</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Embedded Vectors</div>
+          <div class="value" id="statEmbedded">—</div>
+          <div class="sub">in Cloudflare Vectorize</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Warmup Keys</div>
+          <div class="value" id="statWarmup">—</div>
+          <div class="sub" id="statNonWarmup"></div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('cache')">Cache Keys</button>
+        <button class="tab-btn" onclick="switchTab('embedded')">Embedded Jobs</button>
+      </div>
+
+      <!-- Tab: Cache Keys -->
+      <div id="tab-cache" class="tab-panel active">
+        <div class="table-card">
+          <div class="table-card-header">
+            <h2>All Cache Keys</h2>
+            <input id="keyFilter" class="filter-input" type="text" placeholder="Filter keyword or location…" oninput="filterTable()" />
+          </div>
+          <div class="table-wrap">
+            <table id="keysTable">
+              <thead>
+                <tr>
+                  <th onclick="sortTable('keyword')">Keyword <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable('location')">Location <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable('job_count')" class="text-right">Jobs <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable('embedded_count')" class="text-right">Embedded <span class="sort-icon">↕</span></th>
+                  <th onclick="sortTable('fetched_ts')" class="text-right">Fetched <span class="sort-icon">↕</span></th>
+                  <th>Type</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="keysBody">
+                <tr><td colspan="7" class="loading">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Embedded Jobs -->
+      <div id="tab-embedded" class="tab-panel">
+        <div class="table-card">
+          <div class="table-card-header">
+            <h2>Embedded Jobs <span id="embeddedCount" style="font-weight:400;color:var(--muted);font-size:0.82rem;"></span></h2>
+            <div style="display:flex;align-items:center;gap:0.6rem;">
+              <input id="embeddedFilter" class="filter-input" type="text" placeholder="Filter title, company…" oninput="filterEmbedded()" />
+              <button id="embeddedLoadBtn" class="refresh-btn" onclick="loadEmbeddedJobs()">Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Title</th>
+                  <th>Company</th>
+                  <th>Location</th>
+                  <th>Source</th>
+                  <th class="text-right">Posted</th>
+                  <th>Embedded</th>
+                </tr>
+              </thead>
+              <tbody id="embeddedBody">
+                <tr><td colspan="7" class="loading">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_BASE = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+        ? "http://localhost:8000"
+        : "";
+
+      function getSecret() {
+        let s = sessionStorage.getItem("admin_secret");
+        if (!s) {
+          s = prompt("Enter admin secret key:");
+          if (!s) return null;
+          sessionStorage.setItem("admin_secret", s);
+        }
+        return s;
+      }
+
+      function switchTab(name) {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add("active");
+        document.getElementById(`tab-${name}`).classList.add("active");
+      }
+
+      let _allKeys = [];
+      let _sortCol = "warmup";
+      let _sortAsc = false;
+
+      async function loadData() {
+        const secret = getSecret();
+        if (!secret) return;
+        const btn = document.getElementById("refreshBtn");
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+        try {
+          const res = await fetch(`${API_BASE}/cache/overview?secret=${encodeURIComponent(secret)}`);
+          if (res.status === 403) {
+            sessionStorage.removeItem("admin_secret");
+            document.getElementById("keysBody").innerHTML =
+              `<tr><td colspan="7" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          renderStats(data);
+          _allKeys = data.keys || [];
+          renderTable(_allKeys);
+          document.getElementById("lastUpdated").textContent =
+            "Updated " + new Date().toLocaleTimeString();
+        } catch (e) {
+          document.getElementById("keysBody").innerHTML =
+            `<tr><td colspan="7" class="error-msg">Failed to load: ${e.message}</td></tr>`;
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = `
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+            Refresh`;
+        }
+      }
+
+      function renderStats(data) {
+        document.getElementById("statKeys").textContent = data.total_keys.toLocaleString();
+        document.getElementById("statJobs").textContent = data.total_jobs.toLocaleString();
+        document.getElementById("statLinks").textContent = data.total_unique_links.toLocaleString();
+        document.getElementById("statEmbedded").textContent = data.embedded_count.toLocaleString();
+
+        const warmupCount = (data.keys || []).filter(k => k.warmup).length;
+        const nonWarmupCount = (data.keys || []).length - warmupCount;
+        const staleCount = (data.keys || []).filter(k => k.stale).length;
+        document.getElementById("statWarmup").textContent = warmupCount.toLocaleString();
+        document.getElementById("statNonWarmup").textContent = `${nonWarmupCount} non-warmup`;
+        document.getElementById("statStale").textContent =
+          staleCount > 0 ? `${staleCount} stale` : "all fresh";
+      }
+
+      function renderTable(keys) {
+        const tbody = document.getElementById("keysBody");
+        if (!keys.length) {
+          tbody.innerHTML = `<tr><td colspan="7" class="loading text-muted">No cache keys found.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = keys.map(k => {
+          const typeBadge = k.warmup
+            ? `<span class="badge badge-warmup">warmup</span>`
+            : `<span class="badge badge-nonwarmup">non-warmup</span>`;
+          const statusBadge = k.stale
+            ? `<span class="badge badge-stale"><span class="dot dot-amber"></span>stale</span>`
+            : `<span class="badge badge-fresh"><span class="dot dot-green"></span>fresh</span>`;
+          const embeddedPct = k.job_count > 0
+            ? Math.round(k.embedded_count / k.job_count * 100)
+            : 0;
+          const embeddedCell = k.job_count > 0
+            ? `<strong>${k.embedded_count.toLocaleString()}</strong> <span class="text-muted">/ ${k.job_count} (${embeddedPct}%)</span>`
+            : `<span class="text-muted">—</span>`;
+          return `
+            <tr>
+              <td class="mono">${escHtml(k.keyword)}</td>
+              <td class="text-muted">${escHtml(k.location)}</td>
+              <td class="text-right"><strong>${k.job_count.toLocaleString()}</strong></td>
+              <td class="text-right">${embeddedCell}</td>
+              <td class="text-right text-muted">${k.fetched_ago}</td>
+              <td>${typeBadge}</td>
+              <td>${statusBadge}</td>
+            </tr>`;
+        }).join("");
+      }
+
+      function filterTable() {
+        const q = document.getElementById("keyFilter").value.trim().toLowerCase();
+        const filtered = q
+          ? _allKeys.filter(k =>
+              k.keyword.toLowerCase().includes(q) || k.location.toLowerCase().includes(q))
+          : _allKeys;
+        renderTable(sorted(filtered));
+      }
+
+      function sortTable(col) {
+        if (_sortCol === col) {
+          _sortAsc = !_sortAsc;
+        } else {
+          _sortCol = col;
+          _sortAsc = col === "keyword" || col === "location";
+        }
+        // Update header highlight
+        document.querySelectorAll("th").forEach(th => th.classList.remove("sorted"));
+        document.querySelectorAll("th").forEach(th => {
+          if (th.getAttribute("onclick") === `sortTable('${col}')`) th.classList.add("sorted");
+        });
+        filterTable();
+      }
+
+      function sorted(keys) {
+        return [...keys].sort((a, b) => {
+          let av = a[_sortCol], bv = b[_sortCol];
+          if (typeof av === "string") av = av.toLowerCase();
+          if (typeof bv === "string") bv = bv.toLowerCase();
+          if (av < bv) return _sortAsc ? -1 : 1;
+          if (av > bv) return _sortAsc ? 1 : -1;
+          return 0;
+        });
+      }
+
+      function escHtml(s) {
+        return String(s).replace(/[&<>"']/g, c =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+      }
+
+      let _embeddedJobs = [];
+
+      async function loadEmbeddedJobs() {
+        const secret = getSecret();
+        if (!secret) return;
+        const btn = document.getElementById("embeddedLoadBtn");
+        const tbody = document.getElementById("embeddedBody");
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+        tbody.innerHTML = `<tr><td colspan="5" class="loading">Fetching embedded jobs…</td></tr>`;
+        try {
+          const res = await fetch(`${API_BASE}/admin/embedded-jobs?secret=${encodeURIComponent(secret)}`);
+          if (res.status === 403) {
+            sessionStorage.removeItem("admin_secret");
+            tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Invalid secret key.</td></tr>`;
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          _embeddedJobs = data.jobs || [];
+          const embeddedN = _embeddedJobs.filter(j => j.embedded).length;
+          document.getElementById("embeddedCount").textContent =
+            `— ${data.count.toLocaleString()} jobs, ${embeddedN} embedded`;
+          renderEmbedded(_embeddedJobs);
+        } catch (e) {
+          tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Error: ${escHtml(e.message)}</td></tr>`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Load";
+        }
+      }
+
+      function renderEmbedded(jobs) {
+        const tbody = document.getElementById("embeddedBody");
+        if (!jobs.length) {
+          tbody.innerHTML = `<tr><td colspan="7" class="loading text-muted">No cached jobs found.</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = jobs.map((j, i) => {
+          const hasDesc = !!j.description;
+          const descId = `desc-${i}`;
+          const embeddedBadge = j.embedded
+            ? `<span class="badge badge-embedded"><span class="dot" style="background:#6d28d9;width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;"></span>yes</span>`
+            : j.has_description
+              ? `<span class="badge badge-stale"><span class="dot dot-amber"></span>pending</span>`
+              : `<span class="badge badge-nonwarmup">no desc</span>`;
+          const mainRow = `
+            <tr>
+              <td style="width:28px;">
+                ${hasDesc ? `<button class="expand-btn" onclick="toggleDesc('${descId}')" title="Toggle description">▶</button>` : ""}
+              </td>
+              <td class="mono"><a href="${escHtml(j.link)}" target="_blank" rel="noopener">${escHtml(j.title)}</a></td>
+              <td class="text-muted">${escHtml(j.company || "—")}</td>
+              <td class="text-muted">${escHtml(j.location || "—")}</td>
+              <td><span class="badge badge-nonwarmup">${escHtml(j.source || "—")}</span></td>
+              <td class="text-right text-muted">${escHtml(j.posted || "—")}</td>
+              <td>${embeddedBadge}</td>
+            </tr>`;
+          const descRow = hasDesc ? `
+            <tr id="${descId}" class="desc-row" style="display:none;">
+              <td colspan="7">${escHtml(j.description)}</td>
+            </tr>` : "";
+          return mainRow + descRow;
+        }).join("");
+      }
+
+      function toggleDesc(id) {
+        const row = document.getElementById(id);
+        if (!row) return;
+        const btn = row.previousElementSibling.querySelector(".expand-btn");
+        const visible = row.style.display !== "none";
+        row.style.display = visible ? "none" : "";
+        if (btn) btn.textContent = visible ? "▶" : "▼";
+      }
+
+      function filterEmbedded() {
+        const q = document.getElementById("embeddedFilter").value.trim().toLowerCase();
+        const filtered = q
+          ? _embeddedJobs.filter(j =>
+              (j.title || "").toLowerCase().includes(q) ||
+              (j.company || "").toLowerCase().includes(q) ||
+              (j.location || "").toLowerCase().includes(q))
+          : _embeddedJobs;
+        renderEmbedded(filtered);
+      }
+
+      loadData();
+      loadEmbeddedJobs();
+      // Auto-refresh every 60 seconds
+      setInterval(loadData, 60_000);
+    </script>
+  </body>
+</html>

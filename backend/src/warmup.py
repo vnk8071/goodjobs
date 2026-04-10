@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 import random
 import time
@@ -331,18 +332,20 @@ async def _embed_cached_jobs(executor) -> None:
     loop = asyncio.get_event_loop()
     redis = get_redis()
     try:
-        all_jobs: list[dict] = []
-        for kw in await get_warmup_keywords():
-            for loc in _WARMUP_LOCATIONS:
-                raw = await redis.get(_key(kw, loc))
-                if not raw:
-                    continue
-                import json
+        import json
 
+        all_jobs: list[dict] = []
+        async for key in redis.scan_iter("jobs:*"):
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
                 data = json.loads(raw)
-                for job in data.get("jobs", []):
-                    if job.get("description", "").strip():
-                        all_jobs.append(job)
+            except Exception:
+                continue
+            for job in data.get("jobs", []):
+                if job.get("description", "").strip():
+                    all_jobs.append(job)
 
         unembedded = await embedded_links_filter(all_jobs)
         if not unembedded:
@@ -455,8 +458,6 @@ async def _cleanup_nonwarmup_vectors(executor) -> None:
             for link in candidates:
                 ws = warmup_scores.get(link)
                 if ws is None or ws < cutoff:
-                    import hashlib
-
                     to_delete.append(hashlib.sha1(link.encode()).hexdigest())
                 else:
                     total_skipped += 1

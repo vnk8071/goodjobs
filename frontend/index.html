@@ -1370,6 +1370,48 @@
 
       .about-section.hidden { display: none; }
 
+      /* ─── Query suggestion banner ─────────────────────────── */
+      .suggestion-banner {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.85rem;
+        margin-top: 0.5rem;
+        background: var(--surface, #f9f9f9);
+        border: 1px solid var(--border, #ddd);
+        border-radius: 8px;
+        font-size: 0.875rem;
+        color: var(--text, #111);
+        animation: fadeIn 0.2s ease;
+      }
+      .suggestion-banner.hidden { display: none; }
+      .suggestion-banner__text { color: var(--muted, #888); flex-shrink: 0; }
+      .suggestion-banner__accept {
+        background: none;
+        border: none;
+        padding: 0;
+        font: inherit;
+        font-weight: 600;
+        color: var(--accent, #0066cc);
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        flex: 1;
+        text-align: left;
+      }
+      .suggestion-banner__accept:hover { opacity: 0.75; }
+      .suggestion-banner__dismiss {
+        background: none;
+        border: none;
+        padding: 0 0.25rem;
+        font-size: 0.75rem;
+        color: var(--muted, #888);
+        cursor: pointer;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .suggestion-banner__dismiss:hover { color: var(--text, #111); }
+
     </style>
   </head>
   <body>

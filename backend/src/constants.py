@@ -68,6 +68,7 @@ DESC_MAX_CHARS      = 4000
 RECENT_DAYS         = 8
 MAX_CONCURRENT      = 6
 REDIS_URL           = os.getenv("REDIS_URL", "redis://redis:6379")
+ADMIN_SECRET        = os.getenv("ADMIN_SECRET", "")
 VECTOR_RETENTION_DAYS = 8
 
 # Summarizer configuration

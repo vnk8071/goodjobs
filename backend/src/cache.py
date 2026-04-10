@@ -4,7 +4,7 @@ from difflib import SequenceMatcher
 
 from redis.asyncio import Redis
 
-from .constants import REDIS_URL
+from .constants import REDIS_URL, RECENT_DAYS
 from .logger import log_app
 from .matching import strip_level
 
@@ -50,9 +50,9 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
 
 
 async def cache_set(
-    keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = 8
+    keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = RECENT_DAYS
 ) -> None:
-    """Store jobs in cache with a TTL (default 8 days) to prevent unbounded Redis growth."""
+    """Store jobs in cache with a TTL (default RECENT_DAYS) to prevent unbounded Redis growth."""
     try:
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
@@ -213,6 +213,16 @@ async def embedded_links_filter(jobs: list[dict]) -> list[dict]:
     except Exception as e:
         log_app(f"embedded_links_filter error: {e}", "ERROR")
         return jobs
+
+
+async def embedded_links_all() -> set[str]:
+    """Return all job links that have been marked as embedded in Vectorize."""
+    try:
+        members = await get_redis().smembers(_EMBEDDED_LINKS_KEY)
+        return {m.decode() if isinstance(m, bytes) else m for m in members}
+    except Exception as e:
+        log_app(f"embedded_links_all error: {e}", "ERROR")
+        return set()
 
 
 async def embedded_links_count() -> int:

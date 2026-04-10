@@ -25,7 +25,7 @@ RUN printf 'server {\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
     location / {\n\
-        try_files $uri $uri/ /index.html;\n\
+        try_files $uri $uri/index.html /index.html;\n\
     }\n\
 }\n' > /etc/nginx/conf.d/default.conf
 

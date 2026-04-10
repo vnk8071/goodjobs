@@ -591,6 +591,59 @@ export function hideRelated(): void {
   relatedEl.classList.add("hidden");
 }
 
+// ─── Query suggestion banner ──────────────────────────────────────────────────
+
+let _suggestionBanner: HTMLDivElement | null = null;
+
+function _getOrCreateSuggestionBanner(): HTMLDivElement {
+  if (_suggestionBanner) return _suggestionBanner;
+  const banner = document.createElement("div");
+  banner.id = "suggestionBanner";
+  banner.className = "suggestion-banner hidden";
+  // Insert right after the status bar so it appears prominently
+  statusEl.insertAdjacentElement("afterend", banner);
+  _suggestionBanner = banner;
+  return banner;
+}
+
+/**
+ * Show a "Did you mean?" banner with optional accept/dismiss actions.
+ * @param corrected  The AI-corrected query text.
+ * @param onAccept   Called when the user clicks the corrected suggestion.
+ * @param onDismiss  Called when the user dismisses the banner.
+ */
+export function showSuggestionBanner(
+  corrected: string,
+  onAccept: (corrected: string) => void,
+  onDismiss: () => void,
+): void {
+  const banner = _getOrCreateSuggestionBanner();
+  banner.innerHTML = `
+    <span class="suggestion-banner__text">Ý bạn là: </span>
+    <button class="suggestion-banner__accept" type="button">${corrected}</button>
+    <button class="suggestion-banner__dismiss" type="button" aria-label="Bỏ qua">✕</button>
+  `;
+  banner.classList.remove("hidden");
+
+  banner.querySelector<HTMLButtonElement>(".suggestion-banner__accept")!
+    .addEventListener("click", () => {
+      hideSuggestionBanner();
+      onAccept(corrected);
+    });
+
+  banner.querySelector<HTMLButtonElement>(".suggestion-banner__dismiss")!
+    .addEventListener("click", () => {
+      hideSuggestionBanner();
+      onDismiss();
+    });
+}
+
+/** Hide and clear the suggestion banner. */
+export function hideSuggestionBanner(): void {
+  _suggestionBanner?.classList.add("hidden");
+  if (_suggestionBanner) _suggestionBanner.innerHTML = "";
+}
+
 resultsShareBtn?.addEventListener("click", () => {
   const url = new URL(window.location.origin + window.location.pathname);
   if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);

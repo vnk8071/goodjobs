@@ -26,3 +26,10 @@ export interface ScrapeRequest {
   keyword: string;
   location?: string;
 }
+
+export interface QuerySuggestion {
+  corrected: string;
+  changed: boolean;
+  suggested_cache_keyword: string | null;
+  reasoning: string;
+}

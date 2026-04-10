@@ -1,5 +1,5 @@
-import { scrapeJobsStream, scrapeLinkedInFallback } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated, setSearchContext, openJobByLink } from "./ui";
+import { scrapeJobsStream, scrapeLinkedInFallback, suggestQuery } from "./api";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, showRelated, hideRelated, setSearchContext, openJobByLink, showSuggestionBanner, hideSuggestionBanner } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -92,31 +92,18 @@ let abortController: AbortController | null = null;
 
 let _pendingSharedJobLink: string | null = null;
 
-fetchBtn.addEventListener("click", async () => {
-  const sharedJobLink = _pendingSharedJobLink;
-  _pendingSharedJobLink = null;
-
-  const keyword = keywordEl.value.trim();
-  if (!keyword) {
-    setStatus("Vui lòng nhập tên công việc.", "error");
-    return;
-  }
-  const isChip = [...suggestionChips].some(c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase());
-  if (!isChip && keyword.split(/\s+/).length < 2) {
-    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\").", "error");
-    return;
-  }
-
+/** Run a search with the given keyword and location. Extracted so it can be
+ *  triggered both from the button click and from accepting an AI suggestion. */
+async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null): Promise<void> {
   abortController?.abort();
   abortController = new AbortController();
 
-  const location = getLocation() || undefined;
-
+  hideSuggestionBanner();
   setSearchContext(keyword, location);
+  keywordEl.value = keyword;
 
   fetchBtn.disabled = true;
   currentJobs = [];
-  // Keep publisher content visible for AdSense and first-time users.
   hideResults();
   hideRelated();
   hideProgress();
@@ -234,6 +221,51 @@ fetchBtn.addEventListener("click", async () => {
   } finally {
     fetchBtn.disabled = false;
   }
+}
+
+fetchBtn.addEventListener("click", async () => {
+  const sharedJobLink = _pendingSharedJobLink;
+  _pendingSharedJobLink = null;
+
+  const keyword = keywordEl.value.trim();
+  if (!keyword) {
+    setStatus("Vui lòng nhập tên công việc.", "error");
+    return;
+  }
+  const isChip = [...suggestionChips].some(c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase());
+  if (!isChip && keyword.split(/\s+/).length < 2) {
+    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\").", "error");
+    return;
+  }
+
+  const location = getLocation() || undefined;
+
+  // Fire AI suggestion check in parallel — race with 2s timeout so it never blocks.
+  const suggestionTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 2000));
+  const suggestionPromise = suggestQuery(keyword, location);
+  const suggestion = await Promise.race([suggestionPromise, suggestionTimeout]);
+
+  // Auto-apply pure spelling corrections (corrected ≈ original in word count).
+  const effectiveKeyword = (suggestion?.changed && suggestion.corrected)
+    ? suggestion.corrected
+    : keyword;
+
+  // Start the actual search with the (possibly corrected) keyword.
+  void runSearch(effectiveKeyword, location, sharedJobLink);
+
+  // If the AI corrected the query, show a dismissible "Did you mean?" banner
+  // so the user can revert to their original search.
+  if (suggestion?.changed) {
+    // Show banner after a short delay so progress bar is visible first.
+    setTimeout(() => {
+      showSuggestionBanner(
+        keyword,           // original — offer to revert
+        (original) => void runSearch(original, location, null),
+        () => { /* dismissed — keep corrected search running */ },
+      );
+    }, 500);
+  }
+
 });
 
 // Deep-link support: /?kw=...&loc=... and optional &job=... to auto-open modal.

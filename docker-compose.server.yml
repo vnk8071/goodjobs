@@ -17,6 +17,7 @@ services:
       WARMUP_KEYWORDS: ${WARMUP_KEYWORDS:-}
       CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      ADMIN_SECRET: ${ADMIN_SECRET}
     volumes:
       - ./logs:/app/logs
     depends_on:

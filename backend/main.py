@@ -21,9 +21,12 @@ from src.cache import (
     cache_touch,
     get_redis,
     vector_mark_nonwarmup_seen,
+    embedded_links_filter,
+    embedded_links_add,
 )
-from src.constants import MAX_CONCURRENT
+from src.constants import MAX_CONCURRENT, ADMIN_SECRET
 from src.logger import log_search, log_app
+from src.utils import timed_scrape
 from src.matching import (
     title_matches,
     title_matches_loose,
@@ -35,9 +38,10 @@ from src.matching import (
     normalize_keyword,
 )
 from src.models import Job, ScrapeRequest
+from src.intent import suggest_query, record_search
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
-from src.vector import ensure_index, search as vector_search
+from src.vector import ensure_index, search as vector_search, upsert_jobs
 from src.warmup import (
     warmup,
     _WARMUP_LOCATIONS,
@@ -306,6 +310,228 @@ async def cache_status():
     return await _cache_status_data()
 
 
+@app.get("/cache/overview")
+async def cache_overview(secret: str = ""):
+    """Dashboard data: all cached keys with job counts + total embedded vector count."""
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    now = time.time()
+    STALE_THRESHOLD = 7200
+    age_cutoff = now - 8 * 86400
+
+    redis = get_redis()
+    # Pass 1 — collect all cache keys and their fresh job links
+    keys_data: list[dict] = []
+    # Map from cache key → list of fresh job links (for embedding check)
+    key_links: dict[str, list[str]] = {}
+    all_links: list[str] = []  # ordered, for pipeline batch check
+    warmup_kws = set(kw.lower().strip() for kw in await get_warmup_keywords())
+
+    try:
+        async for key in redis.scan_iter("jobs:*"):
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            jobs = data.get("jobs", [])
+            fetched_ts = float(data.get("fetched_ts", 0))
+
+            # Parse keyword/location from key "jobs:<kw>:<loc>"
+            parts = key.split(":")
+            kw_part = parts[1] if len(parts) >= 3 else ""
+            loc_part = ":".join(parts[2:]) if len(parts) >= 3 else ""
+
+            fresh_jobs = [j for j in jobs if j.get("posted_ts", 0) >= age_cutoff]
+            links = [j["link"] for j in fresh_jobs if j.get("link")]
+            key_links[key] = links
+            all_links.extend(links)
+
+            age = int(now - fetched_ts) if fetched_ts else None
+            if age is not None:
+                if age < 3600:
+                    fetched_ago = f"{age // 60}m ago"
+                elif age < 86400:
+                    fetched_ago = f"{age // 3600}h {(age % 3600) // 60}m ago"
+                else:
+                    fetched_ago = f"{age // 86400}d ago"
+            else:
+                fetched_ago = "never"
+
+            is_warmup = kw_part.lower().strip() in warmup_kws
+            is_stale = fetched_ts == 0 or (now - fetched_ts >= STALE_THRESHOLD)
+
+            keys_data.append({
+                "key": key,
+                "keyword": kw_part,
+                "location": loc_part,
+                "job_count": len(fresh_jobs),
+                "fetched_ts": fetched_ts,
+                "fetched_ago": fetched_ago,
+                "stale": is_stale,
+                "warmup": is_warmup,
+                "embedded_count": 0,  # filled in pass 2
+            })
+    except Exception as e:
+        log_app(f"[cache/overview] scan error: {e}", "ERROR")
+
+    # Pass 2 — batch-check all links against vector:embedded_links in one pipeline
+    embedded_set: set[str] = set()
+    try:
+        if all_links:
+            pipe = redis.pipeline()
+            for link in all_links:
+                pipe.sismember("vector:embedded_links", link)
+            results = await pipe.execute()
+            embedded_set = {link for link, is_emb in zip(all_links, results) if is_emb}
+    except Exception as e:
+        log_app(f"[cache/overview] embedding check error: {e}", "ERROR")
+
+    # Fill per-key embedded counts
+    total_jobs = 0
+    seen_links: set[str] = set()
+    for entry in keys_data:
+        links = key_links.get(entry["key"], [])
+        entry["embedded_count"] = sum(1 for l in links if l in embedded_set)
+        total_jobs += entry["job_count"]
+        seen_links.update(links)
+
+    # Sort: warmup first, then by job_count desc
+    keys_data.sort(key=lambda k: (not k["warmup"], -k["job_count"]))
+
+    embedded_count = len(embedded_set)
+
+    return {
+        "total_keys": len(keys_data),
+        "total_jobs": total_jobs,
+        "total_unique_links": len(seen_links),
+        "embedded_count": embedded_count,
+        "keys": keys_data,
+    }
+
+
+@app.get("/admin/embedded-jobs")
+async def admin_embedded_jobs(secret: str = ""):
+    """List all cached jobs with their embedding status."""
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    redis = get_redis()
+    jobs_out: list[dict] = []
+    seen_links: set[str] = set()
+
+    async for key in redis.scan_iter("jobs:*"):
+        raw = await redis.get(key)
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        for job in data.get("jobs", []):
+            link = job.get("link", "")
+            if not link or link in seen_links:
+                continue
+            seen_links.add(link)
+            jobs_out.append({
+                "title": job.get("title", ""),
+                "company": job.get("company", ""),
+                "location": job.get("location", ""),
+                "source": job.get("source", ""),
+                "posted": job.get("posted", ""),
+                "posted_ts": job.get("posted_ts", 0),
+                "link": link,
+                "description": job.get("description", "").strip(),
+                "has_description": bool(job.get("description", "").strip()),
+            })
+
+    if not jobs_out:
+        return {"count": 0, "jobs": []}
+
+    # Batch-check which links are embedded
+    pipe = redis.pipeline()
+    for job in jobs_out:
+        pipe.sismember("vector:embedded_links", job["link"])
+    embedded_flags = await pipe.execute()
+
+    for job, is_embedded in zip(jobs_out, embedded_flags):
+        job["embedded"] = bool(is_embedded)
+
+    jobs_out.sort(key=lambda j: j.get("posted_ts", 0), reverse=True)
+    return {"count": len(jobs_out), "jobs": jobs_out}
+
+
+@app.post("/admin/embed-test")
+async def admin_embed_test(secret: str = "", n: int = 3):
+    """Embed a small sample of cached jobs to verify the Cloudflare Vectorize pipeline.
+
+    Picks up to `n` unembedded jobs from the cache, embeds them, upserts to Vectorize,
+    and marks them in Redis. Returns per-job results so you can see exactly what happened.
+    """
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    n = max(1, min(n, 20))  # clamp 1–20
+
+    # Find up to n unembedded fresh jobs from the cache
+    redis = get_redis()
+    age_cutoff = time.time() - 8 * 86400
+    candidates: list[dict] = []
+    try:
+        async for key in redis.scan_iter("jobs:*"):
+            if len(candidates) >= n * 5:  # oversample to account for already-embedded
+                break
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            for job in data.get("jobs", []):
+                if job.get("posted_ts", 0) >= age_cutoff and job.get("link") and job.get("title"):
+                    candidates.append(job)
+                    if len(candidates) >= n * 5:
+                        break
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Redis scan failed: {e}")
+
+    if not candidates:
+        return {"ok": False, "error": "No fresh jobs found in cache", "results": []}
+
+    # Filter out already-embedded jobs
+    loop = asyncio.get_event_loop()
+    unembedded = await embedded_links_filter(candidates)
+    sample = unembedded[:n] or candidates[:n]  # fallback to re-embed if all already done
+
+    # Run upsert in executor (blocking HTTP calls)
+    t0 = time.perf_counter()
+    ok = await loop.run_in_executor(_executor, upsert_jobs, sample)
+    elapsed = round(time.perf_counter() - t0, 2)
+
+    if ok:
+        await embedded_links_add([j["link"] for j in sample])
+
+    results = [
+        {
+            "title": j.get("title", ""),
+            "company": j.get("company", ""),
+            "source": j.get("source", ""),
+            "link": j.get("link", ""),
+            "already_embedded": j not in unembedded,
+        }
+        for j in sample
+    ]
+
+    return {
+        "ok": ok,
+        "elapsed_s": elapsed,
+        "attempted": len(sample),
+        "results": results,
+    }
+
+
 @app.get("/stats")
 async def stats():
     """Return total unique jobs posted in the last 7 days across all cached keys."""
@@ -381,6 +607,49 @@ async def list_warmup_keywords():
     return {"keywords": keywords, "count": len(keywords)}
 
 
+@app.post("/suggest-query")
+async def suggest_query_endpoint(req: ScrapeRequest, request: Request):
+    """Pre-verify user query with Cloudflare AI + IP search history.
+
+    Returns spelling correction and best matching cached keyword.
+    Response:
+      {
+        "corrected": str,
+        "changed": bool,
+        "suggested_cache_keyword": str | None,
+        "reasoning": str,
+      }
+    """
+    keyword = req.keyword.strip()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="keyword is required")
+
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+
+    warmup_kws = await get_warmup_keywords()
+    # Scan Redis for all cached keyword keys to give AI more coverage
+    cached_kws: list[str] = list(warmup_kws)
+    try:
+        loc = req.location.lower().strip() if req.location else ""
+        pattern = f"jobs:*:{loc}" if loc else "jobs:*"
+        async for key in get_redis().scan_iter(pattern):
+            # Extract keyword portion from "jobs:<kw>:<loc>"
+            parts = key.split(":")
+            if len(parts) >= 3:
+                kw_part = ":".join(parts[1:-1]) if loc else ":".join(parts[1:])
+                if kw_part and kw_part not in cached_kws:
+                    cached_kws.append(kw_part)
+    except Exception:
+        pass
+
+    result = await suggest_query(keyword, ip, cached_kws)
+    return result
+
+
 @app.post("/scrape", response_model=list[Job])
 async def scrape(req: ScrapeRequest, request: Request):
     """Scrape jobs for a keyword and location, returning all results as a JSON array."""
@@ -424,16 +693,8 @@ async def scrape(req: ScrapeRequest, request: Request):
 
     loop = asyncio.get_event_loop()
 
-    def _timed(site: str, fn, kw: str, loc: str):
-        log_app(f"{site} scraper starting")
-        t0 = time.perf_counter()
-        result = fn(kw, loc)
-        elapsed = time.perf_counter() - t0
-        log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result)} jobs")
-        return result
-
     tasks = [
-        loop.run_in_executor(_executor, _timed, site, fn, cache_keyword, req.location)
+        loop.run_in_executor(_executor, timed_scrape, site, fn, cache_keyword, req.location)
         for site, fn in _SCRAPERS.items()
     ]
 
@@ -498,6 +759,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         raise HTTPException(status_code=429, detail=rate_err, headers=rate_headers)
 
     log_search(request, keyword, req.location)
+    # Record this search in IP history for future intent suggestions (fire-and-forget)
+    asyncio.ensure_future(record_search(ip, keyword, req.location))
 
     warmup_kws = await get_warmup_keywords()
     keyword_corrected = correct_keyword_typos(keyword, warmup_kws)
@@ -530,14 +793,6 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
             filtered.append(j)
         return filtered
-
-    def _timed(site: str, fn, kw: str, loc: str):
-        log_app(f"{site} scraper starting")
-        t0 = time.perf_counter()
-        result = fn(kw, loc)
-        elapsed = time.perf_counter() - t0
-        log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result)} jobs")
-        return result
 
     async def event_generator() -> AsyncGenerator[str, None]:
         global _queue_count
@@ -652,7 +907,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 scrape_kw = fuzzy_matched_kw if fuzzy_matched_kw else cache_keyword
                 linkedin_fut = loop.run_in_executor(
                     _executor,
-                    _timed,
+                    timed_scrape,
                     "linkedin",
                     scrape_linkedin,
                     scrape_kw,
@@ -663,7 +918,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 for site, fn in other_scrapers.items():
                     futures[
                         loop.run_in_executor(
-                            _executor, _timed, site, fn, scrape_kw, req.location
+                            _executor, timed_scrape, site, fn, scrape_kw, req.location
                         )
                     ] = site
 
