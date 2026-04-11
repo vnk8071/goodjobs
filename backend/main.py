@@ -1025,7 +1025,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 )
                 _refresh_posted_times(unique_jobs)
                 latest_ts = max(cache_fetched_ts_list) if cache_fetched_ts_list else 0
-                yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': False}, ensure_ascii=False)}\n\n"
+                yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': is_warmup}, ensure_ascii=False)}\n\n"
 
                 if is_warmup and unique_jobs:
                     yield "event: done\ndata: {}\n\n"

@@ -184,7 +184,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         void count;
       },
       (position) => showQueuedMessage(position),
-      () => clearQueuedMessage(),
+      () => { clearQueuedMessage(); setFromCache(false); },
       () => {
         setLinkedInEnriching(false);
         const count = currentJobs.length;
@@ -267,6 +267,7 @@ fetchBtn.addEventListener("click", async () => {
     c => (c.dataset.kw ?? "").toLowerCase() === rawInput.toLowerCase(),
   );
   if (isWarmupKeyword) {
+    hideIntentBox();
     void runSearch(rawInput, location, sharedJobLink);
     return;
   }
@@ -284,6 +285,7 @@ fetchBtn.addEventListener("click", async () => {
 
   // If classify failed (null = timeout or network error), skip AI checks and search directly.
   if (classified === null) {
+    hideIntentBox();
     void runSearch(rawInput.trim().slice(0, 60), location, sharedJobLink);
     return;
   }
