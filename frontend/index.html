@@ -37,20 +37,68 @@
      crossorigin="anonymous"></script>
     <style>
       :root {
+        color-scheme: light dark;
         --primary: #3b82f6;
         --primary-hover: #2563eb;
+        --primary-light: #dbeafe;
         --success-bg: #ecfdf5;
         --success-text: #065f46;
         --error-bg: #fef2f2;
         --error-text: #991b1b;
-        --loading-bg: #eff6ff;
+        --loading-bg: #dbeafe;
         --loading-text: #1e40af;
-        --bg: #f8fafc;
+        --bg: #fafafa;
         --card: #ffffff;
-        --border: #e2e8f0;
-        --text: #0f172a;
-        --muted: #475569;
-        --radius: 12px;
+        --border: #e5e5e5;
+        --text: #1a1a1a;
+        --muted: #666666;
+        --muted-light: #999999;
+        --radius: 8px;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f0f0f;
+          --card: #1a1a1a;
+          --border: #2a2a2a;
+          --text: #f5f5f5;
+          --muted: #999999;
+          --muted-light: #666666;
+          --primary-light: rgba(59, 130, 246, 0.15);
+          --success-bg: rgba(5, 150, 105, 0.1);
+          --error-bg: rgba(220, 38, 38, 0.1);
+          --loading-bg: rgba(30, 64, 175, 0.1);
+        }
+      }
+
+      html[data-theme="dark"] {
+        --bg: #0f0f0f;
+        --card: #1a1a1a;
+        --border: #2a2a2a;
+        --text: #f5f5f5;
+        --muted: #999999;
+        --muted-light: #666666;
+        --primary-light: rgba(59, 130, 246, 0.15);
+        --success-bg: rgba(5, 150, 105, 0.1);
+        --error-bg: rgba(220, 38, 38, 0.1);
+        --loading-bg: rgba(30, 64, 175, 0.1);
+      }
+
+      html[data-theme="light"] {
+        --bg: #fafafa;
+        --card: #ffffff;
+        --border: #e5e5e5;
+        --text: #1a1a1a;
+        --muted: #666666;
+        --muted-light: #999999;
+        --primary-light: #dbeafe;
+        --success-bg: #ecfdf5;
+        --error-bg: #fef2f2;
+        --loading-bg: #dbeafe;
+      }
+
+      body {
+        transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       * {
@@ -65,28 +113,29 @@
       }
 
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         background: var(--bg);
         color: var(--text);
         min-height: 100vh;
-        padding: 2rem 1rem 4rem;
+        padding: 2.5rem 1rem 4rem;
+        letter-spacing: -0.01em;
       }
 
       .container {
-        max-width: 1600px;
+        max-width: 1400px;
         margin: 0 auto;
       }
 
       /* Header */
       header {
-        margin-bottom: 1.5rem;
+        margin-bottom: 2.5rem;
         display: flex;
         flex-direction: row;
         align-items: center;
         text-align: left;
-        gap: 1rem;
+        gap: 1.25rem;
         flex-wrap: wrap;
+        justify-content: space-between;
       }
 
       .header-row {
@@ -98,84 +147,92 @@
 
       .logo {
         flex-shrink: 0;
-        width: 52px;
-        height: 52px;
-        background: linear-gradient(135deg, var(--primary), #2563eb);
-        border-radius: 14px;
+        width: 48px;
+        height: 48px;
+        background: var(--primary);
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
-        transform: rotate(-2deg);
-        transition: transform 0.2s;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .logo:hover {
-        transform: rotate(0deg) scale(1.05);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
       }
 
       .logo svg {
-        width: 30px;
-        height: 30px;
+        width: 26px;
+        height: 26px;
+        color: white;
       }
 
       .header-text h1 {
-        font-size: 2.1rem;
-        font-weight: 800;
-        letter-spacing: -0.03em;
+        font-size: 1.85rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
         display: flex;
         align-items: baseline;
         gap: 0.6rem;
-        line-height: 1.1;
-        color: #0f172a;
+        line-height: 1.2;
+        color: var(--text);
       }
 
       .header-text h1 .subtitle {
-        font-size: 1.05rem;
-        font-weight: 500;
-        color: var(--muted);
+        font-size: 0.95rem;
+        font-weight: 400;
+        color: var(--muted-light);
         letter-spacing: 0;
       }
 
       .header-text p {
-        margin-top: 0.2rem;
+        margin-top: 0.4rem;
         color: var(--muted);
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        line-height: 1.5;
       }
 
-      /* Card */
+      /* Weekly stats badge */
       .weekly-stats {
         display: inline-flex;
         align-items: center;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: #1e40af;
-        background: #eff6ff;
-        border: 1px solid #bfdbfe;
-        padding: 0.4rem 0.85rem;
-        border-radius: 999px;
+        background: var(--primary-light);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        padding: 0.45rem 0.95rem;
+        border-radius: 20px;
         font-weight: 500;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        box-shadow: none;
         margin: 0;
         width: auto;
         white-space: nowrap;
         flex-shrink: 0;
+        transition: all 0.2s;
+      }
+      .weekly-stats:hover {
+        background: rgba(59, 130, 246, 0.08);
+        transform: translateY(-1px);
       }
       .weekly-stats strong {
         color: #1d4ed8;
-        font-size: 0.95rem;
-        font-weight: 800;
+        font-size: 0.9rem;
+        font-weight: 700;
       }
 
       .card {
         background: var(--card);
-        border: 1px solid rgba(226, 232, 240, 0.8);
+        border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 2rem 2.25rem 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04), 0 2px 8px -2px rgba(0, 0, 0, 0.02);
-        transition: transform 0.2s, box-shadow 0.2s;
+        padding: 2rem 2.25rem;
+        margin-bottom: 1.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       }
       .card:hover {
-        box-shadow: 0 10px 25px -4px rgba(0, 0, 0, 0.05), 0 4px 10px -4px rgba(0, 0, 0, 0.03);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        border-color: rgba(59, 130, 246, 0.2);
       }
 
       /* Search form */
@@ -202,15 +259,17 @@
         .search-grid .location-field { order: 3; }
         .search-grid .button-field   { order: 4; }
 
-        /* Table: show only #, Title, Logo, Posted, Source — hide everything else */
+        /* Table: show only #, Title, Posted, Source, Link — hide everything else */
+        thead th:nth-child(3),  /* Company logo column (moved under title) */
         thead th:nth-child(4),  /* Location */
-        thead th:nth-child(6),  /* Skills */
-        thead th:nth-child(7),  /* Description */
-        thead th:nth-child(9),  /* Link */
+        thead th:nth-child(6),  /* Relevance */
+        thead th:nth-child(7),  /* Skills */
+        thead th:nth-child(8),  /* Description */
+        tbody td:nth-child(3),
         tbody td:nth-child(4),
         tbody td:nth-child(6),
         tbody td:nth-child(7),
-        tbody td:nth-child(9) {
+        tbody td:nth-child(8) {
           display: none;
         }
 
@@ -225,28 +284,7 @@
           vertical-align: middle;
         }
 
-        /* Company col: show logo only, no text — keep th visible for fixed-width sizing */
-        thead th:nth-child(3) { width: 2.8rem; font-size: 0; }
-        tbody td:nth-child(3) {
-          padding: 0.2rem 0;
-          vertical-align: middle;
-          text-align: center;
-          width: 2.8rem;
-          max-width: 2.8rem;
-          overflow: hidden;
-        }
-        tbody td:nth-child(3) .company-cell {
-          flex-shrink: 0;
-          width: 2.8rem;
-          max-width: 2.8rem;
-        }
-        tbody td:nth-child(3) .company-cell span { display: none; }
-        tbody td:nth-child(3) .company-logo,
-        tbody td:nth-child(3) .company-avatar {
-          width: 32px;
-          height: 32px;
-          font-size: 0.75rem;
-        }
+        /* Company logo column hidden on mobile (logo moved under title). */
 
         td.title {
           font-size: 0.82rem;
@@ -256,17 +294,49 @@
           flex: 1;
           min-width: 0;
         }
-        /* Company name under title */
-        td.title::after {
-          content: attr(data-company);
-          display: block;
-          font-size: 0.7rem;
+        /* Company name under title (legacy) */
+        td.title::after { content: none; }
+
+        td.title .title-main { font-size: 0.82rem; font-weight: 700; color: var(--text); }
+        td.title .title-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.45rem;
+          margin-top: 0.25rem;
+          min-width: 0;
+        }
+        td.title .title-meta .company-logo,
+        td.title .title-meta .company-avatar {
+          width: 20px;
+          height: 20px;
+          border-radius: 6px;
+          flex-shrink: 0;
+        }
+        td.title .title-company {
+          font-size: 0.76rem;
           color: var(--muted);
-          font-weight: 400;
-          margin-top: 0.15rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          min-width: 0;
+        }
+        td.title .title-score {
+          font-size: 0.72rem;
+          color: #1d4ed8;
+          background: rgba(219, 234, 254, 0.9);
+          border: 1px solid rgba(59, 130, 246, 0.25);
+          padding: 0.05rem 0.35rem;
+          border-radius: 999px;
+          flex-shrink: 0;
+          font-variant-numeric: tabular-nums;
+        }
+
+        /* Center score pill in the row on mobile */
+        td.title .title-meta { position: relative; }
+        td.title .title-score {
+          position: absolute;
+          left: 50%;
+          transform: translateX(-50%);
         }
 
         td.num { width: 1.4rem; font-size: 0.72rem; }
@@ -278,21 +348,21 @@
         table.jobs-table thead th:nth-child(2) { width: auto; }     /* Title — auto width */
         table.jobs-table thead th:nth-child(3) { width: 1.8rem; }   /* Company logo */
         table.jobs-table thead th:nth-child(5) { width: 4.5rem; }   /* Posted */
-        table.jobs-table thead th:nth-child(8) { width: 4.5rem; }   /* Source — wide enough for badge */
+        table.jobs-table thead th:nth-child(9) { width: 4.5rem; }   /* Source — wide enough for badge */
         table.jobs-table thead th:nth-child(6),
         table.jobs-table thead th:nth-child(7),
-        table.jobs-table thead th:nth-child(9) { width: 0; }        /* Hidden columns take no space */
+        table.jobs-table thead th:nth-child(8) { width: 0; }        /* Hidden columns take no space */
 
         /* Source header: hide text, show nothing (badge in body makes it clear) */
-        thead th:nth-child(8) { font-size: 0; }
+        thead th:nth-child(9) { font-size: 0; }
 
         /* Source badge: smaller font, allow wrapping text */
-        tbody td:nth-child(8) {
+        tbody td:nth-child(9) {
           text-align: center;
           vertical-align: middle;
           padding: 0.3rem 0.2rem;
         }
-        tbody td:nth-child(8) .badge {
+        tbody td:nth-child(9) .badge {
           font-size: 0.65rem;
           padding: 0.15rem 0.35rem;
           white-space: normal;
@@ -301,42 +371,69 @@
           display: inline-block;
           max-width: 4.2rem;
         }
+
+        /* Relevance is hidden on mobile */
+
+        /* Link column: compact, centered */
+        thead th:nth-child(10),
+        tbody td:nth-child(10) {
+          text-align: center;
+          white-space: nowrap;
+        }
+
+        tbody td:nth-child(10) {
+          padding: 0.3rem 0.2rem;
+        }
       }
 
       .field label {
         display: block;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         font-weight: 600;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        margin-bottom: 0.5rem;
-        color: var(--muted);
+        margin-bottom: 0.6rem;
+        color: var(--muted-light);
       }
 
       .field input[type="text"],
+      .field textarea,
       .field select {
         width: 100%;
-        padding: 0.85rem 1.1rem;
-        font-size: 1rem;
-        border: 1px solid rgba(203, 213, 225, 0.8);
-        border-radius: 10px;
+        padding: 0.9rem 1.1rem;
+        font-size: 0.95rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         outline: none;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-        background: #f8fafc;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: var(--card);
         color: var(--text);
-        box-shadow: inset 0 1px 2px rgba(0,0,0,0.01);
+        box-shadow: none;
+        font-family: inherit;
+      }
+
+      .field textarea {
+        resize: none;
+        overflow: hidden;
+        min-height: 3.5rem;
+        max-height: 12rem;
+        overflow-y: auto;
+        font-family: inherit;
+        line-height: 1.6;
       }
 
       .field input[type="text"]:focus,
+      .field textarea:focus,
       .field select:focus {
-        background: #ffffff;
-        border-color: #93c5fd;
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15), inset 0 1px 2px rgba(0,0,0,0.01);
+        background: var(--card);
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
       }
 
       .field input[type="text"]:hover,
+      .field textarea:hover,
       .field select:hover {
-        border-color: #cbd5e1;
+        border-color: rgba(59, 130, 246, 0.3);
       }
 
       .field select {
@@ -372,39 +469,41 @@
         .suggestions {
           /* properties moved to base class */
         }
+
+        /* Override desktop default: show title meta row on mobile */
+        td.title .title-meta { display: flex; }
       }
 
       .suggestion-chip {
         display: inline-flex;
         align-items: center;
-        padding: 0.35rem 0.85rem;
-        font-size: 0.85rem;
+        padding: 0.45rem 0.95rem;
+        font-size: 0.8rem;
         font-weight: 500;
-        border-radius: 999px;
-        background: #f8fafc;
+        border-radius: 6px;
+        background: var(--bg);
         color: var(--muted);
         cursor: pointer;
-        border: 1px solid rgba(203, 213, 225, 0.6);
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 1px solid var(--border);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         user-select: none;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.01);
+        box-shadow: none;
         white-space: nowrap;
         flex-shrink: 0;
       }
 
       .suggestion-chip:hover {
-        background: #eff6ff;
-        border-color: #bfdbfe;
-        color: #1e40af;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+        background: var(--card);
+        border-color: var(--primary);
+        color: var(--primary);
+        transform: translateY(-1px);
       }
 
       .suggestion-chip.active {
         background: var(--primary);
         border-color: var(--primary);
         color: #fff;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
       }
 
       /* Buttons */
@@ -413,84 +512,102 @@
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        padding: 0.75rem 1.6rem;
-        font-size: 1rem;
+        padding: 0.85rem 1.75rem;
+        font-size: 0.95rem;
         font-weight: 600;
         border: none;
-        border-radius: 10px;
+        border-radius: var(--radius);
         cursor: pointer;
-        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         white-space: nowrap;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        box-shadow: none;
       }
 
       .btn:disabled {
-        opacity: 0.6;
+        opacity: 0.5;
         cursor: not-allowed;
         transform: none !important;
-        box-shadow: none !important;
       }
 
       .btn-primary {
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        background: var(--primary);
         color: #fff;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
 
       .btn-primary:hover:not(:disabled) {
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+        background: var(--primary-hover);
         transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
       }
-      
+
       .btn-primary:active:not(:disabled) {
-        transform: translateY(1px);
-        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+        transform: translateY(0px);
       }
 
       /* Status bar */
       .status {
-        padding: 0.75rem 1.1rem;
-        border-radius: 8px;
+        padding: 0.85rem 1.25rem;
+        border-radius: var(--radius);
         font-size: 0.9rem;
         font-weight: 500;
         margin-bottom: 1rem;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.6rem;
+        animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       .status-loading {
-        background: var(--loading-bg);
-        color: var(--loading-text);
+        background: rgba(30, 64, 175, 0.08);
+        color: #1e40af;
+        border: 1px solid rgba(30, 64, 175, 0.15);
       }
 
       .status-loading::before {
         content: "";
         display: inline-block;
-        width: 14px;
-        height: 14px;
-        border: 2px solid var(--loading-text);
-        border-top-color: transparent;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(30, 64, 175, 0.3);
+        border-top-color: #1e40af;
         border-radius: 50%;
-        animation: spin 0.7s linear infinite;
+        animation: spin 0.8s linear infinite;
         flex-shrink: 0;
       }
 
       .status-success {
-        background: var(--success-bg);
-        color: var(--success-text);
+        background: rgba(5, 150, 105, 0.08);
+        color: var(--primary);
+        border: 1px solid rgba(16, 185, 129, 0.15);
       }
 
       .status-error {
-        background: var(--error-bg);
-        color: var(--error-text);
+        background: rgba(220, 38, 38, 0.08);
+        color: #dc2626;
+        border: 1px solid rgba(220, 38, 38, 0.15);
+      }
+
+      .status-info {
+        background: rgba(30, 64, 175, 0.08);
+        color: #1e40af;
+        border: 1px solid rgba(30, 64, 175, 0.15);
       }
 
       .status a {
         color: inherit;
-        font-weight: 600;
+        font-weight: 700;
+        text-decoration: underline;
         text-underline-offset: 2px;
       }
 
@@ -505,20 +622,20 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 0.85rem;
+        margin-bottom: 1.2rem;
         gap: 0.75rem;
       }
 
       .results-header > * { min-width: 0; }
 
-
       .results-header h2 {
-        font-size: 1rem;
+        font-size: 1.1rem;
         font-weight: 600;
+        color: var(--text);
       }
 
       #jobCount {
-        font-size: 0.85rem;
+        font-size: 0.8rem;
         color: var(--muted);
         margin-left: 0.5rem;
         font-weight: 400;
@@ -528,12 +645,13 @@
         overflow-x: hidden;
         border: 1px solid var(--border);
         border-radius: var(--radius);
+        background: var(--card);
       }
 
       table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
       }
 
       /* Keep both results tables aligned by column */
@@ -549,28 +667,29 @@
         table.jobs-table thead th:nth-child(4),
         tbody td:nth-child(4) { display: none; }   /* Location — hidden on all sizes */
         table.jobs-table thead th:nth-child(5) { width: 6.8rem; }
-        table.jobs-table thead th:nth-child(6) { width: 16rem; }
-        table.jobs-table thead th:nth-child(7) { width: clamp(20rem, 34vw, 30rem); }
-        table.jobs-table thead th:nth-child(8) { width: 6.2rem; }
-        table.jobs-table thead th:nth-child(9) { width: 4.8rem; }
+        table.jobs-table thead th:nth-child(6) { width: 4.8rem; }  /* Relevance */
+        table.jobs-table thead th:nth-child(7) { width: 16rem; }   /* Skills */
+        table.jobs-table thead th:nth-child(8) { width: clamp(20rem, 34vw, 30rem); } /* Desc */
+        table.jobs-table thead th:nth-child(9) { width: 6.2rem; }  /* Source */
+        table.jobs-table thead th:nth-child(10) { width: 4.8rem; } /* Link */
       }
 
       thead th {
-        background: #f8fafc;
-        padding: 0.7rem 1rem;
+        background: var(--bg);
+        padding: 0.8rem 1.1rem;
         text-align: left;
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
-        color: var(--muted);
+        letter-spacing: 0.06em;
+        color: var(--muted-light);
         border-bottom: 1px solid var(--border);
         white-space: nowrap;
       }
 
       tbody td {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid var(--border);
+        padding: 0.9rem 1.1rem;
+        border-bottom: 1px solid rgba(229, 229, 229, 0.6);
         vertical-align: middle;
       }
 
@@ -580,55 +699,63 @@
 
       td.num {
         color: var(--muted);
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         width: 2.5rem;
         text-align: center;
       }
 
       td.title {
-        font-weight: 500;
-        color: var(--primary);
+        font-weight: 600;
+        color: var(--text);
       }
 
       td.title a {
-        color: var(--text);
+        color: var(--primary);
         text-decoration: none;
+        transition: color 0.2s;
       }
 
       td.title a:hover {
-        color: var(--primary);
-        text-decoration: underline;
+        color: var(--primary-hover);
+      }
+
+      /* Title sub-structure: used for mobile layout; hide on desktop to avoid
+         duplicating the dedicated Company/Relevance columns. */
+      @media (min-width: 641px) {
+        td.title .title-meta { display: none; }
       }
 
       tbody tr {
         cursor: pointer;
-        transition: background 0.1s;
+        transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       tbody tr:hover td {
-        background: #eef2ff;
+        background: rgba(59, 130, 246, 0.04);
       }
 
       td.posted {
         color: var(--muted);
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         white-space: nowrap;
       }
 
       td.desc {
         font-size: 0.8rem;
         color: var(--muted);
-        line-height: 1.45;
+        line-height: 1.5;
       }
 
       .view-link {
         color: var(--primary);
         text-decoration: none;
-        font-size: 0.85rem;
-        font-weight: 500;
+        font-size: 0.8rem;
+        font-weight: 600;
+        transition: color 0.2s;
       }
 
       .view-link:hover {
+        color: var(--primary-hover);
         text-decoration: underline;
       }
 
@@ -645,6 +772,26 @@
         border-radius: 99px;
         font-size: 0.75rem;
         font-weight: 600;
+        white-space: nowrap;
+      }
+
+      /* Level-match highlight — row where title contains the searched level word */
+      tr.level-match {
+        background: #f0fdf4;
+      }
+      tr.level-match:hover {
+        background: #dcfce7;
+      }
+      .level-badge {
+        display: inline-block;
+        margin-left: 0.4rem;
+        padding: 0.1rem 0.45rem;
+        border-radius: 99px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: #dcfce7;
+        color: #15803d;
+        vertical-align: middle;
         white-space: nowrap;
       }
 
@@ -802,7 +949,7 @@
       }
 
       .job-modal-close:hover {
-        background: #f1f5f9;
+        background: rgba(59, 130, 246, 0.1);
         color: var(--text);
       }
 
@@ -842,14 +989,47 @@
         font-size: 0.82rem;
       }
 
+      /* Theme toggle */
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text);
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        padding: 0;
+        flex-shrink: 0;
+      }
+
+      .theme-toggle:hover {
+        border-color: var(--primary);
+        background: rgba(59, 130, 246, 0.05);
+        transform: translateY(-1px);
+      }
+
+      .theme-toggle svg {
+        width: 20px;
+        height: 20px;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .theme-toggle:hover svg {
+        transform: rotate(20deg);
+      }
+
       .job-summary-box {
         font-size: 0.88rem;
         color: var(--text);
         line-height: 1.65;
         padding: 0.85rem 1.1rem;
-        background: #eff6ff;
+        background: rgba(59, 130, 246, 0.08);
         border-radius: 8px;
-        border: 1px solid #bfdbfe;
+        border: 1px solid rgba(59, 130, 246, 0.2);
         margin-bottom: 1rem;
       }
 
@@ -858,7 +1038,7 @@
         display: block;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #3b82f6;
+        color: var(--primary);
         text-transform: uppercase;
         letter-spacing: 0.05em;
         margin-bottom: 0.4rem;
@@ -869,7 +1049,7 @@
         color: var(--text);
         line-height: 1.75;
         padding: 1.5rem;
-        background: #f8fafc;
+        background: var(--bg);
         border-radius: 8px;
         border: 1px solid var(--border);
         margin-bottom: 1.1rem;
@@ -919,7 +1099,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.4rem;
-        color: #64748b;
+        color: var(--muted);
         font-style: italic;
         font-size: 0.9rem;
         animation: pill-pulse 1.4s ease-in-out infinite;
@@ -929,8 +1109,8 @@
         display: inline-block;
         width: 0.75rem;
         height: 0.75rem;
-        border: 2px solid #cbd5e1;
-        border-top-color: #3b82f6;
+        border: 2px solid rgba(59, 130, 246, 0.2);
+        border-top-color: var(--primary);
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -1361,6 +1541,103 @@
 
       .about-section.hidden { display: none; }
 
+      /* ─── Feature slideshow ───────────────────────────────── */
+      .feature-slideshow {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+        overflow: hidden;
+      }
+      .feature-slideshow.hidden { display: none; }
+
+      .slideshow-intro h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--text);
+        margin-bottom: 0.3rem;
+      }
+      .slideshow-intro p {
+        font-size: 0.85rem;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .slideshow-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-top: 1px solid var(--border);
+        padding-top: 0.75rem;
+      }
+
+      .slideshow-icon {
+        flex-shrink: 0;
+        color: var(--primary);
+        display: flex;
+        align-items: center;
+      }
+
+      .slideshow-slides {
+        flex: 1;
+        position: relative;
+        overflow: hidden;
+        min-width: 0;
+      }
+
+      .slideshow-slide {
+        display: none;
+        flex-direction: column;
+        gap: 0.15rem;
+        animation: slideIn 0.35s ease;
+      }
+      .slideshow-slide.active { display: flex; }
+
+      @keyframes slideIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+
+      .slideshow-slide strong {
+        font-size: 0.88rem;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .slideshow-slide span {
+        font-size: 0.8rem;
+        color: var(--muted);
+        line-height: 1.4;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .slideshow-dots {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+        align-items: center;
+      }
+
+      .slideshow-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--border);
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .slideshow-dot.active { background: var(--primary); }
+
       /* ─── Query suggestion banner ─────────────────────────── */
       .suggestion-banner {
         display: flex;
@@ -1403,12 +1680,74 @@
       }
       .suggestion-banner__dismiss:hover { color: var(--text, #111); }
 
+      /* Intent box — shows AI classification result for CV/skills input */
+      .intent-box {
+        margin-top: 0.75rem;
+        padding: 0.85rem 1.1rem;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 10px;
+        font-size: 0.875rem;
+        animation: fadeIn 0.2s ease;
+      }
+      .intent-box.hidden { display: none; }
+      .intent-box__header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+        color: #1d4ed8;
+      }
+      .intent-box__keyword {
+        display: inline-block;
+        background: #dbeafe;
+        color: #1e40af;
+        border-radius: 6px;
+        padding: 0.15rem 0.6rem;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+      .intent-box__reasoning {
+        color: #374151;
+        margin-top: 0.25rem;
+        font-size: 0.82rem;
+        opacity: 0.85;
+      }
+
+      .intent-box__alts {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 0.55rem;
+      }
+
+      .intent-box__alts-label {
+        font-size: 0.82rem;
+        color: #374151;
+        opacity: 0.9;
+      }
+
+      .intent-box__alt {
+        border: 1px solid rgba(59, 130, 246, 0.25);
+        background: rgba(255, 255, 255, 0.65);
+        color: #1d4ed8;
+        padding: 0.25rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .intent-box__alt:hover { background: rgba(255, 255, 255, 0.9); }
+
     </style>
   </head>
   <body>
     <div class="container">
       <header>
-        <a id="homeLink" href="#" style="display:flex; align-items:center; gap:1.25rem; text-decoration:none; color:inherit; cursor:pointer;" aria-label="Về trang chủ">
+        <a id="homeLink" href="#" style="display:flex; align-items:center; gap:1.25rem; text-decoration:none; color:inherit; cursor:pointer; flex:1; min-width:0;" aria-label="Về trang chủ">
           <div class="logo" aria-hidden="true">
             <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg">
               <text x="8" y="21" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
@@ -1425,20 +1764,67 @@
             </p>
           </div>
         </a>
+        <button id="themeToggle" class="theme-toggle" aria-label="Chuyển đổi giao diện tối/sáng" title="Chuyển đổi giao diện">
+          <svg fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+          </svg>
+        </button>
       </header>
+
+      <!-- Homepage intro + feature slideshow — merged, visible before any search -->
+      <div id="featureSlideshow" class="feature-slideshow">
+        <div class="slideshow-intro">
+          <h2>Tổng hợp việc làm tại Việt Nam</h2>
+          <p>Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm công khai tại Việt Nam — LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet — vào một trang duy nhất. Công việc được cập nhật mỗi ngày, giúp bạn không bỏ lỡ cơ hội nào.</p>
+        </div>
+        <div class="slideshow-row">
+        <div class="slideshow-icon" id="slideshowIcon">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </div>
+        <div class="slideshow-slides">
+          <div class="slideshow-slide active">
+            <strong>Tìm kiếm đa nguồn</strong>
+            <span>Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet cùng lúc.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Dữ liệu mới nhất</strong>
+            <span>Tin tuyển dụng được làm mới tự động mỗi ngày, chỉ hiển thị bài đăng trong 7 ngày gần nhất.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Lọc theo kỹ năng</strong>
+            <span>Xem ngay kỹ năng yêu cầu, mô tả công việc và thông tin công ty trực tiếp trên trang.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Tóm tắt nội dung công việc</strong>
+            <span>Sử dụng AI để tóm tắt nhanh mô tả công việc dài dòng, giúp bạn nắm bắt yêu cầu chính chỉ trong vài giây.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Tìm việc từ CV hoặc kỹ năng</strong>
+            <span>Dán CV hoặc liệt kê kỹ năng vào ô tìm kiếm — AI tự phân tích và tìm công việc phù hợp nhất.</span>
+          </div>
+        </div>
+        <div class="slideshow-dots" id="slideshowDots">
+          <div class="slideshow-dot active" data-idx="0"></div>
+          <div class="slideshow-dot" data-idx="1"></div>
+          <div class="slideshow-dot" data-idx="2"></div>
+          <div class="slideshow-dot" data-idx="3"></div>
+          <div class="slideshow-dot" data-idx="4"></div>
+        </div>
+        </div><!-- end slideshow-row -->
+      </div>
 
       <!-- Search Card -->
       <div class="card">
         <div class="search-grid">
           <div class="field keyword-field">
-            <label for="keyword">Chức danh công việc</label>
-            <input
+            <label for="keyword">Chức danh / Kỹ năng / CV</label>
+            <textarea
               id="keyword"
-              type="text"
-              placeholder="Nhập chức danh, ví dụ: AI Engineer"
-              value=""
+              rows="1"
+              placeholder="Nhập chức danh, kỹ năng, hoặc dán CV…"
               autocomplete="off"
-            />
+              spellcheck="false"
+            ></textarea>
           </div>
 
           <div class="field location-field">
@@ -1485,6 +1871,9 @@
         </div>
       </div>
 
+      <!-- Intent box — shown after AI classifies CV/skills input -->
+      <div id="intentBox" class="intent-box hidden"></div>
+
       <!-- Status -->
       <div id="status" class="status hidden"></div>
 
@@ -1520,6 +1909,7 @@
                 <th>Công ty</th>
                 <th>Địa điểm</th>
                 <th>Ngày đăng</th>
+                <th>Điểm</th>
                 <th>Kỹ năng</th>
                 <th>Mô tả</th>
                 <th>Nguồn</th>
@@ -1534,52 +1924,17 @@
         </div>
       </div>
 
-      <!-- About section — visible before any search, stays below results after searching -->
+      <!-- About section — stays below results after searching -->
       <section id="aboutSection" class="about-section">
-        <h2>Tổng hợp việc làm tại Việt Nam</h2>
-        <p>
-          Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm công khai tại Việt Nam —
-          LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet — vào một trang duy nhất.
-          Công việc được cập nhật mỗi ngày, giúp bạn không bỏ lỡ cơ hội nào.
-        </p>
-        <div class="about-features">
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <div>
-              <strong>Tìm kiếm đa nguồn</strong>
-              <span>Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet cùng lúc.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-            <div>
-              <strong>Dữ liệu mới nhất</strong>
-              <span>Tin tuyển dụng được làm mới tự động mỗi ngày, chỉ hiển thị bài đăng trong 7 ngày gần nhất.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            <div>
-              <strong>Lọc theo kỹ năng</strong>
-              <span>Xem ngay kỹ năng yêu cầu, mô tả công việc và thông tin công ty trực tiếp trên trang.</span>
-            </div>
-          </div>
-          <div class="about-feature">
-            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <div>
-              <strong>Tóm tắt nội dung công việc</strong>
-              <span>Sử dụng AI để tóm tắt nhanh mô tả công việc dài dòng, giúp bạn nắm bắt yêu cầu chính chỉ trong vài giây.</span>
-            </div>
-          </div>
-        </div>
-
         <div class="about-popular">
           <h3>Hướng dẫn tìm việc hiệu quả trên Good Jobs:</h3>
           <ul>
             <li><strong>Sử dụng từ khóa tiếng Anh:</strong> Ngành IT và đa số công ty đa quốc gia dùng chức danh tiếng Anh. Ví dụ: "AI Engineer", "Data Scientist" sẽ ra nhiều kết quả hơn tiếng Việt.</li>
             <li><strong>Lọc theo trình độ:</strong> Nhập thêm "Senior", "Junior" hoặc "Intern" vào tên chức danh để thu hẹp kết quả phù hợp với số năm kinh nghiệm.</li>
             <li><strong>Tìm việc từ xa (Work from home):</strong> Chọn địa điểm là "Remote" để xem các vị trí không yêu cầu lên văn phòng.</li>
-            <li><strong>Chia sẻ nhanh:</strong> Bạn có thể chia sẻ link <strong>kết quả tìm kiếm</strong> hoặc link <strong>1 job cụ thể</strong> để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
+            <li><strong>Chia sẻ nhanh:</strong> Bạn có thể chia sẻ link kết quả tìm kiếm hoặc đường link của 1 công việc cụ thể để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
+            <li><strong>Đánh giá mức độ phù hợp:</strong> Cột "Điểm phù hợp" cho biết mức độ khớp giữa yêu cầu công việc và kỹ năng của bạn (dựa trên AI). Dùng cột này để ưu tiên ứng tuyển những vị trí có điểm cao.</li>
+            <li><strong>Nhập kỹ năng/CV:</strong> Dán CV hoặc liệt kê kỹ năng — AI tự phân tích và tìm công việc phù hợp nhất. Ví dụ: "2 năm kinh nghiệm React, Node.js, PostgreSQL. Đã làm tại startup fintech, quen với CI/CD và Docker…"</li>
           </ul>
         </div>
 
@@ -1635,6 +1990,10 @@
         <a href="/privacy/" style="color:inherit; text-decoration:none; font-weight:500;">Chính sách bảo mật</a>
         <a href="/terms/" style="color:inherit; text-decoration:none; font-weight:500;">Điều khoản dịch vụ</a>
         <a href="/contact/" style="color:inherit; text-decoration:none; font-weight:500;">Liên hệ</a>
+        <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener" style="color:inherit; text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:0.3rem;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+          LinkedIn
+        </a>
       </div>
       <div>&copy; 2026 Good Jobs | Hệ thống tìm kiếm việc làm tự động | Dữ liệu được làm mới mỗi ngày</div>
       <div style="margin-top:0.5rem; font-size:0.75rem; opacity:0.8;">
@@ -1642,12 +2001,83 @@
       </div>
     </footer>
 
+    <script>
+      // Theme toggle setup
+      const themeToggleBtn = document.getElementById('themeToggle');
+      const html = document.documentElement;
+
+      // Initialize theme from localStorage, default to light
+      function initTheme() {
+        const stored = localStorage.getItem('theme');
+        html.setAttribute('data-theme', stored || 'light');
+      }
+
+      // Toggle theme
+      themeToggleBtn?.addEventListener('click', (e) => {
+        e.preventDefault();
+        const current = html.getAttribute('data-theme') || 'light';
+        const next = current === 'light' ? 'dark' : 'light';
+        html.setAttribute('data-theme', next);
+        localStorage.setItem('theme', next);
+      });
+
+      // Initialize on load
+      initTheme();
+    </script>
     <script type="module" src="/src/main.ts"></script>
     <script>
       // Prevent background page scroll when modal overlay is touched on mobile
       document.getElementById("jobModal").addEventListener("touchmove", (e) => {
         if (!e.target.closest(".job-modal-body")) e.preventDefault();
       }, { passive: false });
+    </script>
+    <script>
+      // Feature slideshow
+      (function () {
+        const ICONS = [
+          '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
+          '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>',
+          '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
+          '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+          '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+        ];
+        const slides = document.querySelectorAll(".slideshow-slide");
+        const dots   = document.querySelectorAll(".slideshow-dot");
+        const icon   = document.getElementById("slideshowIcon");
+        let current  = 0;
+        let timer    = null;
+
+        function goTo(idx) {
+          slides[current].classList.remove("active");
+          dots[current].classList.remove("active");
+          current = idx;
+          slides[current].classList.add("active");
+          dots[current].classList.add("active");
+          if (icon) icon.innerHTML = ICONS[current];
+        }
+
+        function next() { goTo((current + 1) % slides.length); }
+
+        function start() { timer = setInterval(next, 3500); }
+        function stop()  { clearInterval(timer); }
+
+        dots.forEach((dot) => {
+          dot.addEventListener("click", () => {
+            stop();
+            goTo(parseInt(dot.dataset.idx, 10));
+            start();
+          });
+        });
+
+        // Init icon
+        if (icon) icon.innerHTML = ICONS[0];
+        start();
+
+        // Expose hide/show so main.ts can toggle it
+        const el = document.getElementById("featureSlideshow");
+        window._slideshowHide = () => { stop(); if (el) el.classList.add("hidden"); };
+        window._slideshowShow = () => { if (el) { el.classList.remove("hidden"); start(); } };
+      })();
     </script>
   </body>
 </html>

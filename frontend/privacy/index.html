@@ -91,6 +91,15 @@
         <p>Good Jobs sử dụng trí tuệ nhân tạo (Cloudflare AI) để cải thiện độ chính xác của từ khóa tìm kiếm — ví dụ: tự động sửa lỗi chính tả hoặc gợi ý từ khóa phù hợp hơn dựa trên ngữ cảnh. Để thực hiện điều này, chúng tôi lưu trữ tạm thời <strong>tối đa 5 lượt tìm kiếm gần nhất</strong> của mỗi phiên người dùng trong vòng <strong>7 ngày</strong>.</p>
         <p>Dữ liệu lưu trữ bao gồm: từ khóa tìm kiếm, địa điểm và thời điểm tìm kiếm. Địa chỉ IP của bạn <strong>không được lưu trực tiếp</strong> — thay vào đó, chúng tôi chỉ lưu một mã định danh ẩn danh một chiều (hash SHA-256, không thể truy ngược lại địa chỉ IP gốc). Dữ liệu này chỉ được dùng để cải thiện gợi ý tìm kiếm và không được chia sẻ với bên thứ ba.</p>
 
+        <h2>Xử lý CV / hồ sơ kỹ năng</h2>
+        <p>Khi bạn dán nội dung CV hoặc mô tả kỹ năng vào ô tìm kiếm, văn bản đó được xử lý như sau:</p>
+        <ul>
+          <li><strong>Lọc thông tin cá nhân:</strong> Trước khi gửi đi bất cứ đâu, hệ thống tự động xóa các thông tin nhận dạng cá nhân (email, số điện thoại, địa chỉ, số CMND/CCCD, v.v.) khỏi văn bản.</li>
+          <li><strong>Phân loại ý định:</strong> Văn bản đã lọc được gửi tới <strong>Cloudflare AI</strong> (Workers AI) — một dịch vụ AI của Cloudflare — chỉ để trích xuất từ khóa nghề nghiệp phù hợp. Cloudflare AI không lưu trữ dữ liệu người dùng cho mục đích huấn luyện mô hình.</li>
+          <li><strong>Không lưu trữ:</strong> Nội dung CV <strong>không bao giờ được lưu</strong> vào cơ sở dữ liệu hay bộ nhớ đệm (cache). Toàn bộ quá trình xử lý diễn ra trong bộ nhớ tạm (in-memory) và bị xóa ngay sau khi yêu cầu hoàn tất.</li>
+          <li><strong>Chỉ dùng trong phiên hiện tại:</strong> Dữ liệu CV chỉ tồn tại trong vòng đời của một yêu cầu tìm kiếm duy nhất và không được dùng cho bất kỳ mục đích nào khác.</li>
+        </ul>
+
         <h2>Sự đồng ý</h2>
         <p>Bằng cách sử dụng trang web của chúng tôi, bạn đồng ý với chính sách bảo mật của chúng tôi và chấp nhận các điều khoản của chính sách đó.</p>
 
