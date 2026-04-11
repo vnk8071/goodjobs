@@ -1,6 +1,6 @@
 import type { Job } from "./types";
 
-type StatusType = "loading" | "success" | "error";
+type StatusType = "loading" | "success" | "error" | "info";
 
 /** Strip HTML tags and truncate plain text to max characters for table display. */
 function truncate(text: string, max: number): string {
@@ -154,7 +154,8 @@ function openJobModal(job: Job): void {
   if (!job.skills?.length && isEnriching) {
     jobModalSkills.innerHTML = '<span class="desc-loading">Đang tìm kỹ năng…</span>';
   } else {
-    jobModalSkills.innerHTML = renderSkillTags(job.skills);
+    // Modal can show more skills than the table.
+    jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
   }
   const isMobile = window.innerWidth <= 640;
   const summaryText = job.summary_description || (isMobile ? truncate(job.description ?? "", 300) : "");
@@ -372,7 +373,7 @@ export function hideResults(): void {
   filterBar.classList.add("hidden");
   // Reset filter state
   _allJobs = [];
-  _hiddenSources.clear();
+  _activeSources.clear();
   _activeSkills.clear();
   titleFilter.value = "";
 }
@@ -385,14 +386,14 @@ export function openJobByLink(link: string): boolean {
 }
 
 let _allJobs: Job[] = [];
-let _hiddenSources = new Set<string>();
+let _activeSources = new Set<string>();
 let _activeSkills = new Set<string>();
 
-/** Re-render the table rows based on the current _hiddenSources filter set, title words, and active skills. */
+/** Re-render the table rows based on the current _activeSources filter set, title words, and active skills. */
 function _applyFilter(): void {
   const words = titleFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const visible = _allJobs.filter((j) => {
-    if (_hiddenSources.has(j.source)) return false;
+    if (_activeSources.size > 0 && !_activeSources.has(j.source)) return false;
     if (words.length > 0) {
       const title = j.title.toLowerCase();
       if (!words.every((w) => title.includes(w))) return false;
@@ -407,7 +408,7 @@ function _applyFilter(): void {
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
     jobsBody.innerHTML =
-      '<tr><td colspan="9" class="empty">Không có việc làm nào phù hợp với bộ lọc đã chọn.</td></tr>';
+      '<tr><td colspan="10" class="empty">Không có việc làm nào phù hợp với bộ lọc đã chọn.</td></tr>';
   } else {
     visible.forEach((job, i) => jobsBody.appendChild(buildRow(job, i + 1)));
   }
@@ -441,21 +442,19 @@ function _rebuildFilterBar(): void {
   sources.forEach((source) => {
     const count = _allJobs.filter((j) => j.source === source).length;
     const btn = document.createElement("span");
-    // Start active (visible); only faded if already in _hiddenSources
-    const isHidden = _hiddenSources.has(source);
-    btn.className = `badge badge-${source.toLowerCase()} badge-filter${isHidden ? "" : " active"}`;
+    // Start inactive; activate on click (like skill pills)
+    const isActive = _activeSources.has(source);
+    btn.className = `badge badge-${source.toLowerCase()} badge-filter${isActive ? " active" : ""}`;
     btn.textContent = `${source} ${count}`;
     btn.dataset.source = source;
 
     btn.addEventListener("click", () => {
-      if (_hiddenSources.has(source)) {
-        // Currently hidden → show it
-        _hiddenSources.delete(source);
-        btn.classList.add("active");
-      } else {
-        // Currently visible → hide it
-        _hiddenSources.add(source);
+      if (_activeSources.has(source)) {
+        _activeSources.delete(source);
         btn.classList.remove("active");
+      } else {
+        _activeSources.add(source);
+        btn.classList.add("active");
       }
       _applyFilter();
     });
@@ -512,13 +511,41 @@ function _rebuildFilterBar(): void {
  * Returns the merged sorted job list.
  */
 export function appendJobs(existing: Job[], incoming: Job[]): Job[] {
+  const jobKey = (j: Job): string => {
+    // Primary identity is the canonical link (used for in-place enrichment).
+    if (j.link) return j.link;
+    // Fallback for rare cases where a scraper returns an empty link.
+    // This prevents clobbering multiple jobs into one Map entry.
+    const t = (j.title || "").trim().toLowerCase();
+    const c = (j.company || "").trim().toLowerCase();
+    const s = (j.source || "").trim().toLowerCase();
+    const l = (j.location || "").trim().toLowerCase();
+    const ts = typeof j.posted_ts === "number" ? j.posted_ts : 0;
+    return `nolink:${s}:${c}:${t}:${l}:${ts}`;
+  };
+
   // Merge incoming into existing: update jobs with same link (e.g. LinkedIn
   // description enrichment pass), append truly new ones.
-  const byLink = new Map(existing.map(j => [j.link, j]));
+  const byLink = new Map(existing.map(j => [jobKey(j), j]));
   for (const j of incoming) {
-    byLink.set(j.link, j); // overwrite with enriched version if same link
+    const key = jobKey(j);
+    const prev = byLink.get(key);
+    // Preserve existing semantic score if the incoming update doesn't include it
+    // (common for phase-2 enrichment updates).
+    if (prev && typeof prev._vector_score === "number" && typeof j._vector_score !== "number") {
+      (j as Job)._vector_score = prev._vector_score;
+    }
+    byLink.set(key, j); // overwrite with enriched version if same link
   }
   const merged = [...byLink.values()].sort((a, b) => {
+    const sa = a._vector_score;
+    const sb = b._vector_score;
+    // If we have vector scores, rank by relevance first.
+    if (typeof sa === "number" || typeof sb === "number") {
+      const da = typeof sa === "number" ? sa : -Infinity;
+      const db = typeof sb === "number" ? sb : -Infinity;
+      if (db !== da) return db - da;
+    }
     const ta = a.posted_ts ?? 0;
     const tb = b.posted_ts ?? 0;
     return tb - ta; // larger timestamp = newer = first
@@ -530,13 +557,15 @@ export function appendJobs(existing: Job[], incoming: Job[]): Job[] {
 
   // If the modal is open for a job that just received enriched data, update it live
   if (_openModalLink) {
+    // Modal tracks by real link; refresh only when that specific link was enriched.
     const openJob = byLink.get(_openModalLink);
     if (openJob && incoming.some(j => j.link === _openModalLink)) {
       // This job was part of the incoming batch — refresh modal fields
       if (openJob.description) {
         jobModalDesc.innerHTML = openJob.description;
       }
-      jobModalSkills.innerHTML = renderSkillTags(openJob.skills);
+      // Modal can show more skills than the table.
+      jobModalSkills.innerHTML = renderSkillTags(openJob.skills, 30);
       const isMobile = window.innerWidth <= 640;
       const refreshSummary = openJob.summary_description || (isMobile ? truncate(openJob.description ?? "", 300) : "");
       if (refreshSummary) {
@@ -560,24 +589,90 @@ function renderTable(jobs: Job[]): void {
 /** Build a table row element for a single job, wiring up the modal click handler. */
 function buildRow(job: Job, num: number): HTMLTableRowElement {
   const tr = document.createElement("tr");
-  const skillsHtml = renderSkillTags(job.skills);
+  if (job.level_match) tr.classList.add("level-match");
+  // Keep rows compact: show fewer skills in the table.
+  const skillsHtml = renderSkillTags(job.skills, 6);
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
+  const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
+  const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
+  const levelBadge = job.level_match ? `<span class="level-badge">✓ Phù hợp</span>` : "";
   tr.innerHTML = `
     <td class="num">${num}</td>
-    <td class="title" data-company="${esc(job.company)}">${esc(job.title)}</td>
+    <td class="title" data-company="${esc(job.company)}">
+      <div class="title-main">${esc(job.title)}${levelBadge}</div>
+      <div class="title-meta">
+        ${companyLogoHtml(job.company, job.source, job.logo)}
+        <span class="title-company">${esc(job.company)}</span>
+        ${scorePill}
+      </div>
+    </td>
     <td><div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div></td>
     <td>${esc(job.location)}</td>
     <td class="posted">${esc(job.posted ?? "")}</td>
-    <td class="skills-cell">${skillsHtml || '<span class="no-skills">—</span>'}</td>
+    <td class="score" title="Vector similarity score">${esc(score)}</td>
+    <td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>
     <td class="desc">${esc(descText)}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(job.source)}</span></td>
-    <td><a href="${esc(job.link)}" target="_blank" rel="noopener" class="view-link" onclick="event.stopPropagation()">View ↗</a></td>
+    <td>
+      ${job.link
+        ? `<a href="${esc(job.link)}" target="_blank" rel="noopener" class="view-link" onclick="event.stopPropagation()">View ↗</a>`
+        : `<span class="view-link" style="opacity:0.45;cursor:default">—</span>`}
+    </td>
   `;
   tr.addEventListener("click", () => openJobModal(job));
   return tr;
 }
 
 // (showRelated/hideRelated removed)
+
+// ─── Intent box ───────────────────────────────────────────────────────────────
+
+const _intentBox = document.getElementById("intentBox") as HTMLDivElement;
+
+export function showIntentBox(keyword: string, inputType: "job_title" | "cv_or_skills", reasoning: string): void {
+  const label = inputType === "cv_or_skills" ? "Hồ sơ / kỹ năng" : "Chức danh";
+  _intentBox.innerHTML = `
+    <div class="intent-box__header">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      AI nhận diện: <span style="font-weight:400;color:#374151;">${label}</span>
+      &rarr; tìm kiếm với từ khóa <span class="intent-box__keyword">${esc(keyword)}</span>
+    </div>
+    ${reasoning ? `<div class="intent-box__reasoning">${esc(reasoning)}</div>` : ""}
+  `;
+  _intentBox.classList.remove("hidden");
+}
+
+export function setIntentAlternatives(
+  titles: string[],
+  onPick: (title: string) => void,
+): void {
+  const uniq = [...new Set(titles.map(t => t.trim()).filter(Boolean))];
+  // Avoid bloating the UI.
+  const top = uniq.slice(0, 6);
+  if (top.length === 0) return;
+
+  const row = document.createElement("div");
+  row.className = "intent-box__alts";
+  row.innerHTML = `<span class="intent-box__alts-label">Gợi ý:</span>`;
+
+  for (const t of top) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "intent-box__alt";
+    btn.textContent = t;
+    btn.addEventListener("click", () => onPick(t));
+    row.appendChild(btn);
+  }
+
+  _intentBox.appendChild(row);
+}
+
+export function hideIntentBox(): void {
+  _intentBox.classList.add("hidden");
+  _intentBox.innerHTML = "";
+}
 
 // ─── Query suggestion banner ──────────────────────────────────────────────────
 
@@ -604,10 +699,11 @@ export function showSuggestionBanner(
   corrected: string,
   onAccept: (corrected: string) => void,
   onDismiss: () => void,
+  label = "Ý bạn là: ",
 ): void {
   const banner = _getOrCreateSuggestionBanner();
   banner.innerHTML = `
-    <span class="suggestion-banner__text">Ý bạn là: </span>
+    <span class="suggestion-banner__text">${label}</span>
     <button class="suggestion-banner__accept" type="button">${corrected}</button>
     <button class="suggestion-banner__dismiss" type="button" aria-label="Bỏ qua">✕</button>
   `;

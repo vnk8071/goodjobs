@@ -19,3 +19,4 @@ class Job(BaseModel):
 class ScrapeRequest(BaseModel):
     keyword: str
     location: str = "Ho Chi Minh City"
+    raw_input: str = ""   # Free-form CV/skills text; used for vector search when set

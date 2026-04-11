@@ -97,6 +97,32 @@ export async function suggestQuery(
   }
 }
 
+export interface ClassifyResult {
+  input_type: "job_title" | "cv_or_skills";
+  keyword: string;
+  alternatives?: string[];
+  reasoning: string;
+  is_job_title: boolean;
+}
+
+export async function classifyInput(
+  rawText: string,
+  signal?: AbortSignal,
+): Promise<ClassifyResult | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/classify-input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: rawText }),
+      signal,
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ClassifyResult;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Streams job results from the backend via SSE (VPS) or plain JSON (Lambda).
  * Calls `onBatch` each time a scraper finishes with its jobs.

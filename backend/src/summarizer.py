@@ -48,7 +48,12 @@ class SummarizerService:
         "Bạn là chuyên gia phân tích tin tuyển dụng. Với mỗi tin, hãy trả về JSON object gồm 2 trường:\n"
         '1. "summary": tóm tắt bằng TIẾNG VIỆT, CHỈ tập trung vào YÊU CẦU ứng viên (kinh nghiệm, kỹ năng, tech stack, yêu cầu công việc). '
         "KHÔNG QUÁ {max_len} kí tự. Plain text, 1 dòng, không markdown.\n"
-        '2. "skills": mảng JSON tối đa 20 tên kỹ năng/công nghệ TIẾNG ANH ngắn gọn, ví dụ ["Python", "Docker", "AWS"].\n'
+        '2. "skills": mảng JSON tối đa 20 tên kỹ năng/công nghệ TIẾNG ANH ngắn gọn. '
+        "Dùng tên chuẩn, KHÔNG viết tắt hay số nhiều: "
+        '"Machine Learning" (không phải "ML"), "LLM" (không phải "LLMs"), '
+        '"Deep Learning" (không phải "DL"), "Natural Language Processing" → dùng "NLP", '
+        '"Artificial Intelligence" → dùng "AI". '
+        'Ví dụ: ["Python", "Machine Learning", "LLM", "Docker", "AWS"].\n'
         "Chỉ trả về JSON object, không giải thích thêm."
     )
 
@@ -310,7 +315,6 @@ class SummarizerService:
             result_status = result_data.get("status", "")
 
             if result_status in ("queued", "202", "running"):
-                log_app(f"[summarizer] batch {result_status} (status={result_status}), request_id={request_id}")
                 time.sleep(self._POLL_INTERVAL)
                 continue
 

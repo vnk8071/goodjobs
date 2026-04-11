@@ -394,12 +394,28 @@
         text-transform: uppercase;
         margin-bottom: 0.6rem;
         color: var(--muted-light);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1;
+        height: 0.75rem;
+      }
+
+      .field {
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Button column uses an empty label as a spacer; keep its height consistent. */
+      .field.button-field label {
+        visibility: hidden;
       }
 
       .field input[type="text"],
       .field textarea,
       .field select {
         width: 100%;
+        min-height: 48px;
         padding: 0.9rem 1.1rem;
         font-size: 0.95rem;
         border: 1px solid var(--border);
@@ -415,11 +431,22 @@
       .field textarea {
         resize: none;
         overflow: hidden;
-        min-height: 3.5rem;
+        min-height: 48px;
         max-height: 12rem;
         overflow-y: auto;
         font-family: inherit;
-        line-height: 1.6;
+        line-height: 1.4;
+      }
+
+      /* Keyword box is a textarea; keep it aligned with other controls by default. */
+      .search-grid #keyword {
+        height: 48px;
+      }
+
+      /* Make search controls align (input/select/button). */
+      .field input[type="text"],
+      .field select {
+        height: 48px;
       }
 
       .field input[type="text"]:focus,
@@ -512,7 +539,8 @@
         align-items: center;
         justify-content: center;
         gap: 0.5rem;
-        padding: 0.85rem 1.75rem;
+        height: 48px;
+        padding: 0 1.75rem;
         font-size: 0.95rem;
         font-weight: 600;
         border: none;
@@ -642,7 +670,9 @@
       }
 
       .table-wrapper {
-        overflow-x: hidden;
+        /* All columns now fit without scrolling */
+        overflow-x: visible;
+        -webkit-overflow-scrolling: touch;
         border: 1px solid var(--border);
         border-radius: var(--radius);
         background: var(--card);
@@ -661,22 +691,32 @@
 
       /* Rebalance: narrower company, wider description — desktop only */
       @media (min-width: 641px) {
-        table.jobs-table thead th:nth-child(1) { width: 2.8rem; }
-        table.jobs-table thead th:nth-child(2) { width: clamp(10rem, 12vw, 11rem); }
-        table.jobs-table thead th:nth-child(3) { width: clamp(8.5rem, 12vw, 11rem); }
+        /* Narrow first columns to reduce wasted space. */
+        table.jobs-table thead th:nth-child(1) { width: 2.2rem; }
+        table.jobs-table thead th:nth-child(2) { width: clamp(7rem, 9vw, 9rem); }
+        table.jobs-table thead th:nth-child(3) { width: clamp(6rem, 8vw, 8rem); }
         table.jobs-table thead th:nth-child(4),
         tbody td:nth-child(4) { display: none; }   /* Location — hidden on all sizes */
-        table.jobs-table thead th:nth-child(5) { width: 6.8rem; }
-        table.jobs-table thead th:nth-child(6) { width: 4.8rem; }  /* Relevance */
-        table.jobs-table thead th:nth-child(7) { width: 16rem; }   /* Skills */
-        table.jobs-table thead th:nth-child(8) { width: clamp(20rem, 34vw, 30rem); } /* Desc */
-        table.jobs-table thead th:nth-child(9) { width: 6.2rem; }  /* Source */
-        table.jobs-table thead th:nth-child(10) { width: 4.8rem; } /* Link */
+        table.jobs-table thead th:nth-child(5) { width: 5rem; }
+        table.jobs-table thead th:nth-child(6) { width: 3.5rem; }  /* Relevance */
+        table.jobs-table thead th:nth-child(7) { width: 9rem; }   /* Skills */
+        /* Description text is clamped; keep this column narrower to avoid big empty space. */
+        table.jobs-table thead th:nth-child(8) { width: 13rem; } /* Desc */
+        table.jobs-table thead th:nth-child(9) { width: 5rem; }  /* Source */
+        table.jobs-table thead th:nth-child(10) { width: 3.5rem; } /* Link */
+      }
+
+      /* Mobile: hide Link column ("View ↗") to save space */
+      @media (max-width: 640px) {
+        table.jobs-table thead th:nth-child(10),
+        table.jobs-table tbody td:nth-child(10) {
+          display: none;
+        }
       }
 
       thead th {
         background: var(--bg);
-        padding: 0.8rem 1.1rem;
+        padding: 0.8rem 0.6rem;
         text-align: left;
         font-size: 0.7rem;
         font-weight: 700;
@@ -688,7 +728,7 @@
       }
 
       tbody td {
-        padding: 0.9rem 1.1rem;
+        padding: 0.9rem 0.6rem;
         border-bottom: 1px solid rgba(229, 229, 229, 0.6);
         vertical-align: middle;
       }

@@ -35,13 +35,28 @@ async def get_jobs_without_summary(keyword_filter: str | None = None) -> list[di
                 jobs = data.get("jobs", [])
 
                 for job in jobs:
-                    if not job.get("summary_description"):
-                        jobs_to_summarize.append({
+                    # Only summarize jobs that have a real description and no summary yet.
+                    # Note: some scrapers set summary_description to "" initially.
+                    desc = (job.get("description") or "").strip()
+                    if not desc:
+                        continue
+                    summary = job.get("summary_description")
+                    if isinstance(summary, str) and summary.strip():
+                        continue
+                    if summary not in (None, "") and not (
+                        isinstance(summary, str) and not summary.strip()
+                    ):
+                        # Unexpected non-string sentinel: treat as already processed.
+                        continue
+
+                    jobs_to_summarize.append(
+                        {
                             "keyword": kw,
                             "location": loc,
                             "job_id": job.get("link"),
                             "job": job,
-                        })
+                        }
+                    )
 
         log_app(f"[summarizer] found {len(jobs_to_summarize)} jobs without summaries")
         return jobs_to_summarize
@@ -51,7 +66,9 @@ async def get_jobs_without_summary(keyword_filter: str | None = None) -> list[di
         return []
 
 
-async def update_job_analysis(keyword: str, location: str, job_id: str, summary: str, skills: list[str]) -> bool:
+async def update_job_analysis(
+    keyword: str, location: str, job_id: str, summary: str, skills: list[str]
+) -> bool:
     """Update a single job with its summary and skills."""
     redis = get_redis()
     try:
@@ -73,7 +90,9 @@ async def update_job_analysis(keyword: str, location: str, job_id: str, summary:
                 break
 
         if updated:
-            payload = json.dumps({"jobs": jobs, "fetched_ts": data["fetched_ts"]}, ensure_ascii=False)
+            payload = json.dumps(
+                {"jobs": jobs, "fetched_ts": data["fetched_ts"]}, ensure_ascii=False
+            )
             await redis.set(key, payload)
             return True
 
@@ -84,7 +103,9 @@ async def update_job_analysis(keyword: str, location: str, job_id: str, summary:
         return False
 
 
-async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | None = None) -> dict[str, int]:
+async def summarize_pending_jobs(
+    batch_size: int = 25, keyword_filter: str | None = None
+) -> dict[str, int]:
     """Summarize all jobs that don't have summaries yet, and extract skills in the same pass.
 
     batch_size: Number of jobs to process per API call (default: 25)
@@ -99,20 +120,35 @@ async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | Non
 
     stats = {"processed": 0, "success": 0, "skipped": 0, "failed": 0}
 
-    jobs_to_summarize = [item for item in jobs_to_summarize if item["job"].get("description")]
+    # Deduplicate by (keyword, location, link) and prioritize newest jobs first.
+    uniq: dict[tuple[str, str, str], dict] = {}
+    for item in jobs_to_summarize:
+        kw = str(item.get("keyword") or "")
+        loc = str(item.get("location") or "")
+        link = str(item.get("job_id") or item.get("job", {}).get("link") or "")
+        if not link:
+            continue
+        uniq[(kw, loc, link)] = item
+    jobs_to_summarize = list(uniq.values())
+    jobs_to_summarize.sort(
+        key=lambda it: float((it.get("job") or {}).get("posted_ts") or 0.0),
+        reverse=True,
+    )
 
     if not jobs_to_summarize:
         log_app("[summarizer] no jobs with description to summarize")
         return {"processed": 0, "success": 0, "failed": 0}
 
     for i in range(0, len(jobs_to_summarize), batch_size):
-        batch = jobs_to_summarize[i:i + batch_size]
-        descriptions = [item["job"].get("description", "") for item in batch]
+        batch = jobs_to_summarize[i : i + batch_size]
+        descriptions = [str(item["job"].get("description", "") or "") for item in batch]
         batch_num = i // batch_size + 1
 
         titles = [item["job"].get("title", "?") for item in batch]
         skipped = sum(1 for d in descriptions if not d or len(d) < 50)
-        log_app(f"[summarizer] processing batch {batch_num}/{(len(jobs_to_summarize) + batch_size - 1) // batch_size}: {len(descriptions)} jobs ({skipped} empty) — {titles[:5]}{'...' if len(titles) > 5 else ''}")
+        log_app(
+            f"[summarizer] processing batch {batch_num}/{(len(jobs_to_summarize) + batch_size - 1) // batch_size}: {len(descriptions)} jobs ({skipped} empty) — {titles[:5]}{'...' if len(titles) > 5 else ''}"
+        )
 
         try:
             results = summarizer.batch_analyze(descriptions)
@@ -148,10 +184,14 @@ async def summarize_pending_jobs(batch_size: int = 25, keyword_filter: str | Non
     return stats
 
 
-async def run_background_summarization(keyword_filter: str | None = None) -> dict[str, int]:
+async def run_background_summarization(
+    keyword_filter: str | None = None,
+) -> dict[str, int]:
     """Main entry point for background summarization."""
     if keyword_filter:
-        log_app(f"[summarizer] starting background summarization (keyword={keyword_filter!r})...")
+        log_app(
+            f"[summarizer] starting background summarization (keyword={keyword_filter!r})..."
+        )
     else:
         log_app("[summarizer] starting background summarization...")
 

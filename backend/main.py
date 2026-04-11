@@ -36,12 +36,18 @@ from src.matching import (
     strip_level,
     correct_keyword_typos,
     normalize_keyword,
+    _LEVEL_WORDS,
 )
 from src.models import Job, ScrapeRequest
-from src.intent import suggest_query, record_search
+from src.intent import suggest_query, record_search, classify_and_extract
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
-from src.vector import ensure_index, search as vector_search, upsert_jobs
+from src.vector import (
+    ensure_index,
+    search as vector_search,
+    upsert_jobs,
+    score_jobs_by_embedding,
+)
 from src.warmup import (
     warmup,
     _WARMUP_LOCATIONS,
@@ -75,6 +81,8 @@ graphql_app = GraphQLRouter(schema)
 app.include_router(graphql_app, prefix="/graphql")
 
 _ALLOWED_ORIGINS = [
+    "http://localhost",
+    "http://localhost:80",
     "http://localhost:5173",
     "https://goodjobs.io.vn",
     "https://www.goodjobs.io.vn",
@@ -547,7 +555,7 @@ async def admin_embed_test(secret: str = "", n: int = 3):
 @app.get("/stats")
 async def stats():
     """Return total unique jobs posted in the last 7 days across all cached keys."""
-    cutoff = time.time() - 7 * 86400
+    cutoff = time.time() - 8 * 86400
     seen_links: set[str] = set()
     count = 0
     try:
@@ -677,6 +685,24 @@ async def suggest_query_endpoint(req: ScrapeRequest, request: Request):
     return result
 
 
+@app.post("/classify-input")
+async def classify_input_endpoint(req: ScrapeRequest):
+    """Classify user input as job_title or cv_or_skills, and extract a clean keyword.
+
+    Response:
+      {
+        "input_type": "job_title" | "cv_or_skills",
+        "keyword": str,
+        "reasoning": str,
+        "is_job_title": bool,
+      }
+    """
+    raw = req.keyword.strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="keyword is required")
+    return await classify_and_extract(raw)
+
+
 @app.post("/scrape", response_model=list[Job])
 async def scrape(req: ScrapeRequest, request: Request):
     """Scrape jobs for a keyword and location, returning all results as a JSON array."""
@@ -690,6 +716,12 @@ async def scrape(req: ScrapeRequest, request: Request):
         re.sub(r"\d+", " ", normalize_keyword(keyword)).split()
     )
     cache_keyword = strip_level(keyword_normalized)
+
+    kw_words_lower_s = set(keyword_normalized.lower().split())
+    requested_levels_s = kw_words_lower_s & _LEVEL_WORDS
+    has_level_s = bool(requested_levels_s)
+    match_keyword_s = cache_keyword if has_level_s else keyword
+    match_fn_s = title_matches if has_level_s else title_matches_loose
 
     all_cached_jobs: list[dict] = []
     related_keywords = _get_related_keywords(cache_keyword)
@@ -706,8 +738,12 @@ async def scrape(req: ScrapeRequest, request: Request):
         all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
         unique_jobs = list(all_cached_jobs_by_link.values())
         unique_jobs = [
-            j for j in unique_jobs if title_matches(j.get("title", ""), keyword)
+            j for j in unique_jobs if match_fn_s(j.get("title", ""), match_keyword_s)
         ]
+        for j in unique_jobs:
+            if has_level_s:
+                title_lower = j.get("title", "").lower()
+                j["level_match"] = any(lvl in title_lower for lvl in requested_levels_s)
         log_app(
             f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering"
         )
@@ -795,6 +831,16 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     )
     cache_keyword = strip_level(keyword_normalized)
 
+    # Detect level words in the requested keyword (e.g. "junior" in "Junior Software Engineer").
+    # When present, broaden the search to the level-stripped keyword so we get enough results,
+    # then tag each job whose title matches the level for frontend highlighting.
+    kw_words_lower = set(keyword_normalized.lower().split())
+    requested_levels = kw_words_lower & _LEVEL_WORDS
+    has_level = bool(requested_levels)
+    # Use for title matching: if a level was requested, match against the stripped keyword
+    # so that "Software Engineer" jobs are included alongside "Junior Software Engineer".
+    match_keyword = cache_keyword if has_level else keyword
+
     loop = asyncio.get_event_loop()
     _is_warmup_kw = any(
         cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws
@@ -804,16 +850,29 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     )
     is_warmup = _is_warmup_kw and _is_warmup_loc
 
+    # For warmup, keep matching strict to reduce cache noise; for user searches, be looser.
+    match_fn = title_matches if is_warmup else title_matches_loose
+
+    def _tag_level(j: dict) -> dict:
+        """Mark job as level_match if its title contains any of the requested level words."""
+        if has_level:
+            title_lower = j.get("title", "").lower()
+            j["level_match"] = any(lvl in title_lower for lvl in requested_levels)
+        return j
+
     def _process(jobs: list[dict]) -> list[dict]:
         filtered = []
         for j in jobs:
-            if is_warmup and not title_matches(j.get("title", ""), keyword):
+            if is_warmup and not title_matches(j.get("title", ""), match_keyword):
                 continue
-            if not is_warmup and not title_matches_loose(j.get("title", ""), keyword):
+            if not is_warmup and not title_matches_loose(
+                j.get("title", ""), match_keyword
+            ):
                 continue
             j["posted_ts"] = posted_ts(j)
             j["posted"] = posted_relative(j["posted_ts"])
             j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+            _tag_level(j)
             filtered.append(j)
         return filtered
 
@@ -822,6 +881,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         sem = _get_sem()
         ip_active_inc(ip)
         try:
+            # CV/skills mode: combine semantic (embedding) matches with keyword cache results.
+            # Shows all cached results immediately, then scrapes fresh ones.
+            raw_vector_query = (req.raw_input or "").strip()
+            vector_seen_links: set[str] = set()
+
             cached_prefill_jobs: list[dict] = []
             cached_prefill_latest_ts = 0.0
             fuzzy_matched_kw = None
@@ -836,6 +900,97 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     all_cached_jobs.extend(cached_jobs)
                     cache_fetched_ts_list.append(cache_fetched_ts)
 
+            if raw_vector_query:
+                # Fetch embedding results and keyword cache in parallel, combine into one batch.
+                vector_primary = await _fetch_vector_supplement(
+                    raw_vector_query,
+                    seen_links=set(),
+                    location=req.location,
+                    warmup_keywords=warmup_kws,
+                    top_k=50,
+                )
+                # Only keep high-confidence semantic matches (score >= 0.6) to avoid noise, especially for warmup keywords where we want to maintain cache quality.
+                vector_primary = [
+                    j for j in vector_primary if j.get("_vector_score", 0.0) >= 0.6
+                ]
+
+                # Build combined map: start with keyword-cache jobs, then overlay vector matches
+                # (vector overrides to attach the score).
+                age_cutoff_cv = time.time() - 8 * 86400
+                combined_by_link: dict[str, dict] = {}
+                if all_cached_jobs:
+                    log_app(
+                        f"cv cache — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords"
+                    )
+                    unique_cache = list(
+                        {j.get("link"): j for j in all_cached_jobs}.values()
+                    )
+                    unique_cache = [
+                        j
+                        for j in unique_cache
+                        if match_fn(j.get("title", ""), match_keyword)
+                        and j.get("posted_ts", 0) >= age_cutoff_cv
+                    ]
+
+                    # Also compute semantic scores for cached jobs so "Điểm" is populated
+                    # even when the job wasn't embedded into Vectorize.
+                    # Best-effort: if embedding is unavailable, jobs will simply have no score.
+                    loop = asyncio.get_event_loop()
+                    try:
+                        await loop.run_in_executor(
+                            _executor,
+                            score_jobs_by_embedding,
+                            unique_cache,
+                            raw_vector_query,
+                            250,
+                        )
+                    except Exception as e:
+                        log_app(f"[cv] local embedding score error: {e}", "ERROR")
+
+                    for j in unique_cache:
+                        _tag_level(j)
+                    _refresh_posted_times(unique_cache)
+                    for j in unique_cache:
+                        combined_by_link[str(j.get("link", ""))] = j
+
+                for j in vector_primary:
+                    link = str(j.get("link", ""))
+                    j["posted_ts"] = posted_ts(j)
+                    j["posted"] = posted_relative(j["posted_ts"])
+                    j["skills"] = extract_skills(
+                        j.get("title", ""), j.get("description", "")
+                    )
+                    _tag_level(j)
+                    combined_by_link[link] = j  # vector overrides with score
+
+                combined = list(combined_by_link.values())
+                combined.sort(
+                    key=lambda j: (
+                        j.get("_vector_score", 0.0),
+                        j.get("posted_ts", 0.0),
+                    ),
+                    reverse=True,
+                )
+
+                if combined:
+                    now_ts = (
+                        max(cache_fetched_ts_list)
+                        if cache_fetched_ts_list
+                        else time.time()
+                    )
+                    yield (
+                        "event: cached\n"
+                        f"data: {json.dumps({'jobs': combined, 'fetched_ts': now_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
+                    )
+                    for j in combined:
+                        if j.get("link"):
+                            vector_seen_links.add(str(j["link"]))
+                    cached_prefill_jobs = combined
+                    cached_prefill_latest_ts = now_ts
+
+                # Skip the regular cache emission below — already handled above.
+                all_cached_jobs = []
+
             if all_cached_jobs:
                 log_app(
                     f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords"
@@ -843,8 +998,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
                 unique_jobs = list(all_cached_jobs_by_link.values())
                 unique_jobs = [
-                    j for j in unique_jobs if title_matches(j.get("title", ""), keyword)
+                    j
+                    for j in unique_jobs
+                    if match_fn(j.get("title", ""), match_keyword)
                 ]
+                for j in unique_jobs:
+                    _tag_level(j)
                 age_cutoff = time.time() - 8 * 86400
                 unique_jobs = [
                     j for j in unique_jobs if j.get("posted_ts", 0) >= age_cutoff
@@ -859,8 +1018,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 if is_warmup and unique_jobs:
                     yield "event: done\ndata: {}\n\n"
                     seen_links = {str(j["link"]) for j in unique_jobs if j.get("link")}
+                    vector_query = req.raw_input.strip() or keyword
                     vector_supplement = await _fetch_vector_supplement(
-                        keyword, seen_links, req.location, warmup_kws
+                        vector_query, seen_links, req.location, warmup_kws
                     )
                     if vector_supplement:
                         _refresh_posted_times(vector_supplement)
@@ -889,9 +1049,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 refiltered = [
                     j
                     for j in fuzzy_jobs
-                    if title_matches(j.get("title", ""), keyword)
+                    if match_fn(j.get("title", ""), match_keyword)
                     and j.get("posted_ts", 0) >= age_cutoff_fuzzy
                 ]
+                for j in refiltered:
+                    _tag_level(j)
                 if refiltered:
                     log_app(
                         f"cache fuzzy — streaming {len(refiltered)} jobs for {keyword!r}, done"
@@ -1035,6 +1197,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             log_app(f"{site} scraper error: {e}", "ERROR")
                             result = []
                         filtered = _process(result)
+                        # Deduplicate against jobs already sent via vector prefill
+                        if vector_seen_links:
+                            filtered = [
+                                j
+                                for j in filtered
+                                if str(j.get("link", "")) not in vector_seen_links
+                            ]
                         all_jobs.extend(filtered)
                         cfg = next((c for c in _ENRICH_CFG if c[0] == site), None)
                         if cfg is not None:
@@ -1075,7 +1244,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 # Deduplicate before persisting/upserting (cache prefill + live scrape may overlap).
                 # For jobsgo/vietnamworks, posted_date is derived from relative text ("3 days ago")
                 # and resets on every scrape. Preserve the oldest known posted_ts for these sources.
-                _RELATIVE_DATE_SOURCES = {"JobsGo", "VietnamWorks"}
+                _RELATIVE_DATE_SOURCES = {
+                    "JobsGo",
+                    "VietnamWorks",
+                    "TopDev",
+                    "CareerViet",
+                    "CareerLink",
+                }
                 by_link: dict[str, dict] = {}
                 for job in all_jobs:
                     link = job.get("link")
@@ -1100,8 +1275,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     seen_links_for_supplement = {
                         str(j["link"]) for j in all_jobs if j.get("link")
                     }
+                    vector_query = req.raw_input.strip() or keyword
                     vector_supplement = await _fetch_vector_supplement(
-                        keyword, seen_links_for_supplement, req.location, warmup_kws
+                        vector_query,
+                        seen_links_for_supplement,
+                        req.location,
+                        warmup_kws,
                     )
                     if vector_supplement:
                         _refresh_posted_times(vector_supplement)

@@ -1,11 +1,11 @@
-import { scrapeJobsStream, scrapeLinkedInFallback, suggestQuery } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, openJobByLink, showSuggestionBanner, hideSuggestionBanner } from "./ui";
+import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput } from "./api";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
 
 const fetchBtn        = document.getElementById("fetchBtn")        as HTMLButtonElement;
-const keywordEl       = document.getElementById("keyword")         as HTMLInputElement;
+const keywordEl       = document.getElementById("keyword")         as HTMLTextAreaElement;
 const locationSelect  = document.getElementById("locationSelect")  as HTMLSelectElement;
 const locationCustom  = document.getElementById("locationCustom")  as HTMLInputElement;
 
@@ -38,9 +38,12 @@ homeLink.addEventListener("click", (e) => {
   clearStatus();
   setLinkedInEnriching(false);
   setTopCVEnriching(false);
+  hideIntentBox();
+  (window as any)._slideshowShow?.();
   currentJobs = [];
   fetchBtn.disabled = false;
   keywordEl.value = "";
+  keywordEl.style.height = "auto";
   suggestionChips.forEach(c => c.classList.remove("active"));
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
@@ -56,15 +59,22 @@ suggestionChips.forEach((chip) => {
 });
 
 keywordEl.addEventListener("input", () => {
+  // Highlight matching suggestion chip.
   const val = keywordEl.value.trim().toLowerCase();
   suggestionChips.forEach(c => {
     c.classList.toggle("active", (c.dataset.kw ?? "").toLowerCase() === val);
   });
+  // Auto-expand height.
+  keywordEl.style.height = "auto";
+  keywordEl.style.height = `${keywordEl.scrollHeight}px`;
 });
 
-
 keywordEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") fetchBtn.click();
+  // Enter without Shift submits; Shift+Enter inserts a newline.
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    fetchBtn.click();
+  }
 });
 
 const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
@@ -93,18 +103,27 @@ let abortController: AbortController | null = null;
 let _pendingSharedJobLink: string | null = null;
 
 /** Run a search with the given keyword and location. Extracted so it can be
- *  triggered both from the button click and from accepting an AI suggestion. */
-async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null): Promise<void> {
+ *  triggered both from the button click and from accepting an AI suggestion.
+ *  `rawInput` — original free-form CV/skills text; used for vector search when set. */
+async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = ""): Promise<void> {
+  const fromCvOrSkills = rawInput.length > 0;
   abortController?.abort();
   abortController = new AbortController();
 
   hideSuggestionBanner();
+  if (!rawInput) hideIntentBox();   // hide when searching as plain job title
   setSearchContext(keyword, location);
-  keywordEl.value = keyword;
+  // In CV mode keep the original pasted text visible; only replace for plain job-title searches.
+  if (!rawInput) {
+    keywordEl.value = keyword;
+    keywordEl.style.height = "auto";
+    keywordEl.style.height = `${keywordEl.scrollHeight}px`;
+  }
 
   fetchBtn.disabled = true;
   currentJobs = [];
   hideResults();
+  (window as any)._slideshowHide?.();
   // related jobs feature is disabled for now
   hideProgress();
   clearStatus();
@@ -114,7 +133,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
 
   try {
     await scrapeJobsStream(
-      { keyword, location },
+      { keyword, location, ...(rawInput ? { raw_input: rawInput } : {}) },
       (batch) => {
         if (location) {
           for (const j of batch) {
@@ -149,6 +168,8 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
 
         if (_isCacheHit) {
           setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
+        } else if (fromCvOrSkills) {
+          setStatus(`Tìm thấy ${count} việc làm phù hợp với hồ sơ — đang tải mô tả…`, "success");
         } else {
           setStatus(`Tìm thấy ${count} việc làm — đang tải mô tả…`, "success");
         }
@@ -228,52 +249,59 @@ fetchBtn.addEventListener("click", async () => {
     return;
   }
 
-  const keyword = keywordEl.value.trim();
-  if (!keyword) {
-    setStatus("Vui lòng nhập tên công việc.", "error");
-    return;
-  }
-  const isWarmupKeyword = [...suggestionChips].some(
-    c => (c.dataset.kw ?? "").toLowerCase() === keyword.toLowerCase(),
-  );
-  if (!isWarmupKeyword && keyword.split(/\s+/).length < 2) {
-    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\").", "error");
+  const rawInput = keywordEl.value.trim();
+  if (!rawInput) {
+    setStatus("Vui lòng nhập tên công việc hoặc dán kỹ năng/CV.", "error");
     return;
   }
 
   const location = getLocation() || undefined;
 
-  // Warmup keywords are curated; skip AI typo/suggestion round-trip.
+  // Warmup chips are curated — skip AI classification entirely.
+  const isWarmupKeyword = [...suggestionChips].some(
+    c => (c.dataset.kw ?? "").toLowerCase() === rawInput.toLowerCase(),
+  );
   if (isWarmupKeyword) {
-    void runSearch(keyword, location, sharedJobLink);
+    void runSearch(rawInput, location, sharedJobLink);
     return;
   }
 
-  // Fire AI suggestion check in parallel — race with 2s timeout so it never blocks.
-  const suggestionTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 2000));
-  const suggestionPromise = suggestQuery(keyword, location);
-  const suggestion = await Promise.race([suggestionPromise, suggestionTimeout]);
+  // Classify all non-warmup input via AI (job title vs CV/skills).
+  setStatus("Đang phân tích…", "info");
+  fetchBtn.disabled = true;
+  const classifyTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
+  const classified = await Promise.race([
+    classifyInput(rawInput, abortController?.signal ?? undefined),
+    classifyTimeout,
+  ]);
+  fetchBtn.disabled = false;
+  clearStatus();
 
-  // Auto-apply pure spelling corrections (corrected ≈ original in word count).
-  const effectiveKeyword = (suggestion?.changed && suggestion.corrected)
-    ? suggestion.corrected
-    : keyword;
+  const isJobTitle = classified?.is_job_title ?? rawInput.split(/\s+/).length <= 6;
+  const extractedKeyword = classified?.keyword ?? rawInput.trim().slice(0, 60);
+  const inputType = classified?.input_type ?? (isJobTitle ? "job_title" : "cv_or_skills");
+  const reasoning = classified?.reasoning ?? "";
 
-  // Start the actual search with the (possibly corrected) keyword.
-  void runSearch(effectiveKeyword, location, sharedJobLink);
-
-  // If the AI corrected the query, show a dismissible "Did you mean?" banner
-  // so the user can revert to their original search.
-  if (suggestion?.changed) {
-    // Show banner after a short delay so progress bar is visible first.
-    setTimeout(() => {
-      showSuggestionBanner(
-        keyword,           // original — offer to revert
-        (original) => void runSearch(original, location, null),
-        () => { /* dismissed — keep corrected search running */ },
-      );
-    }, 500);
+  // Validate: job title must be at least 2 words
+  if (isJobTitle && extractedKeyword.split(/\s+/).length < 2) {
+    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\") hoặc dán kỹ năng/CV.", "error");
+    return;
   }
+
+  showIntentBox(extractedKeyword, inputType, reasoning);
+
+  if (inputType === "cv_or_skills" && (classified?.alternatives?.length ?? 0) > 0) {
+    setIntentAlternatives(classified!.alternatives!, (picked) => {
+      // Clicking an alternative switches to a job-title search.
+      // Disable immediately to prevent double-submits before runSearch starts.
+      fetchBtn.disabled = true;
+      void runSearch(picked, location, sharedJobLink);
+    });
+  }
+
+  // For CV/skills: pass raw input so vector search uses the full text.
+  const rawForVector = isJobTitle ? "" : rawInput;
+  void runSearch(extractedKeyword, location, sharedJobLink, rawForVector);
 
 });
 

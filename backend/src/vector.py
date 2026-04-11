@@ -1,10 +1,17 @@
 import hashlib
 import json
+import math
 
 import requests
 
-from .constants import CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_IDS, CLOUDFLARE_API_TOKEN, CLOUDFLARE_API_TOKENS
+from .constants import (
+    CLOUDFLARE_ACCOUNT_ID,
+    CLOUDFLARE_ACCOUNT_IDS,
+    CLOUDFLARE_API_TOKEN,
+    CLOUDFLARE_API_TOKENS,
+)
 from .logger import log_app
+
 _EMBED_MODEL = "@cf/google/embeddinggemma-300m"
 _INDEX_NAME = "embeddings"
 _EMBED_DIM = 768
@@ -13,12 +20,19 @@ _CF_VEC_BASE = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOU
 
 
 def _headers() -> dict:
-    return {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}", "Content-Type": "application/json"}
+    return {
+        "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+        "Content-Type": "application/json",
+    }
 
 
 def _iter_ai_creds() -> list[tuple[str, str]]:
-    accounts = CLOUDFLARE_ACCOUNT_IDS or ([] if not CLOUDFLARE_ACCOUNT_ID else [CLOUDFLARE_ACCOUNT_ID])
-    tokens = CLOUDFLARE_API_TOKENS or ([] if not CLOUDFLARE_API_TOKEN else [CLOUDFLARE_API_TOKEN])
+    accounts = CLOUDFLARE_ACCOUNT_IDS or (
+        [] if not CLOUDFLARE_ACCOUNT_ID else [CLOUDFLARE_ACCOUNT_ID]
+    )
+    tokens = CLOUDFLARE_API_TOKENS or (
+        [] if not CLOUDFLARE_API_TOKEN else [CLOUDFLARE_API_TOKEN]
+    )
     if not accounts or not tokens:
         return []
     if len(tokens) == 1 and len(accounts) > 1:
@@ -56,7 +70,10 @@ def ensure_index() -> bool:
         if _INDEX_NAME in existing:
             log_app(f"[vector] index '{_INDEX_NAME}' already exists")
             return True
-    body = {"name": _INDEX_NAME, "config": {"dimensions": _EMBED_DIM, "metric": "cosine"}}
+    body = {
+        "name": _INDEX_NAME,
+        "config": {"dimensions": _EMBED_DIM, "metric": "cosine"},
+    }
     resp = requests.post(url, headers=_headers(), json=body, timeout=15)
     if resp.ok and resp.json().get("success"):
         log_app(f"[vector] index '{_INDEX_NAME}' created")
@@ -78,13 +95,21 @@ def embed_texts(texts: list[str]) -> list[list[float]] | None:
     try:
         for idx, (account_id, api_token) in enumerate(creds):
             ai_url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{_EMBED_MODEL}"
-            headers = {"Authorization": f"Bearer {api_token}", "Content-Type": "application/json"}
-            resp = requests.post(ai_url, headers=headers, json={"text": texts}, timeout=(10, 90))
+            headers = {
+                "Authorization": f"Bearer {api_token}",
+                "Content-Type": "application/json",
+            }
+            resp = requests.post(
+                ai_url, headers=headers, json={"text": texts}, timeout=(10, 90)
+            )
             if resp.ok:
                 result = resp.json().get("result", {})
                 return result.get("data")
             if idx < len(creds) - 1 and _is_quota_error(resp):
-                log_app(f"[vector] embed quota-limited, trying next CF account ({resp.status_code})", "WARN")
+                log_app(
+                    f"[vector] embed quota-limited, trying next CF account ({resp.status_code})",
+                    "WARN",
+                )
                 next_account_id = creds[idx + 1][0]
                 log_app(
                     f"[vector] embed fallback → account {idx + 2}/{len(creds)} ({next_account_id[:8]}...)",
@@ -128,7 +153,7 @@ def upsert_jobs(jobs: list[dict]) -> bool:
         texts = [_job_text(j) for j in batch]
         vectors = embed_texts(texts)
         if vectors is None:
-            log_app(f"[vector] embed failed for batch {i//BATCH}", "ERROR")
+            log_app(f"[vector] embed failed for batch {i // BATCH}", "ERROR")
             all_ok = False
             continue
 
@@ -160,10 +185,10 @@ def upsert_jobs(jobs: list[dict]) -> bool:
             timeout=(10, 60),
         )
         if not (resp.ok and resp.json().get("success")):
-            log_app(f"[vector] upsert failed batch {i//BATCH}: {resp.text}", "ERROR")
+            log_app(f"[vector] upsert failed batch {i // BATCH}: {resp.text}", "ERROR")
             all_ok = False
         else:
-            log_app(f"[vector] upserted {len(batch)} vectors (batch {i//BATCH})")
+            log_app(f"[vector] upserted {len(batch)} vectors (batch {i // BATCH})")
 
     return all_ok
 
@@ -228,6 +253,65 @@ def search(query: str, top_k: int = 20) -> list[dict]:
         return []
 
 
+def _cosine(a: list[float], b: list[float]) -> float:
+    # Both are expected to be same length.
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if na <= 0.0 or nb <= 0.0:
+        return 0.0
+    return dot / (math.sqrt(na) * math.sqrt(nb))
+
+
+def score_jobs_by_embedding(
+    jobs: list[dict],
+    query: str,
+    max_jobs: int = 250,
+) -> list[dict]:
+    """Compute cosine similarity between query embedding and job embeddings.
+
+    Intended for CV/skills mode so cached jobs can get _vector_score too.
+    Only scores jobs that don't already have _vector_score.
+
+    Notes:
+    - Uses Workers AI embedding endpoint; does not require Vectorize index.
+    - Caps to `max_jobs` jobs to limit latency and cost.
+    """
+    if not jobs or not query.strip():
+        return jobs
+
+    # Keep original order; only fill missing scores.
+    to_score: list[dict] = [j for j in jobs if "_vector_score" not in j]
+    if not to_score:
+        return jobs
+
+    if max_jobs and len(to_score) > max_jobs:
+        to_score = to_score[:max_jobs]
+
+    q_vecs = embed_texts([query.strip()])
+    if not q_vecs:
+        return jobs
+    q_vec = q_vecs[0]
+
+    BATCH = 100
+    for i in range(0, len(to_score), BATCH):
+        batch = to_score[i : i + BATCH]
+        texts = [_job_text(j) for j in batch]
+        vecs = embed_texts(texts)
+        if not vecs:
+            # Best-effort: leave remaining jobs unscored.
+            return jobs
+        for j, v in zip(batch, vecs):
+            # Round for compact payloads + stable UI.
+            j["_vector_score"] = round(_cosine(q_vec, v), 4)
+
+    return jobs
+
+
 def delete_by_ids(ids: list[str]) -> bool:
     """Delete vectors from Cloudflare Vectorize by their IDs.
 
@@ -246,7 +330,9 @@ def delete_by_ids(ids: list[str]) -> bool:
             timeout=30,
         )
         if not resp.ok:
-            log_app(f"[vector] delete_by_ids error {resp.status_code}: {resp.text}", "ERROR")
+            log_app(
+                f"[vector] delete_by_ids error {resp.status_code}: {resp.text}", "ERROR"
+            )
             return False
         log_app(f"[vector] deleted {len(ids)} vectors")
         return True

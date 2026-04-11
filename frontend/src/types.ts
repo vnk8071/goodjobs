@@ -20,11 +20,15 @@ export interface Job {
   summary_description?: string;
   skills?: string[];
   logo?: string;
+  _vector_score?: number;
+  _from_vector?: boolean;
+  level_match?: boolean;   // true when title contains the requested level word (e.g. "junior")
 }
 
 export interface ScrapeRequest {
   keyword: string;
   location?: string;
+  raw_input?: string;  // Free-form CV/skills text; used for vector search
 }
 
 export interface QuerySuggestion {

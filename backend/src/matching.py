@@ -253,7 +253,7 @@ def title_matches_loose(title: str, keyword: str) -> bool:
         return False
 
     overlap = len(set(kw_words) & set(core_words)) / len(set(kw_words) | set(core_words))
-    return overlap >= 0.3
+    return overlap >= 0.2
 
 
 def extract_skills(title: str, description: str) -> list[str]:
