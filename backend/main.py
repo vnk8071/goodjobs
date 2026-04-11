@@ -879,6 +879,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
     async def event_generator() -> AsyncGenerator[str, None]:
         global _queue_count
+        loop = asyncio.get_event_loop()
         sem = _get_sem()
         ip_active_inc(ip)
         try:
@@ -936,7 +937,6 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     # Also compute semantic scores for cached jobs so "Điểm" is populated
                     # even when the job wasn't embedded into Vectorize.
                     # Best-effort: if embedding is unavailable, jobs will simply have no score.
-                    loop = asyncio.get_event_loop()
                     try:
                         await loop.run_in_executor(
                             _executor,

@@ -133,7 +133,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
 
   try {
     await scrapeJobsStream(
-      { keyword, location, ...(rawInput ? { raw_input: rawInput } : {}) },
+      { keyword, location, ...(rawInput ? { raw_input: rawInput.slice(0, 2000) } : {}) },
       (batch) => {
         if (location) {
           for (const j of batch) {
