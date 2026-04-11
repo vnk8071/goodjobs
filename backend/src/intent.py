@@ -244,6 +244,13 @@ Classification rules:
 - "cv_or_skills": anything longer — a resume, skill list, bio, or sentences describing experience
 - "not_job": input is a greeting, random text, question, or anything not related to job search (e.g. "Hi", "hello", "what is the weather?", "tell me a joke"). Set keyword to "" when using this type.
 
+Abbreviation expansion (Vietnamese tech community shorthand — expand these before extracting keyword):
+- "de" → "Data Engineer", "da" → "Data Analyst", "ds" → "Data Scientist"
+- "be" → "Backend Engineer", "fe" → "Frontend Engineer", "fs" → "Fullstack Engineer"
+- "ba" → "Business Analyst", "pm" → "Product Manager", "po" → "Product Owner"
+- "qa" → "QA Engineer", "qc" → "QC Engineer", "devops" stays as "DevOps Engineer"
+- Apply expansion even when combined with level words, e.g. "de intern" → "Data Engineer Intern", "senior be" → "Senior Backend Engineer"
+
 Keyword extraction rules:
 - NEVER use CV section headers (EDUCATION, SKILLS, EXPERIENCE, SUMMARY, etc.) as the keyword
 - For a CV: look at the EXPERIENCE section and pick the most recent or most senior job title

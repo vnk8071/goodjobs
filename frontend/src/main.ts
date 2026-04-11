@@ -277,15 +277,21 @@ fetchBtn.addEventListener("click", async () => {
   fetchBtn.disabled = false;
   clearStatus();
 
-  if (classified?.input_type === "not_job") {
+  // If classify failed (null = timeout or network error), skip AI checks and search directly.
+  if (classified === null) {
+    void runSearch(rawInput.trim().slice(0, 60), location, sharedJobLink);
+    return;
+  }
+
+  if (classified.input_type === "not_job") {
     setStatus("Vui lòng nhập tên công việc hoặc kỹ năng để tìm kiếm (ví dụ: \"Backend Engineer\", \"React Developer\").", "error");
     return;
   }
 
-  const isJobTitle = classified?.is_job_title ?? rawInput.split(/\s+/).length <= 6;
-  const extractedKeyword = classified?.keyword ?? rawInput.trim().slice(0, 60);
-  const inputType = classified?.input_type ?? (isJobTitle ? "job_title" : "cv_or_skills");
-  const reasoning = classified?.reasoning ?? "";
+  const isJobTitle = classified.is_job_title;
+  const extractedKeyword = classified.keyword || rawInput.trim().slice(0, 60);
+  const inputType = classified.input_type;
+  const reasoning = classified.reasoning ?? "";
 
   // Validate: job title must be at least 2 words
   if (isJobTitle && extractedKeyword.split(/\s+/).length < 2) {

@@ -9,6 +9,28 @@ _LEVEL_WORDS = {
     "associate",
 }
 
+# Generic role nouns that carry little discriminating signal on their own.
+# Stripped when building a fallback match keyword so "LLM Specialist" → "llm"
+# still matches cached "LLM Engineer" jobs.
+_GENERIC_ROLE_WORDS = {
+    "engineer", "developer", "dev", "specialist", "analyst", "consultant",
+    "architect", "manager", "officer", "executive", "lead", "head",
+    "coordinator", "administrator", "admin", "technician", "expert",
+    "programmer", "coder", "designer", "researcher", "scientist",
+}
+
+
+def strip_generic_role(keyword: str) -> str:
+    """Return keyword with generic role nouns removed, lowercased.
+
+    Used as a fallback match keyword so niche titles like 'LLM Specialist'
+    still match cached jobs with titles like 'LLM Engineer'.
+    Returns the original lowercased keyword if stripping leaves nothing.
+    """
+    words = keyword.lower().strip().split()
+    stripped = [w for w in words if w not in _GENERIC_ROLE_WORDS and w not in _LEVEL_WORDS]
+    return " ".join(stripped).strip() or keyword.lower().strip()
+
 # Common job-related English vocabulary for typo correction
 _JOB_VOCABULARY = {
     # Roles & positions

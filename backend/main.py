@@ -34,6 +34,7 @@ from src.matching import (
     posted_ts,
     posted_relative,
     strip_level,
+    strip_generic_role,
     correct_keyword_typos,
     normalize_keyword,
     _LEVEL_WORDS,
@@ -1003,6 +1004,16 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     for j in unique_jobs
                     if match_fn(j.get("title", ""), match_keyword)
                 ]
+                # Fallback: if no jobs matched, retry with generic role words stripped
+                # so "LLM Specialist" matches cached "LLM Engineer" jobs.
+                if not unique_jobs:
+                    fallback_kw = strip_generic_role(match_keyword)
+                    if fallback_kw != match_keyword.lower().strip():
+                        unique_jobs = [
+                            j
+                            for j in all_cached_jobs_by_link.values()
+                            if match_fn(j.get("title", ""), fallback_kw)
+                        ]
                 for j in unique_jobs:
                     _tag_level(j)
                 age_cutoff = time.time() - 8 * 86400
@@ -1053,6 +1064,15 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     if match_fn(j.get("title", ""), match_keyword)
                     and j.get("posted_ts", 0) >= age_cutoff_fuzzy
                 ]
+                if not refiltered:
+                    fallback_kw = strip_generic_role(match_keyword)
+                    if fallback_kw != match_keyword.lower().strip():
+                        refiltered = [
+                            j
+                            for j in fuzzy_jobs
+                            if match_fn(j.get("title", ""), fallback_kw)
+                            and j.get("posted_ts", 0) >= age_cutoff_fuzzy
+                        ]
                 for j in refiltered:
                     _tag_level(j)
                 if refiltered:
