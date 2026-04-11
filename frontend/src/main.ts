@@ -105,7 +105,7 @@ let _pendingSharedJobLink: string | null = null;
 /** Run a search with the given keyword and location. Extracted so it can be
  *  triggered both from the button click and from accepting an AI suggestion.
  *  `rawInput` — original free-form CV/skills text; used for vector search when set. */
-async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = ""): Promise<void> {
+async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = "", replaceInput = false): Promise<void> {
   const fromCvOrSkills = rawInput.length > 0;
   abortController?.abort();
   abortController = new AbortController();
@@ -113,8 +113,8 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   hideSuggestionBanner();
   // Intent box is shown for all search types; only hide on explicit reset.
   setSearchContext(keyword, location);
-  // In CV mode keep the original pasted text visible; only replace for plain job-title searches.
-  if (!rawInput) {
+  // Only replace input when explicitly requested (e.g. clicking an alternative keyword).
+  if (replaceInput) {
     keywordEl.value = keyword;
     keywordEl.style.height = "auto";
     keywordEl.style.height = `${keywordEl.scrollHeight}px`;
@@ -140,6 +140,8 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
             if (!j.location) j.location = location;
           }
         }
+        // Hide vector-matched jobs that have no description — they add no value to the user.
+        batch = batch.filter(j => typeof j._vector_score !== "number" || !!j.description?.trim());
         if (batch.some(j => j.source === "LinkedIn" && !j.description)) {
           setLinkedInEnriching(true);
         }
@@ -307,7 +309,7 @@ fetchBtn.addEventListener("click", async () => {
       // Clicking an alternative switches to a job-title search.
       // Disable immediately to prevent double-submits before runSearch starts.
       fetchBtn.disabled = true;
-      void runSearch(picked, location, sharedJobLink);
+      void runSearch(picked, location, sharedJobLink, "", true);
     });
   }
 
