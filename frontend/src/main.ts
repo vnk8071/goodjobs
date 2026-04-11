@@ -197,7 +197,9 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
-        setFromCache(true);
+        // Only skip highlighting for warmup keyword cache (fuzzy hits where all jobs already match).
+        // For user-specific searches, keep highlighting even when served from cache.
+        if (fuzzy) setFromCache(true);
       },
       // onVectorResults (related jobs) is disabled for now
       () => {},
