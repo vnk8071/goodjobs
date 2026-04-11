@@ -2,6 +2,60 @@ import type { Job } from "./types";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
+// Generic role nouns and level words that carry no domain signal.
+const _ROLE_WORDS = new Set([
+  "engineer", "developer", "dev", "specialist", "analyst", "consultant",
+  "architect", "manager", "officer", "executive", "lead", "head",
+  "coordinator", "administrator", "admin", "technician", "expert",
+  "programmer", "coder", "designer", "researcher", "scientist",
+  "senior", "sr", "junior", "jr", "intern", "internship",
+  "fresher", "staff", "principal", "mid", "entry", "associate",
+]);
+
+// Expand common abbreviations to their full forms for matching job titles.
+const _ABBR_EXPAND: Record<string, string[]> = {
+  "ai": ["ai", "artificial intelligence"],
+  "ml": ["ml", "machine learning"],
+  "nlp": ["nlp", "natural language"],
+  "cv": ["computer vision"],
+  "ui": ["ui", "user interface"],
+  "ux": ["ux", "user experience"],
+  "be": ["backend"],
+  "fe": ["frontend"],
+  "fs": ["fullstack", "full stack"],
+  "de": ["data"],
+  "da": ["data"],
+  "ds": ["data"],
+  "ba": ["business"],
+  "qa": ["qa", "quality"],
+  "qc": ["qc", "quality"],
+};
+
+function _expandDomainWords(words: string[]): string[] {
+  const result: string[] = [];
+  for (const w of words) {
+    result.push(w);
+    const extras = _ABBR_EXPAND[w];
+    if (extras) result.push(...extras);
+  }
+  return [...new Set(result)];
+}
+
+/**
+ * Wrap domain words from the search keyword in <mark> tags within a job title.
+ * Skips generic role/level words so only meaningful domain terms are highlighted.
+ * Uses word-boundary matching to avoid partial matches (e.g. "ai" inside "aircraft").
+ */
+function highlightDomain(title: string, keyword: string): string {
+  if (!keyword) return esc(title);
+  const base = keyword.toLowerCase().split(/\s+/).filter(w => w.length >= 2 && !_ROLE_WORDS.has(w));
+  const domainWords = _expandDomainWords(base).filter(w => w.length >= 2);
+  if (domainWords.length === 0) return esc(title);
+  const escaped = domainWords.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "gi");
+  return esc(title).replace(pattern, "<mark>$1</mark>");
+}
+
 /** Strip HTML tags and truncate plain text to max characters for table display. */
 function truncate(text: string, max: number): string {
   const plain = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -38,10 +92,16 @@ const resultsShareBtn = document.getElementById("resultsShareBtn") as HTMLButton
 
 let _searchKeyword = "";
 let _searchLocation: string | undefined;
+let _fromCache = false;
 
 export function setSearchContext(keyword: string, location?: string): void {
   _searchKeyword = keyword;
   _searchLocation = location;
+  _fromCache = false;
+}
+
+export function setFromCache(val: boolean): void {
+  _fromCache = val;
 }
 
 async function _copyToClipboard(text: string): Promise<boolean> {
@@ -590,6 +650,12 @@ function renderTable(jobs: Job[]): void {
 function buildRow(job: Job, num: number): HTMLTableRowElement {
   const tr = document.createElement("tr");
   if (job.level_match) tr.classList.add("level-match");
+  if (!_fromCache) {
+    const _baseDomain = _searchKeyword.toLowerCase().split(/\s+/).filter(w => w.length >= 2 && !_ROLE_WORDS.has(w));
+    const _domainWords = _expandDomainWords(_baseDomain).filter(w => w.length >= 2);
+    const titleLower = job.title.toLowerCase();
+    if (_domainWords.length > 0 && _domainWords.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(titleLower))) tr.classList.add("domain-match");
+  }
   // Keep rows compact: show fewer skills in the table.
   const skillsHtml = renderSkillTags(job.skills, 6);
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
@@ -599,7 +665,7 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
   tr.innerHTML = `
     <td class="num">${num}</td>
     <td class="title" data-company="${esc(job.company)}">
-      <div class="title-main">${esc(job.title)}${levelBadge}</div>
+      <div class="title-main">${_fromCache ? esc(job.title) : highlightDomain(job.title, _searchKeyword)}${levelBadge}</div>
       <div class="title-meta">
         ${companyLogoHtml(job.company, job.source, job.logo)}
         <span class="title-company">${esc(job.company)}</span>

@@ -229,6 +229,7 @@ export async function scrapeJobsStream(
         if (eventType === "cached") {
           try {
             const { jobs, fetched_ts, fuzzy } = JSON.parse(payload) as { jobs: Job[]; fetched_ts: number; fuzzy: boolean };
+            if (onCached) onCached(fetched_ts, fuzzy ?? false);
             if (jobs.length > 0) {
               for (const j of jobs) siteCounts.set(j.source, (siteCounts.get(j.source) ?? 0) + 1);
               const BATCH = 5;
@@ -237,7 +238,6 @@ export async function scrapeJobsStream(
                 if (i + BATCH < jobs.length) await new Promise(r => setTimeout(r, 80));
               }
             }
-            if (onCached) onCached(fetched_ts, fuzzy ?? false);
           } catch (e) { console.error("[cached] parse error:", e, "payload length:", payload.length); }
           eventType = "message";
           continue;

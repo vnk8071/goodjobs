@@ -93,11 +93,30 @@ CLOUDFLARE_API_TOKEN = CLOUDFLARE_API_TOKENS[0] if CLOUDFLARE_API_TOKENS else ""
 CLOUDFLARE_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8"
 
 SYNONYMS: list[set[str]] = [
-    {"engineer", "developer", "dev", "programmer"},
-    {"ai", "ml", "machine learning", "artificial intelligence"},
+    {"engineer", "developer", "dev", "programmer", "kỹ sư", "lập trình viên"},
+    {"ai", "ml", "machine learning", "artificial intelligence", "trí tuệ nhân tạo"},
     {"fullstack", "full stack", "full-stack"},
-    {"frontend", "front end", "front-end"},
+    {"frontend", "front end", "front-end", "giao diện"},
     {"backend", "back end", "back-end"},
+    # Vietnamese job title translations
+    {"software", "phần mềm"},
+    {"data", "dữ liệu"},
+    {"mobile", "di động"},
+    {"security", "bảo mật", "an ninh mạng"},
+    {"network", "mạng", "hạ tầng"},
+    {"product", "sản phẩm"},
+    {"manager", "quản lý", "trưởng nhóm", "trưởng phòng"},
+    {"director", "giám đốc"},
+    {"analyst", "phân tích"},
+    {"designer", "thiết kế"},
+    {"marketing", "tiếp thị"},
+    {"sales", "kinh doanh", "bán hàng"},
+    {"accountant", "kế toán"},
+    {"finance", "tài chính"},
+    {"human resources", "nhân sự", "hr"},
+    {"intern", "thực tập", "thực tập sinh"},
+    {"senior", "cao cấp"},
+    {"junior", "mới ra trường", "fresher"},
 ]
 
 SKILL_PATTERNS: list[tuple[str, list[str]]] = [

@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -111,7 +111,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   abortController = new AbortController();
 
   hideSuggestionBanner();
-  if (!rawInput) hideIntentBox();   // hide when searching as plain job title
+  // Intent box is shown for all search types; only hide on explicit reset.
   setSearchContext(keyword, location);
   // In CV mode keep the original pasted text visible; only replace for plain job-title searches.
   if (!rawInput) {
@@ -195,6 +195,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
+        setFromCache(true);
       },
       // onVectorResults (related jobs) is disabled for now
       () => {},
@@ -284,7 +285,7 @@ fetchBtn.addEventListener("click", async () => {
   }
 
   if (classified.input_type === "not_job") {
-    setStatus("Vui lòng nhập tên công việc hoặc kỹ năng để tìm kiếm (ví dụ: \"Backend Engineer\", \"React Developer\").", "error");
+    setStatus("Có vẻ như bạn đang tìm kiếm không phải là một vị trí công việc. Vui lòng nhập tên công việc hoặc kỹ năng để tìm kiếm (ví dụ: \"Business Analyst\", \"Python Developer\", \"kỹ sư phần mềm\").", "error");
     return;
   }
 
