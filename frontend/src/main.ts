@@ -277,6 +277,11 @@ fetchBtn.addEventListener("click", async () => {
   fetchBtn.disabled = false;
   clearStatus();
 
+  if (classified?.input_type === "not_job") {
+    setStatus("Vui lòng nhập tên công việc hoặc kỹ năng để tìm kiếm (ví dụ: \"Backend Engineer\", \"React Developer\").", "error");
+    return;
+  }
+
   const isJobTitle = classified?.is_job_title ?? rawInput.split(/\s+/).length <= 6;
   const extractedKeyword = classified?.keyword ?? rawInput.trim().slice(0, 60);
   const inputType = classified?.input_type ?? (isJobTitle ? "job_title" : "cv_or_skills");

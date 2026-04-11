@@ -228,12 +228,12 @@ _CV_SECTION_HEADERS = {
 
 _CLASSIFY_SYSTEM_PROMPT = """\
 You are a Vietnamese job-search assistant. Given user input, do two things:
-1. Classify whether it is a short job title or a CV / skill list.
-2. Extract the single best job title keyword to search for.
+1. Classify whether it is a short job title, a CV / skill list, or completely unrelated to job search.
+2. Extract the single best job title keyword to search for (unless unrelated).
 
 Return ONLY a JSON object:
 {
-  "input_type": "job_title" | "cv_or_skills",
+  "input_type": "job_title" | "cv_or_skills" | "not_job",
   "keyword": "<2-4 word English job title>",
   "alternatives": ["<related job title>", "<related job title>"] ,
   "reasoning": "<one short sentence>"
@@ -242,6 +242,7 @@ Return ONLY a JSON object:
 Classification rules:
 - "job_title": the entire input is a short role name (≤6 words), e.g. "AI Engineer", "Data Scientist"
 - "cv_or_skills": anything longer — a resume, skill list, bio, or sentences describing experience
+- "not_job": input is a greeting, random text, question, or anything not related to job search (e.g. "Hi", "hello", "what is the weather?", "tell me a joke"). Set keyword to "" when using this type.
 
 Keyword extraction rules:
 - NEVER use CV section headers (EDUCATION, SKILLS, EXPERIENCE, SUMMARY, etc.) as the keyword

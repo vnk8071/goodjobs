@@ -98,7 +98,7 @@ export async function suggestQuery(
 }
 
 export interface ClassifyResult {
-  input_type: "job_title" | "cv_or_skills";
+  input_type: "job_title" | "cv_or_skills" | "not_job";
   keyword: string;
   alternatives?: string[];
   reasoning: string;

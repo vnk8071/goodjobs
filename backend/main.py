@@ -267,6 +267,7 @@ async def _background_rescrape(
 
 
 @app.get("/")
+@app.get("/health")
 def health():
     """Health check endpoint."""
     return {"status": "ok", "service": "good jobs"}
