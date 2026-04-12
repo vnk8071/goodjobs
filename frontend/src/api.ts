@@ -203,6 +203,8 @@ export async function scrapeJobsStream(
           topdev:     "TopDev",
           jobsgo:     "JobsGo",
           careerlink: "CareerLink",
+          glints:     "Glints",
+          viecoi:     "ViecOi",
         };
 
         // Special lifecycle events

@@ -130,6 +130,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   showProgress();
 
   let _isCacheHit = false;
+  let _isFuzzyCache = false;
 
   try {
     await scrapeJobsStream(
@@ -168,7 +169,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
           return;
         }
 
-        if (_isCacheHit) {
+        if (_isCacheHit || _isFuzzyCache) {
           setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
         } else if (fromCvOrSkills) {
           setStatus(`Tìm thấy ${count} việc làm phù hợp với hồ sơ — đang tải mô tả…`, "success");
@@ -199,7 +200,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         if (!fuzzy) _isCacheHit = true;
         // Only skip highlighting for warmup keyword cache (fuzzy hits where all jobs already match).
         // For user-specific searches, keep highlighting even when served from cache.
-        if (fuzzy) setFromCache(true);
+        if (fuzzy) { _isFuzzyCache = true; setFromCache(true); }
       },
       // onVectorResults (related jobs) is disabled for now
       () => {},
