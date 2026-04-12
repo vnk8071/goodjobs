@@ -20,3 +20,5 @@ class ScrapeRequest(BaseModel):
     keyword: str
     location: str = "Ho Chi Minh City"
     raw_input: str = ""   # Free-form CV/skills text; used for vector search when set
+    estimated_level: str = ""  # "junior" | "middle" | "senior" | "" — AI-inferred from CV
+    intent: str = ""      # "job_title" | "cv_or_skills" | "not_job" — AI-classified on frontend

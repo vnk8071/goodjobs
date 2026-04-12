@@ -167,7 +167,7 @@
       }
     </style>
   </head>
-  <body>
+  <body style="display:none">
     <div class="container">
       <header>
         <div class="header-left">
@@ -229,6 +229,7 @@
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('cache')">Cache Keys</button>
         <button class="tab-btn" onclick="switchTab('embedded')">Embedded Jobs</button>
+        <button class="tab-btn" onclick="switchTab('analytics')">Analytics</button>
       </div>
 
       <!-- Tab: Cache Keys -->
@@ -291,6 +292,86 @@
           </div>
         </div>
       </div>
+
+      <!-- Tab: Analytics -->
+      <div id="tab-analytics" class="tab-panel">
+        <!-- Stat cards -->
+        <div class="stats-grid" style="margin-bottom:1.5rem">
+          <div class="stat-card">
+            <div class="label">Total Requests</div>
+            <div class="value" id="aStatTotal">—</div>
+            <div class="sub">all time</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Today</div>
+            <div class="value" id="aStatToday">—</div>
+            <div class="sub">searches</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Unique IPs</div>
+            <div class="value" id="aStatIPs">—</div>
+            <div class="sub">visitors</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Top Keyword</div>
+            <div class="value" style="font-size:1.1rem;line-height:1.2" id="aStatTopKw">—</div>
+            <div class="sub" id="aStatTopKwSub"></div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem">
+          <!-- Requests by hour -->
+          <div class="table-card" style="padding:1.25rem">
+            <div style="font-weight:700;font-size:0.95rem;margin-bottom:1rem">Requests by Hour (today)</div>
+            <canvas id="hourChart" height="120"></canvas>
+          </div>
+          <!-- Top keywords -->
+          <div class="table-card" style="padding:1.25rem">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+              <div style="font-weight:700;font-size:0.95rem">Top Keywords</div>
+              <button class="refresh-btn" onclick="loadAnalytics()" id="analyticsRefreshBtn">Refresh</button>
+            </div>
+            <div id="topKeywordsList" style="display:flex;flex-direction:column;gap:0.6rem"></div>
+          </div>
+        </div>
+
+        <!-- Week + Intent row -->
+        <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem">
+          <div class="table-card" style="padding:1.25rem">
+            <div style="font-weight:700;font-size:0.95rem;margin-bottom:1rem">Requests by Week (last 7 days)</div>
+            <canvas id="weekChart" height="100"></canvas>
+          </div>
+          <div class="table-card" style="padding:1.25rem">
+            <div style="font-weight:700;font-size:0.95rem;margin-bottom:1rem">Intent Breakdown</div>
+            <canvas id="intentChart"></canvas>
+            <div id="intentLegend" style="display:flex;flex-direction:column;gap:0.4rem;margin-top:1rem;font-size:0.8rem"></div>
+          </div>
+        </div>
+
+        <!-- Recent searches table -->
+        <div class="table-card">
+          <div class="table-card-header">
+            <h2>Recent Searches</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Keyword</th>
+                  <th>Location</th>
+                  <th>IP</th>
+                  <th>Intent</th>
+                </tr>
+              </thead>
+              <tbody id="analyticsBody">
+                <tr><td colspan="5" class="loading">Click Analytics tab to load…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script type="module">
@@ -308,11 +389,33 @@
         return s;
       }
 
+      async function authenticate() {
+        let secret = getSecret();
+        while (true) {
+          if (!secret) {
+            document.body.innerHTML = "<p style='font-family:system-ui;text-align:center;margin-top:20vh;color:#dc2626'>Access denied.</p>";
+            document.body.style.display = "";
+            return;
+          }
+          const res = await fetch(`${API_BASE}/admin/analytics?secret=${encodeURIComponent(secret)}`);
+          if (res.ok) {
+            document.body.style.display = "";
+            return;
+          }
+          sessionStorage.removeItem("admin_secret");
+          secret = prompt("Invalid secret. Enter admin secret key:");
+          if (secret) sessionStorage.setItem("admin_secret", secret);
+        }
+      }
+
+      await authenticate();
+
       function switchTab(name) {
         document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
         document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
         document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add("active");
         document.getElementById(`tab-${name}`).classList.add("active");
+        if (name === "analytics" && !_analyticsLoaded) loadAnalytics();
       }
 
       let _allKeys = [];
@@ -487,6 +590,175 @@
         }
       }
 
+      let _hourChart = null;
+      let _weekChart = null;
+      let _intentChart = null;
+      let _analyticsLoaded = false;
+
+      async function loadAnalytics() {
+        const secret = getSecret();
+        if (!secret) return;
+        const btn = document.getElementById("analyticsRefreshBtn");
+        if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+        try {
+          const res = await fetch(`${API_BASE}/admin/analytics?secret=${encodeURIComponent(secret)}`);
+          if (res.status === 403) {
+            sessionStorage.removeItem("admin_secret");
+            _analyticsLoaded = true;
+            document.getElementById("analyticsBody").innerHTML =
+              `<tr><td colspan="5" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
+            return;
+          }
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          renderAnalytics(data);
+          _analyticsLoaded = true;
+        } catch (e) {
+          document.getElementById("analyticsBody").innerHTML =
+            `<tr><td colspan="5" class="error-msg">Failed to load: ${e.message}</td></tr>`;
+        } finally {
+          if (btn) { btn.disabled = false; btn.textContent = "Refresh"; }
+        }
+      }
+
+      function renderAnalytics(data) {
+        // Stat cards
+        document.getElementById("aStatTotal").textContent = (data.total_requests ?? 0).toLocaleString();
+        document.getElementById("aStatToday").textContent = (data.today_requests ?? 0).toLocaleString();
+        document.getElementById("aStatIPs").textContent = (data.unique_ips ?? 0).toLocaleString();
+        const topKw = (data.top_keywords || [])[0];
+        document.getElementById("aStatTopKw").textContent = topKw ? topKw.keyword : "—";
+        document.getElementById("aStatTopKwSub").textContent = topKw ? `${topKw.count} searches` : "";
+
+        // Bar chart — destroy previous instance to avoid canvas reuse error
+        if (_hourChart) { _hourChart.destroy(); _hourChart = null; }
+        if (typeof Chart === "undefined") {
+          document.getElementById("hourChart").insertAdjacentHTML("afterend",
+            `<p style="color:var(--muted);font-size:0.8rem">Chart.js not loaded yet — try refreshing.</p>`);
+        } else {
+        const ctx = document.getElementById("hourChart").getContext("2d");
+        const hours = Array.from({length: 24}, (_, i) => String(i));
+        const counts = hours.map(h => (data.requests_by_hour || {})[h] || 0);
+        _hourChart = new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: hours.map(h => h.padStart(2, "0") + ":00"),
+            datasets: [{
+              data: counts,
+              backgroundColor: counts.map((_, i) => {
+                const now = new Date().getHours();
+                return i === now ? "#2563eb" : "#bfdbfe";
+              }),
+              borderRadius: 3,
+            }],
+          },
+          options: {
+            plugins: { legend: { display: false } },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+              y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+            },
+          },
+        });
+        } // end typeof Chart guard (hourly)
+
+        // Weekly chart
+        if (_weekChart) { _weekChart.destroy(); _weekChart = null; }
+        if (typeof Chart !== "undefined") {
+          const weekData = data.requests_by_week || [];
+          const wCtx = document.getElementById("weekChart").getContext("2d");
+          _weekChart = new Chart(wCtx, {
+            type: "bar",
+            data: {
+              labels: weekData.map(d => d.date.substring(5)),  // MM-DD
+              datasets: [{
+                data: weekData.map(d => d.count),
+                backgroundColor: "#3b82f6",
+                borderRadius: 4,
+              }],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } } },
+              },
+            },
+          });
+        }
+
+        // Intent breakdown doughnut chart
+        if (_intentChart) { _intentChart.destroy(); _intentChart = null; }
+        if (typeof Chart !== "undefined") {
+          const ib = data.intent_breakdown || {};
+          const intentLabels = ["Job Title", "CV / Skills", "Not Job"];
+          const intentValues = [ib.job_title || 0, ib.cv_or_skills || 0, ib.not_job || 0];
+          const intentColors = ["#3b82f6", "#22c55e", "#ef4444"];
+          const iCtx = document.getElementById("intentChart").getContext("2d");
+          _intentChart = new Chart(iCtx, {
+            type: "doughnut",
+            data: {
+              labels: intentLabels,
+              datasets: [{ data: intentValues, backgroundColor: intentColors, borderWidth: 2, borderColor: "#fff" }],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              cutout: "65%",
+            },
+          });
+          const total = intentValues.reduce((a, b) => a + b, 0);
+          document.getElementById("intentLegend").innerHTML = intentLabels.map((lbl, i) => {
+            const pct = total > 0 ? Math.round(intentValues[i] / total * 100) : 0;
+            return `<div style="display:flex;align-items:center;gap:6px">
+              <span style="width:10px;height:10px;border-radius:2px;background:${intentColors[i]};flex-shrink:0"></span>
+              <span style="flex:1">${lbl}</span>
+              <strong>${intentValues[i]}</strong>
+              <span style="color:var(--muted)">(${pct}%)</span>
+            </div>`;
+          }).join("");
+        }
+
+        // Top keywords list
+        const maxCount = topKw ? topKw.count : 1;
+        document.getElementById("topKeywordsList").innerHTML =
+          (data.top_keywords || []).map((kw, i) => {
+            const pct = Math.round((kw.count / maxCount) * 100);
+            return `
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:0.75rem;color:var(--muted);width:16px">${i + 1}</span>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:0.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(kw.keyword)}</div>
+                  <div style="background:var(--border);border-radius:3px;height:4px;margin-top:3px">
+                    <div style="background:var(--primary);width:${pct}%;height:4px;border-radius:3px"></div>
+                  </div>
+                </div>
+                <span style="font-size:0.82rem;font-weight:700;color:var(--primary-dark)">${kw.count}</span>
+              </div>`;
+          }).join("");
+
+        // Recent searches table
+        document.getElementById("analyticsBody").innerHTML =
+          (data.recent_searches || []).length === 0
+            ? `<tr><td colspan="5" class="loading text-muted">No searches recorded.</td></tr>`
+            : (data.recent_searches || []).map(s => {
+                const time = s.ts ? s.ts.substring(11, 16) : "—";
+                const intentBadge = s.intent === "job_title"
+                  ? `<span style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">job title</span>`
+                  : s.intent === "cv_or_skills"
+                  ? `<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">cv / skills</span>`
+                  : s.intent === "not_job"
+                  ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">not job</span>`
+                  : `<span style="color:var(--muted);font-size:0.75rem">—</span>`;
+                return `<tr>
+                  <td class="text-muted mono">${escHtml(time)}</td>
+                  <td><strong>${escHtml(s.keyword || "—")}</strong></td>
+                  <td class="text-muted">${escHtml(s.location || "—")}</td>
+                  <td class="mono text-muted">${escHtml(s.ip || "—")}</td>
+                  <td>${intentBadge}</td>
+                </tr>`;
+              }).join("");
+      }
+
       let _embeddedJobs = [];
       let _embeddedView = "all"; // "all" | "semantic"
 
@@ -628,8 +900,10 @@
       window.filterEmbedded = filterEmbedded;
       window.scrapeKey = scrapeKey;
       window.warmupAll = warmupAll;
+      window.loadAnalytics = loadAnalytics;
 
       // Manual-only: do not auto-fetch on page load.
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
   </body>
 </html>

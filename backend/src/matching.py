@@ -6,7 +6,20 @@ from .constants import SYNONYMS, COMPILED_SKILLS
 _LEVEL_WORDS = {
     "senior", "sr", "junior", "jr", "intern", "internship",
     "fresher", "staff", "principal", "mid", "entry",
-    "associate",
+    "associate", "lead",
+}
+
+# Maps an AI-inferred experience level to the title words that represent it in job listings.
+# Used to tag level_match on results when a CV is submitted without an explicit level keyword.
+LEVEL_SYNONYMS: dict[str, set[str]] = {
+    "intern":    {"intern", "internship"},
+    "fresher":   {"fresher"},
+    "junior":    {"junior"},
+    "middle":    {"middle", "mid"},
+    "senior":    {"senior"},
+    "lead":      {"lead"},
+    "principal": {"principal"},
+    "staff":     {"staff"},
 }
 
 # Generic role nouns that carry little discriminating signal on their own.
@@ -14,7 +27,7 @@ _LEVEL_WORDS = {
 # still matches cached "LLM Engineer" jobs.
 _GENERIC_ROLE_WORDS = {
     "engineer", "developer", "dev", "specialist", "analyst", "consultant",
-    "architect", "manager", "officer", "executive", "lead", "head",
+    "architect", "manager", "officer", "executive", "head",
     "coordinator", "administrator", "admin", "technician", "expert",
     "programmer", "coder", "designer", "researcher", "scientist",
 }

@@ -235,7 +235,9 @@ Return ONLY a JSON object:
 {
   "input_type": "job_title" | "cv_or_skills" | "not_job",
   "keyword": "<2-4 word English job title>",
-  "alternatives": ["<related job title>", "<related job title>"] ,
+  "alternatives": ["<related job title>", "<related job title>"],
+  "estimated_years": <number | null>,
+  "estimated_level": "intern" | "fresher" | "junior" | "middle" | "senior" | "lead" | "principal" | "staff" | null,
   "reasoning": "<one short sentence in Vietnamese>"
 }
 
@@ -263,9 +265,22 @@ Keyword extraction rules:
 - PRESERVE seniority/level words (Senior/Junior/Lead/Principal/Staff/Intern/Fresher) exactly as the user wrote them — do NOT strip or change them
 - NEVER include dates, months (January..December, Jan..Dec), years, or "Present"/"Current"
 - NEVER include company names, locations, or employment type (Full-time/Part-time/Contract)
-- The keyword must be a clean English job title of 1–5 words that faithfully reflects what the user asked for (e.g. "AI Lead", "Junior Data Scientist", "Intern Software Engineer")
+- The keyword must be a clean English job title of EXACTLY 2–5 words. If the input is a single technology/tool/abbreviation (e.g. "RAG", "LLM", "Python", "AWS"), append the most fitting role word (Engineer/Developer/Scientist/Analyst/Architect) — e.g. "RAG" → "RAG Engineer", "Python" → "Python Developer", "AWS" → "Cloud Engineer".
 - alternatives: provide 3–6 closely related standard English job titles (2–5 words each). No duplicates.
 - alternatives MUST be job titles (not skills). Preserve the same level/seniority as the user specified.
+- estimated_years / estimated_level rules (ALWAYS populate these fields):
+  * For "cv_or_skills": sum the duration of all work experience entries (e.g. "2020–2022" = 2 yrs, "Jan 2019 – Present" = years until now). If the CV explicitly states a level (Junior/Middle/Senior/Lead/Principal) use that instead of calculating.
+    - 0 years / student / no work experience → "intern"
+    - stated fresher or < 1 year experience → "fresher"
+    - less than 3 years (< 3) → "junior"
+    - 3 to 5 years (≥ 3 and ≤ 5) → "middle"
+    - more than 5 years (> 5) → "senior"
+    - stated Lead/Team Lead explicitly → "lead"
+    - stated Principal explicitly → "principal"
+    - stated Staff Engineer explicitly → "staff"
+    - Examples: 0 yrs → "intern", 0.5 yrs → "fresher", 2 yrs → "junior", 3 yrs → "middle", 6 yrs → "senior"
+  * For "job_title": if the query contains a level word (junior/senior/middle/lead/intern/fresher), set estimated_level accordingly; otherwise set both fields to null.
+  * For "not_job": set both fields to null.
 - Return ONLY the JSON, no markdown, no explanation
 """
 
@@ -296,7 +311,7 @@ async def classify_and_extract(raw_input: str) -> dict:
     """
     prompt = f'User input:\n"""\n{_scrub_pii(raw_input[:3000])}\n"""'
     raw_reply = _call_cloudflare_ai_with_system(
-        _CLASSIFY_SYSTEM_PROMPT, prompt, max_tokens=150
+        _CLASSIFY_SYSTEM_PROMPT, prompt, max_tokens=220
     )
 
     first_line_raw = _extract_job_title_fallback(raw_input)
@@ -356,8 +371,23 @@ async def classify_and_extract(raw_input: str) -> dict:
             if len(alternatives) >= 6:
                 break
 
+    _VALID_LEVELS = {"intern", "fresher", "junior", "middle", "senior", "lead", "principal", "staff"}
+    estimated_level_raw = parsed.get("estimated_level")
+    estimated_level = (
+        estimated_level_raw.lower()
+        if isinstance(estimated_level_raw, str) and estimated_level_raw.lower() in _VALID_LEVELS
+        else None
+    )
+    estimated_years_raw = parsed.get("estimated_years")
+    estimated_years = (
+        float(estimated_years_raw)
+        if isinstance(estimated_years_raw, (int, float))
+        else None
+    )
+
     log_app(
         f"[intent] classify input={raw_input[:60]!r} type={input_type!r} keyword={keyword!r}"
+        f" level={estimated_level!r} years={estimated_years}"
     )
     return {
         "input_type": input_type,
@@ -365,6 +395,8 @@ async def classify_and_extract(raw_input: str) -> dict:
         "alternatives": alternatives,
         "reasoning": (parsed.get("reasoning") or "").strip(),
         "is_job_title": is_job_title,
+        "estimated_level": estimated_level,
+        "estimated_years": estimated_years,
     }
 
 

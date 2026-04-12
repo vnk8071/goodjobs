@@ -50,17 +50,19 @@ def log_app(message: str, level: str = "INFO") -> None:
     getattr(_app_logger, level.lower())(message)
 
 
-def log_search(request: Request, keyword: str, location: str) -> None:
+def log_search(request: Request, keyword: str, location: str, intent: str = "") -> None:
     ip = (
         request.headers.get("CF-Connecting-IP")
         or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
         or (request.client.host if request.client else "unknown")
     )
-    entry = {
+    entry: dict = {
         "ts":       datetime.now(_TZ_ICT).strftime("%Y-%m-%dT%H:%M:%S+07:00"),
         "ip":       ip,
         "keyword":  keyword,
         "location": location,
     }
-    log_app(f"search: ip={ip} keyword={keyword!r} location={location!r}")
+    if intent:
+        entry["intent"] = intent
+    log_app(f"search: ip={ip} keyword={keyword!r} location={location!r} intent={intent!r}")
     _search_logger.info(json.dumps(entry, ensure_ascii=False))

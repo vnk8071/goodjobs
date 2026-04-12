@@ -103,6 +103,8 @@ export interface ClassifyResult {
   alternatives?: string[];
   reasoning: string;
   is_job_title: boolean;
+  estimated_level?: "intern" | "fresher" | "junior" | "middle" | "senior" | "lead" | "principal" | "staff" | null;
+  estimated_years?: number | null;
 }
 
 export async function classifyInput(

@@ -3,6 +3,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -18,6 +19,7 @@ from src.cache import (
     cache_get,
     cache_set,
     cache_fuzzy_get,
+    cache_preserve_posted_dates,
     cache_touch,
     get_redis,
     vector_mark_nonwarmup_seen,
@@ -38,6 +40,7 @@ from src.matching import (
     correct_keyword_typos,
     normalize_keyword,
     _LEVEL_WORDS,
+    LEVEL_SYNONYMS,
 )
 from src.models import Job, ScrapeRequest
 from src.intent import suggest_query, record_search, classify_and_extract
@@ -556,6 +559,148 @@ async def admin_embed_test(secret: str = "", n: int = 3):
     }
 
 
+@app.get("/admin/analytics")
+async def admin_analytics(secret: str = ""):
+    """Aggregate search.log into request statistics and write analytics.json backup."""
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    import glob as _glob
+    from collections import Counter
+
+    log_dir = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
+    backup_path = os.path.join(log_dir, "analytics.json")
+
+    # Collect all rotated log files: search.log, search.log.1, ..., search.log.5
+    # Filter to only numeric suffixes to avoid crashing on e.g. search.log.gz
+    import re as _re
+    _log_re = _re.compile(r"search\.log(\.\d+)?$")
+    log_files = sorted(
+        [p for p in _glob.glob(os.path.join(log_dir, "search.log*")) if _log_re.search(p)],
+        key=lambda p: (0 if p.endswith("search.log") else int(p.rsplit(".", 1)[-1])),
+    )
+
+    entries: list[dict] = []
+    for path in log_files:
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except Exception:
+                        continue
+        except OSError:
+            continue
+
+    # Fall back to backup if no entries parsed
+    if not entries:
+        try:
+            with open(backup_path, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {
+                "total_requests": 0,
+                "today_requests": 0,
+                "unique_ips": 0,
+                "top_keywords": [],
+                "requests_by_hour": {str(h): 0 for h in range(24)},
+                "requests_by_week": [],
+                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0},
+                "recent_searches": [],
+            }
+
+    _TZ_ICT = timezone(timedelta(hours=7))
+    today_str = datetime.now(_TZ_ICT).strftime("%Y-%m-%d")
+
+    keyword_counter: Counter = Counter()
+    hour_counter_today: Counter = Counter()
+    day_counter: Counter = Counter()
+    intent_counter: Counter = Counter()
+    unique_ips: set = set()
+    today_count = 0
+
+    # Build last-7-days date strings for requests_by_week
+    week_dates = [
+        (datetime.now(_TZ_ICT) - timedelta(days=i)).strftime("%Y-%m-%d")
+        for i in range(6, -1, -1)
+    ]
+    week_dates_set = set(week_dates)
+
+    for e in entries:
+        kw = e.get("keyword", "").strip()
+        ip = e.get("ip", "")
+        ts = e.get("ts", "")
+
+        if kw:
+            keyword_counter[kw.lower()] += 1
+        if ip:
+            unique_ips.add(ip)
+        intent = e.get("intent", "")
+        if intent:
+            intent_counter[intent] += 1
+        if ts:
+            try:
+                dt = datetime.fromisoformat(ts)
+                date_str = dt.strftime("%Y-%m-%d")
+                if date_str == today_str:
+                    hour_counter_today[dt.hour] += 1
+                    today_count += 1
+                if date_str in week_dates_set:
+                    day_counter[date_str] += 1
+            except Exception:
+                pass
+
+    top_keywords = [
+        {"keyword": kw, "count": cnt}
+        for kw, cnt in keyword_counter.most_common(10)
+    ]
+
+    requests_by_hour = {str(h): hour_counter_today.get(h, 0) for h in range(24)}
+    requests_by_week = [
+        {"date": d, "count": day_counter.get(d, 0)} for d in week_dates
+    ]
+
+    recent_searches = [
+        {
+            "ts": e.get("ts", ""),
+            "ip": e.get("ip", ""),
+            "keyword": e.get("keyword", ""),
+            "location": e.get("location", ""),
+            "intent": e.get("intent", ""),
+        }
+        for e in reversed(entries[-50:])
+    ]
+
+    intent_breakdown = {
+        "job_title": intent_counter.get("job_title", 0),
+        "cv_or_skills": intent_counter.get("cv_or_skills", 0),
+        "not_job": intent_counter.get("not_job", 0),
+    }
+
+    result = {
+        "total_requests": len(entries),
+        "today_requests": today_count,
+        "unique_ips": len(unique_ips),
+        "top_keywords": top_keywords,
+        "requests_by_hour": requests_by_hour,
+        "requests_by_week": requests_by_week,
+        "intent_breakdown": intent_breakdown,
+        "recent_searches": recent_searches,
+    }
+
+    # Write backup
+    try:
+        with open(backup_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False)
+    except OSError as e:
+        log_app(f"[analytics] failed to write backup: {e}", "WARNING")
+
+    return result
+
+
 @app.get("/stats")
 async def stats():
     """Return total unique jobs posted in the last 7 days across all cached keys."""
@@ -713,7 +858,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
-    log_search(request, keyword, req.location)
+    log_search(request, keyword, req.location, req.intent)
 
     # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
     keyword_normalized = " ".join(
@@ -784,6 +929,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     for j in jobs:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
+    await cache_preserve_posted_dates(cache_keyword, req.location, jobs)
     await cache_set(cache_keyword, req.location, jobs, time.time())
     _refresh_posted_times(jobs)
     return jobs
@@ -823,7 +969,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if rate_err:
         raise HTTPException(status_code=429, detail=rate_err, headers=rate_headers)
 
-    log_search(request, keyword, req.location)
+    log_search(request, keyword, req.location, req.intent)
     # Record this search in IP history for future intent suggestions (fire-and-forget)
     asyncio.ensure_future(record_search(ip, keyword, req.location))
 
@@ -845,6 +991,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     # so that "Software Engineer" jobs are included alongside "Junior Software Engineer".
     match_keyword = cache_keyword if has_level else keyword
 
+    # For CV input with no explicit level word, use AI-inferred level from classify step.
+    # Map each inferred level to the title words we look for in job listings.
+    inferred_levels: set[str] = set()
+    if not has_level and req.estimated_level in LEVEL_SYNONYMS:
+        inferred_levels = LEVEL_SYNONYMS[req.estimated_level]
+
     loop = asyncio.get_event_loop()
     _is_warmup_kw = any(
         cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws
@@ -858,10 +1010,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     match_fn = title_matches if is_warmup else title_matches_loose
 
     def _tag_level(j: dict) -> dict:
-        """Mark job as level_match if its title contains any of the requested level words."""
+        """Mark job as level_match if its title contains any of the requested/inferred level words."""
+        title_lower = j.get("title", "").lower()
         if has_level:
-            title_lower = j.get("title", "").lower()
             j["level_match"] = any(lvl in title_lower for lvl in requested_levels)
+        elif inferred_levels:
+            j["level_match"] = any(lvl in title_lower for lvl in inferred_levels)
         return j
 
     def _process(jobs: list[dict]) -> list[dict]:
@@ -1314,6 +1468,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         log_app(
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
+                await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs)
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
                 if not is_warmup:
                     try:

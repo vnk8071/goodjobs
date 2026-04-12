@@ -147,6 +147,40 @@ async def cache_ttl(keyword: str, location: str) -> int:
         return -2
 
 
+async def cache_preserve_posted_dates(
+    keyword: str, location: str, new_jobs: list[dict]
+) -> None:
+    """Preserve posted_ts/posted_date/posted from existing cache for already-seen jobs.
+
+    Some job boards (JobsGo, Glints, ViecOi, VietnamWorks, CareerViet) expose only an
+    application deadline rather than a real posting date. Their scrapers derive
+    posted_ts from relative text like "Hôm nay" → days_ago=0, so every re-scrape
+    makes the job look freshly posted and it floats to the top.
+
+    By locking in the original posted_ts from the first time a job was cached, the
+    job's apparent age stays stable for up to RECENT_DAYS. After that the cache TTL
+    expires and the next scrape naturally assigns a new date.
+    """
+    try:
+        existing = await cache_get(keyword, location)
+        if not existing:
+            return
+        existing_by_link: dict[str, dict] = {j["link"]: j for j in existing[0] if j.get("link")}
+        for job in new_jobs:
+            link = job.get("link")
+            if not link or link not in existing_by_link:
+                continue
+            prev = existing_by_link[link]
+            if prev.get("posted_ts") is not None:
+                job["posted_ts"] = prev["posted_ts"]
+            if prev.get("posted_date"):
+                job["posted_date"] = prev["posted_date"]
+            if prev.get("posted"):
+                job["posted"] = prev["posted"]
+    except Exception as e:
+        log_app(f"cache_preserve_posted_dates error: {e}", "ERROR")
+
+
 async def cache_merge(
     keyword: str, location: str, new_jobs: list[dict], fetched_ts: float
 ) -> None:

@@ -104,8 +104,9 @@ let _pendingSharedJobLink: string | null = null;
 
 /** Run a search with the given keyword and location. Extracted so it can be
  *  triggered both from the button click and from accepting an AI suggestion.
- *  `rawInput` — original free-form CV/skills text; used for vector search when set. */
-async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = "", replaceInput = false): Promise<void> {
+ *  `rawInput` — original free-form CV/skills text; used for vector search when set.
+ *  `estimatedLevel` — AI-inferred experience level from CV ("junior"|"middle"|"senior"). */
+async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = "", replaceInput = false, estimatedLevel = "", intent = ""): Promise<void> {
   const fromCvOrSkills = rawInput.length > 0;
   abortController?.abort();
   abortController = new AbortController();
@@ -134,7 +135,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
 
   try {
     await scrapeJobsStream(
-      { keyword, location, ...(rawInput ? { raw_input: rawInput.slice(0, 2000) } : {}) },
+      { keyword, location, ...(rawInput ? { raw_input: rawInput.slice(0, 2000) } : {}), ...(estimatedLevel ? { estimated_level: estimatedLevel } : {}), ...(intent ? { intent } : {}) },
       (batch) => {
         if (location) {
           for (const j of batch) {
@@ -321,7 +322,8 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 
   // For CV/skills: pass raw input so vector search uses the full text.
   const rawForVector = isJobTitle ? "" : rawInput;
-  void runSearch(extractedKeyword, location, sharedJobLink, rawForVector);
+  const levelHint = classified.estimated_level ?? "";
+  void runSearch(extractedKeyword, location, sharedJobLink, rawForVector, false, levelHint, inputType);
 
 });
 
