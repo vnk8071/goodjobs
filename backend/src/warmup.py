@@ -245,8 +245,9 @@ async def _scrape_keyword(
     existing = await cache_get(kw, loc)
     existing_jobs = existing[0] if existing else []
 
+    cached_by_link = {j["link"]: j for j in existing_jobs if j.get("link")}
     cached_desc_by_link = {
-        j["link"]: j["description"] for j in existing_jobs if j.get("description")
+        link: j["description"] for link, j in cached_by_link.items() if j.get("description")
     }
     cached_with_desc = set(cached_desc_by_link)
 
@@ -258,8 +259,12 @@ async def _scrape_keyword(
     ]
     new_jobs_recent = [j for j in jobs if j.get("posted_ts", 0.0) > cutoff_ts]
     for j in new_jobs_recent:
-        if not j.get("description") and j["link"] in cached_desc_by_link:
-            j["description"] = cached_desc_by_link[j["link"]]
+        cached = cached_by_link.get(j["link"])
+        if cached:
+            if not j.get("description") and cached.get("description"):
+                j["description"] = cached["description"]
+            if not j.get("summary_description") and cached.get("summary_description"):
+                j["summary_description"] = cached["summary_description"]
     for j in new_jobs_recent:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
