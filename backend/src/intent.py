@@ -240,9 +240,9 @@ Return ONLY a JSON object:
 }
 
 Classification rules:
-- "job_title": the entire input is a short role name (≤6 words), in ANY language including Vietnamese, e.g. "AI Engineer", "Data Scientist", "kỹ sư hoá học", "lập trình viên", "nhân viên kinh doanh"
+- "job_title": the entire input is a short role name (≤6 words), in ANY language including Vietnamese, e.g. "AI Engineer", "Data Scientist", "kỹ sư hoá học", "lập trình viên", "nhân viên kinh doanh", "Social content", "Content marketing", "Brand design"
 - "cv_or_skills": anything longer — a resume, skill list, bio, or sentences describing experience
-- "not_job": input is a greeting, random text, question, or anything not related to job search (e.g. "Hi", "hello", "what is the weather?", "tell me a joke"). Set keyword to "" when using this type.
+- "not_job": input is a greeting, random text, question, or anything not related to job search (e.g. "Hi", "hello", "what is the weather?", "tell me a joke"). Set keyword to "" when using this type, but still populate "alternatives" with 3–5 job titles that are most likely what the user is actually looking for based on any topic in their input (e.g. "hello" → common job titles; "I love cooking" → ["Chef", "Food Technologist", "Restaurant Manager"]). IMPORTANT: short noun phrases that could be a role or specialization (e.g. "Social content", "Content marketing", "Brand design", "Video editing") are job titles, NOT "not_job".
 
 Vietnamese job title translation (always translate Vietnamese job titles to English for the keyword field):
 - "kỹ sư" → "Engineer", "lập trình viên" → "Developer", "nhân viên" → "Staff/Executive"

@@ -649,25 +649,42 @@ async def warmup(executor, scrapers: dict) -> None:
     await asyncio.sleep(5.0)
     await _cleanup_stale_keys()
 
-    # Startup: only scrape pairs that have never been cached
-    log_app("[warmup] startup — checking for missing cache entries...")
+    # Startup: scrape pairs that are missing or stale (not refreshed since last scheduled run).
+    # Missing pairs get a full backfill (last_fetched_ts=0); stale pairs get an incremental
+    # scrape using the cache's own fetched_ts so we only fetch new jobs since last run.
+    log_app("[warmup] startup — checking for missing or stale cache entries...")
     warmup_kws = await get_warmup_keywords()
-    missing = []
+
+    # Consider a cache stale if it hasn't been refreshed within the expected scrape interval.
+    # _SCRAPE_HOURS runs twice daily, so anything older than ~13 hours needs a top-up.
+    _STALE_THRESHOLD = 13 * 3600
+    now = time.time()
+
+    needs_scrape: list[tuple[str, str, float]] = []  # (kw, loc, last_fetched_ts)
     for kw in warmup_kws:
         for loc in _WARMUP_LOCATIONS:
-            if await cache_get(kw, loc) is None:
-                missing.append((kw, loc))
+            cached = await cache_get(kw, loc)
+            if cached is None:
+                needs_scrape.append((kw, loc, 0.0))  # full backfill
+            else:
+                _, fetched_ts = cached
+                if now - fetched_ts > _STALE_THRESHOLD:
+                    needs_scrape.append((kw, loc, fetched_ts))  # incremental
 
-    if missing:
-        log_app(f"[warmup] startup: scraping {len(missing)} missing entries...")
-        for i, (kw, loc) in enumerate(missing):
+    if needs_scrape:
+        missing_count = sum(1 for _, _, ts in needs_scrape if ts == 0.0)
+        stale_count = len(needs_scrape) - missing_count
+        log_app(
+            f"[warmup] startup: {missing_count} missing + {stale_count} stale entries — scraping..."
+        )
+        for i, (kw, loc, last_fetched_ts) in enumerate(needs_scrape):
             try:
                 await _scrape_keyword(
-                    kw, loc, loop, executor, scrapers, last_fetched_ts=0.0
+                    kw, loc, loop, executor, scrapers, last_fetched_ts=last_fetched_ts
                 )
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
-            if i < len(missing) - 1:
+            if i < len(needs_scrape) - 1:
                 await asyncio.sleep(random.uniform(15, 30))
 
         log_app("[warmup] startup scrape done — summarizing and embedding")
@@ -681,7 +698,7 @@ async def warmup(executor, scrapers: dict) -> None:
         except Exception as e:
             log_app(f"[warmup] startup embed error: {e}", "ERROR")
     else:
-        log_app("[warmup] startup: all cache entries present, skipping initial scrape")
+        log_app("[warmup] startup: all cache entries are fresh, skipping initial scrape")
 
     while True:
         try:

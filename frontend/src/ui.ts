@@ -695,18 +695,29 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
 
 const _intentBox = document.getElementById("intentBox") as HTMLDivElement;
 
-export function showIntentBox(keyword: string, inputType: "job_title" | "cv_or_skills", reasoning: string): void {
-  const label = inputType === "cv_or_skills" ? "Hồ sơ / kỹ năng" : "Chức danh";
-  _intentBox.innerHTML = `
-    <div class="intent-box__header">
-      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
-      </svg>
-      AI nhận diện: <span style="font-weight:400;color:#374151;">${label}</span>
-      &rarr; tìm kiếm với từ khóa <span class="intent-box__keyword">${esc(keyword)}</span>
-    </div>
-    ${reasoning ? `<div class="intent-box__reasoning">${esc(reasoning)}</div>` : ""}
-  `;
+export function showIntentBox(keyword: string, inputType: "job_title" | "cv_or_skills" | "not_job", reasoning: string): void {
+  if (inputType === "not_job") {
+    _intentBox.innerHTML = `
+      <div class="intent-box__header">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+        </svg>
+        Có vẻ đây không phải tên công việc — bạn có muốn tìm:
+      </div>
+    `;
+  } else {
+    const label = inputType === "cv_or_skills" ? "Hồ sơ / kỹ năng" : "Chức danh";
+    _intentBox.innerHTML = `
+      <div class="intent-box__header">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+        </svg>
+        AI nhận diện: <span style="font-weight:400;color:#374151;">${label}</span>
+        &rarr; tìm kiếm với từ khóa <span class="intent-box__keyword">${esc(keyword)}</span>
+      </div>
+      ${reasoning ? `<div class="intent-box__reasoning">${esc(reasoning)}</div>` : ""}
+    `;
+  }
   _intentBox.classList.remove("hidden");
 }
 

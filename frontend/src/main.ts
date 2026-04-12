@@ -291,7 +291,14 @@ fetchBtn.addEventListener("click", async () => {
   }
 
   if (classified.input_type === "not_job") {
-    setStatus("Có vẻ như bạn đang tìm kiếm không phải là một vị trí công việc. Vui lòng nhập tên công việc hoặc kỹ năng để tìm kiếm (ví dụ: \"Business Analyst\", \"Python Developer\", \"kỹ sư phần mềm\").", "error");
+    showIntentBox("", "not_job", classified.reasoning ?? "");
+    const suggestions = classified.alternatives?.length
+      ? classified.alternatives
+      : ["AI Engineer", "Business Analyst", "Marketing Executive", "Data Analyst", "Software Engineer"];
+    setIntentAlternatives(suggestions, (picked) => {
+      fetchBtn.disabled = true;
+      void runSearch(picked, location, sharedJobLink, "", true);
+    });
     return;
   }
 
@@ -300,13 +307,7 @@ fetchBtn.addEventListener("click", async () => {
   const inputType = classified.input_type;
   const reasoning = classified.reasoning ?? "";
 
-  // Validate: job title must be at least 2 words
-  if (isJobTitle && extractedKeyword.split(/\s+/).length < 2) {
-    setStatus("Vui lòng nhập cụ thể hơn — ít nhất 2 từ (ví dụ: \"AI Engineer\") hoặc dán kỹ năng/CV.", "error");
-    return;
-  }
-
-  showIntentBox(extractedKeyword, inputType, reasoning);
+showIntentBox(extractedKeyword, inputType, reasoning);
 
   if (inputType === "cv_or_skills" && (classified?.alternatives?.length ?? 0) > 0) {
     setIntentAlternatives(classified!.alternatives!, (picked) => {
