@@ -31,6 +31,8 @@ from src.scrapers import (
     scrape_careerviet_detail_one,
     scrape_jobsgo_detail_one,
     scrape_careerlink_detail_one,
+    scrape_glints_detail_one,
+    scrape_viecoi_detail_one,
 )
 from src.background_summarizer import run_background_summarization
 
@@ -155,6 +157,8 @@ async def _scrape_keyword(
         "careerviet": 3.0,
         "jobsgo": 3.0,
         "careerlink": 3.0,
+        "glints": 3.0,
+        "viecoi": 3.0,
     }
 
     def _timed(site: str, fn, kw: str, loc: str):
@@ -177,6 +181,8 @@ async def _scrape_keyword(
     careerviet_jobs: list[dict] = []
     jobsgo_jobs: list[dict] = []
     careerlink_jobs: list[dict] = []
+    glints_jobs: list[dict] = []
+    viecoi_jobs: list[dict] = []
     seen_links: set[str] = set()
     site_succeeded: set[str] = set()
     site_timeouts: set[str] = set()
@@ -218,6 +224,10 @@ async def _scrape_keyword(
                     jobsgo_jobs.append(j)
                 elif j.get("source") == "CareerLink":
                     careerlink_jobs.append(j)
+                elif j.get("source") == "Glints":
+                    glints_jobs.append(j)
+                elif j.get("source") == "ViecOi":
+                    viecoi_jobs.append(j)
         # Inter-site delay with jitter — only between sites, not after the last one.
         if i < len(scrapers) - 1:
             base = _SITE_DELAY.get(site, 4.0)
@@ -273,6 +283,8 @@ async def _scrape_keyword(
         ("CareerViet", careerviet_jobs, scrape_careerviet_detail_one, 10, False),
         ("JobsGo", jobsgo_jobs, scrape_jobsgo_detail_one, 10, False),
         ("CareerLink", careerlink_jobs, scrape_careerlink_detail_one, 10, False),
+        ("Glints", glints_jobs, scrape_glints_detail_one, 10, False),
+        ("ViecOi", viecoi_jobs, scrape_viecoi_detail_one, 10, False),
     ]
 
     any_enriched = False

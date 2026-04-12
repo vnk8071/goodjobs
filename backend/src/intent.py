@@ -236,7 +236,7 @@ Return ONLY a JSON object:
   "input_type": "job_title" | "cv_or_skills" | "not_job",
   "keyword": "<2-4 word English job title>",
   "alternatives": ["<related job title>", "<related job title>"] ,
-  "reasoning": "<one short sentence>"
+  "reasoning": "<one short sentence in Vietnamese>"
 }
 
 Classification rules:

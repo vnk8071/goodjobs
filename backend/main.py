@@ -217,6 +217,8 @@ _SCRAPERS = {
     "careerviet": scrape_careerviet,
     "jobsgo": scrape_jobsgo,
     "careerlink": scrape_careerlink,
+    "glints": scrape_glints,
+    "viecoi": scrape_viecoi,
 }
 
 NON_WARMUP_ENRICH_LIMIT = 10
@@ -1144,6 +1146,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     ("topdev", scrape_topdev_detail_one, 2.0, 0.0),
                     ("jobsgo", scrape_jobsgo_detail_one, 2.0, 0.0),
                     ("careerlink", scrape_careerlink_detail_one, 2.0, 0.0),
+                    ("glints", scrape_glints_detail_one, 2.0, 0.0),
+                    ("viecoi", scrape_viecoi_detail_one, 2.0, 0.0),
                 ]
                 # queue and task keyed by site name
                 enrich_queues: dict[str, asyncio.Queue] = {
