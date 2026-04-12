@@ -659,20 +659,6 @@ async def admin_analytics(secret: str = ""):
         if intent:
             intent_counter[intent] += 1
 
-    # Parse intent from app.log if search.log has no intent data
-    if not any(intent_counter.values()):
-        import re as _re2
-        _intent_re = _re2.compile(r"\[intent\] classify .+? type='(\w+)'")
-        app_log_path = os.path.join(log_dir, "app.log")
-        try:
-            with open(app_log_path, encoding="utf-8") as f:
-                for line in f:
-                    m = _intent_re.search(line)
-                    if m:
-                        intent_counter[m.group(1)] += 1
-        except OSError:
-            pass
-
     top_keywords = [
         {"keyword": kw, "count": cnt}
         for kw, cnt in week_keyword_counter.most_common(10)
@@ -878,7 +864,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
-    log_search(request, keyword, req.location, req.intent)
+    log_search(request, keyword, req.location, req.intent or ("cv_or_skills" if req.raw_input else "job_title"))
 
     # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
     keyword_normalized = " ".join(
@@ -989,7 +975,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if rate_err:
         raise HTTPException(status_code=429, detail=rate_err, headers=rate_headers)
 
-    log_search(request, keyword, req.location, req.intent)
+    intent = req.intent or ("cv_or_skills" if req.raw_input else "job_title")
+    log_search(request, keyword, req.location, intent)
     # Record this search in IP history for future intent suggestions (fire-and-forget)
     asyncio.ensure_future(record_search(ip, keyword, req.location))
 
