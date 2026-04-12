@@ -200,6 +200,16 @@ function companyLogoHtml(company: string, source: string, logo?: string): string
   return `<span class="company-avatar" style="background:${bg};color:${fg}">${initial}</span>`;
 }
 
+/** Short display labels for source badges — keeps the UI compact. */
+const _SOURCE_LABEL: Record<string, string> = {
+  "VietnamWorks": "VNWorks",
+  "CareerViet":   "CViet",
+  "CareerLink":   "CLink",
+};
+function sourceLabel(source: string): string {
+  return _SOURCE_LABEL[source] ?? source;
+}
+
 /** Open the job detail modal, populating all fields from the given job. */
 function openJobModal(job: Job): void {
   _openModalLink               = job.link;
@@ -207,7 +217,7 @@ function openJobModal(job: Job): void {
   jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div>`;
   jobModalLocation.textContent = job.location;
   jobModalPosted.textContent   = job.posted || "N/A";
-  jobModalSource.innerHTML     = `<span class="badge badge-${job.source.toLowerCase()}">${esc(job.source)}</span>`;
+  jobModalSource.innerHTML     = `<span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span>`;
   const isEnriching =
     (_linkedinEnriching && job.source === "LinkedIn") ||
     (_topcvEnriching    && job.source === "TopCV");
@@ -505,7 +515,7 @@ function _rebuildFilterBar(): void {
     // Start inactive; activate on click (like skill pills)
     const isActive = _activeSources.has(source);
     btn.className = `badge badge-${source.toLowerCase()} badge-filter${isActive ? " active" : ""}`;
-    btn.textContent = `${source} ${count}`;
+    btn.textContent = `${sourceLabel(source)} ${count}`;
     btn.dataset.source = source;
 
     btn.addEventListener("click", () => {
@@ -678,7 +688,7 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td class="score" title="Vector similarity score">${esc(score)}</td>
     <td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>
     <td class="desc">${esc(descText)}</td>
-    <td><span class="badge badge-${job.source.toLowerCase()}">${esc(job.source)}</span></td>
+    <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td>
       ${job.link
         ? `<a href="${esc(job.link)}" target="_blank" rel="noopener" class="view-link" onclick="event.stopPropagation()">View ↗</a>`
