@@ -616,6 +616,7 @@ async def admin_analytics(secret: str = ""):
     today_str = datetime.now(_TZ_ICT).strftime("%Y-%m-%d")
 
     keyword_counter: Counter = Counter()
+    week_keyword_counter: Counter = Counter()
     hour_counter_today: Counter = Counter()
     day_counter: Counter = Counter()
     intent_counter: Counter = Counter()
@@ -634,13 +635,7 @@ async def admin_analytics(secret: str = ""):
         ip = e.get("ip", "")
         ts = e.get("ts", "")
 
-        if kw:
-            keyword_counter[kw.lower()] += 1
-        if ip:
-            unique_ips.add(ip)
-        intent = e.get("intent", "")
-        if intent:
-            intent_counter[intent] += 1
+        in_week = False
         if ts:
             try:
                 dt = datetime.fromisoformat(ts)
@@ -650,12 +645,37 @@ async def admin_analytics(secret: str = ""):
                     today_count += 1
                 if date_str in week_dates_set:
                     day_counter[date_str] += 1
+                    in_week = True
             except Exception:
                 pass
 
+        if kw:
+            keyword_counter[kw.lower()] += 1
+            if in_week:
+                week_keyword_counter[kw.lower()] += 1
+        if ip:
+            unique_ips.add(ip)
+        intent = e.get("intent", "")
+        if intent:
+            intent_counter[intent] += 1
+
+    # Parse intent from app.log if search.log has no intent data
+    if not any(intent_counter.values()):
+        import re as _re2
+        _intent_re = _re2.compile(r"\[intent\] classify .+? type='(\w+)'")
+        app_log_path = os.path.join(log_dir, "app.log")
+        try:
+            with open(app_log_path, encoding="utf-8") as f:
+                for line in f:
+                    m = _intent_re.search(line)
+                    if m:
+                        intent_counter[m.group(1)] += 1
+        except OSError:
+            pass
+
     top_keywords = [
         {"keyword": kw, "count": cnt}
-        for kw, cnt in keyword_counter.most_common(10)
+        for kw, cnt in week_keyword_counter.most_common(10)
     ]
 
     requests_by_hour = {str(h): hour_counter_today.get(h, 0) for h in range(24)}
