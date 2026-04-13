@@ -1252,6 +1252,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             cache_keyword, req.location, refiltered, fuzzy_fetched_ts
                         )
                     )
+                    asyncio.create_task(cache_touch(cache_keyword, req.location))
                     cached_prefill_jobs = cached_prefill_jobs or refiltered
                     cached_prefill_latest_ts = (
                         cached_prefill_latest_ts or fuzzy_fetched_ts

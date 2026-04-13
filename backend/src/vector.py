@@ -315,25 +315,28 @@ def score_jobs_by_embedding(
 def delete_by_ids(ids: list[str]) -> bool:
     """Delete vectors from Cloudflare Vectorize by their IDs.
 
-    Returns True if the delete call succeeded (or was a no-op).
+    Returns True if all delete calls succeeded (or was a no-op).
     IDs are the same SHA-1 hashes used during upsert.
+    Cloudflare limits each request to 100 IDs; larger lists are chunked.
     """
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         return False
     if not ids:
         return True
     try:
-        resp = requests.post(
-            f"{_CF_VEC_BASE}/delete_by_ids",
-            headers={**_headers(), "Content-Type": "application/json"},
-            json={"ids": ids},
-            timeout=30,
-        )
-        if not resp.ok:
-            log_app(
-                f"[vector] delete_by_ids error {resp.status_code}: {resp.text}", "ERROR"
+        for i in range(0, len(ids), 100):
+            chunk = ids[i : i + 100]
+            resp = requests.post(
+                f"{_CF_VEC_BASE}/delete_by_ids",
+                headers={**_headers(), "Content-Type": "application/json"},
+                json={"ids": chunk},
+                timeout=30,
             )
-            return False
+            if not resp.ok:
+                log_app(
+                    f"[vector] delete_by_ids error {resp.status_code}: {resp.text}", "ERROR"
+                )
+                return False
         log_app(f"[vector] deleted {len(ids)} vectors")
         return True
     except Exception as e:

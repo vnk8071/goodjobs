@@ -270,7 +270,7 @@ fetchBtn.addEventListener("click", async () => {
   );
   if (isWarmupKeyword) {
     hideIntentBox();
-    void runSearch(rawInput, location, sharedJobLink);
+    void runSearch(rawInput, location, sharedJobLink, "", false, "", "warmup_job");
     return;
   }
 
