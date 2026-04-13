@@ -25,6 +25,8 @@ from src.cache import (
     vector_mark_nonwarmup_seen,
     embedded_links_filter,
     embedded_links_add,
+    cache_get_all_keys,
+    cache_get_ts,
 )
 from src.constants import MAX_CONCURRENT, ADMIN_SECRET
 from src.logger import log_search, log_app
@@ -286,10 +288,14 @@ async def _cache_status_data() -> dict:
     stale_count = 0
     for kw in await get_warmup_keywords():
         for loc in _WARMUP_LOCATIONS:
-            existing = await cache_get(kw, loc)
-            is_missing = existing is None
-            fetched_ts = existing[1] if existing else 0.0
-            job_count = len(existing[0]) if existing else 0
+            # Use lightweight TS key — avoids deserialising full job payloads.
+            fetched_ts = await cache_get_ts(kw, loc) or 0.0
+            is_missing = fetched_ts == 0.0
+            # We still need job_count, but only load if the key exists.
+            job_count = 0
+            if not is_missing:
+                existing = await cache_get(kw, loc)
+                job_count = len(existing[0]) if existing else 0
             if fetched_ts:
                 age = int(now - fetched_ts)
                 if age < 3600:
@@ -821,18 +827,23 @@ async def suggest_query_endpoint(req: ScrapeRequest, request: Request):
     )
 
     warmup_kws = await get_warmup_keywords()
-    # Scan Redis for all cached keyword keys to give AI more coverage
+    # Build candidate list from key index (O(1) SMEMBERS) instead of a full SCAN.
     cached_kws: list[str] = list(warmup_kws)
     try:
         loc = req.location.lower().strip() if req.location else ""
-        pattern = f"jobs:*:{loc}" if loc else "jobs:*"
-        async for key in get_redis().scan_iter(pattern):
-            # Extract keyword portion from "jobs:<kw>:<loc>"
-            parts = key.split(":")
-            if len(parts) >= 3:
-                kw_part = ":".join(parts[1:-1]) if loc else ":".join(parts[1:])
-                if kw_part and kw_part not in cached_kws:
-                    cached_kws.append(kw_part)
+        all_index_entries = await cache_get_all_keys()
+        for entry in all_index_entries:
+            # entry format: "{kw}:{loc}"
+            if loc:
+                if not entry.endswith(f":{loc}"):
+                    continue
+                kw_part = entry[: -len(f":{loc}")]
+            else:
+                # No location filter — extract everything before the last colon.
+                last_colon = entry.rfind(":")
+                kw_part = entry[:last_colon] if last_colon != -1 else entry
+            if kw_part and kw_part not in cached_kws:
+                cached_kws.append(kw_part)
     except Exception:
         pass
 
@@ -1067,7 +1078,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     cache_fetched_ts_list.append(cache_fetched_ts)
 
             if raw_vector_query:
-                # Fetch embedding results and keyword cache in parallel, combine into one batch.
+                # Fetch Vectorize matches for the CV text.
                 vector_primary = await _fetch_vector_supplement(
                     raw_vector_query,
                     seen_links=set(),
@@ -1075,15 +1086,15 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     warmup_keywords=warmup_kws,
                     top_k=50,
                 )
-                # Only keep high-confidence semantic matches (score >= 0.6) to avoid noise, especially for warmup keywords where we want to maintain cache quality.
+                # Only keep high-confidence semantic matches (score >= 0.6) to avoid noise.
                 vector_primary = [
                     j for j in vector_primary if j.get("_vector_score", 0.0) >= 0.6
                 ]
 
-                # Build combined map: start with keyword-cache jobs, then overlay vector matches
-                # (vector overrides to attach the score).
+                # Build combined map: start with keyword-cache jobs, then overlay vector matches.
                 age_cutoff_cv = time.time() - 8 * 86400
                 combined_by_link: dict[str, dict] = {}
+                unique_cache: list[dict] = []  # initialise here so Phase 2 rescore is always safe
                 if all_cached_jobs:
                     log_app(
                         f"cv cache — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords"
@@ -1097,26 +1108,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         if match_fn(j.get("title", ""), match_keyword)
                         and j.get("posted_ts", 0) >= age_cutoff_cv
                     ]
-
-                    # Also compute semantic scores for cached jobs so "Điểm" is populated
-                    # even when the job wasn't embedded into Vectorize.
-                    # Best-effort: if embedding is unavailable, jobs will simply have no score.
-                    try:
-                        await loop.run_in_executor(
-                            _executor,
-                            score_jobs_by_embedding,
-                            unique_cache,
-                            raw_vector_query,
-                            250,
-                        )
-                    except Exception as e:
-                        log_app(f"[cv] local embedding score error: {e}", "ERROR")
-
                     for j in unique_cache:
                         _tag_level(j)
                     _refresh_posted_times(unique_cache)
                     for j in unique_cache:
                         combined_by_link[str(j.get("link", ""))] = j
+
 
                 for j in vector_primary:
                     link = str(j.get("link", ""))
@@ -1128,6 +1125,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     _tag_level(j)
                     combined_by_link[link] = j  # vector overrides with score
 
+                # Phase 1: emit immediately sorted by Vectorize score + recency.
+                # This gives the user instant results without waiting for local scoring.
                 combined = list(combined_by_link.values())
                 combined.sort(
                     key=lambda j: (
@@ -1152,6 +1151,33 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             vector_seen_links.add(str(j["link"]))
                     cached_prefill_jobs = combined
                     cached_prefill_latest_ts = now_ts
+
+                    # Phase 2: compute local embedding scores for cached jobs that weren't
+                    # in Vectorize, then re-emit a rescore event so the client can re-sort.
+                    # Running AFTER the yield keeps time-to-first-render fast.
+                    if unique_cache:
+                        try:
+                            await loop.run_in_executor(
+                                _executor,
+                                score_jobs_by_embedding,
+                                unique_cache,
+                                raw_vector_query,
+                                250,
+                            )
+                            # Re-sort with local scores now filled in.
+                            combined.sort(
+                                key=lambda j: (
+                                    j.get("_vector_score", 0.0),
+                                    j.get("posted_ts", 0.0),
+                                ),
+                                reverse=True,
+                            )
+                            yield (
+                                "event: rescore\n"
+                                f"data: {json.dumps({'jobs': combined, 'fetched_ts': now_ts}, ensure_ascii=False)}\n\n"
+                            )
+                        except Exception as e:
+                            log_app(f"[cv] local embedding score error: {e}", "ERROR")
 
                 # Skip the regular cache emission below — already handled above.
                 all_cached_jobs = []

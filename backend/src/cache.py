@@ -8,6 +8,14 @@ from .constants import REDIS_URL, RECENT_DAYS
 from .logger import log_app
 from .matching import strip_level
 
+# Redis key for an O(1)-lookup index of all cached keyword:location pairs.
+# Maintained by cache_set; replaces SCAN-based enumeration in fuzzy-get and suggest-query.
+_KEYINDEX = "cache:keyindex"
+
+# Lightweight key that stores only the fetched_ts float for each cache entry.
+# Allows stale-checks without deserialising the full job JSON payload.
+_TS_KEY_PREFIX = "jobs-ts:"
+
 _redis: Redis | None = None
 
 
@@ -52,15 +60,63 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
 async def cache_set(
     keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = RECENT_DAYS
 ) -> None:
-    """Store jobs in cache with a TTL (default RECENT_DAYS) to prevent unbounded Redis growth."""
+    """Store jobs in cache with a TTL (default RECENT_DAYS) to prevent unbounded Redis growth.
+
+    Also maintains two lightweight side-structures:
+    - cache:keyindex  — a SET of "kw:loc" pairs used by cache_fuzzy_get and suggest-query
+      to enumerate known keys without a full SCAN.
+    - jobs-ts:{kw}:{loc} — a tiny string key holding only the fetched_ts float so that
+      stale-checks can avoid deserialising the full job payload.
+    """
     try:
+        redis = get_redis()
+        kw_norm = keyword.lower().strip()
+        loc_norm = location.lower().strip()
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
         )
-        await get_redis().set(_key(keyword, location), payload, ex=ttl_days * 86400)
+        ttl_secs = ttl_days * 86400
+        pipe = redis.pipeline()
+        pipe.set(_key(keyword, location), payload, ex=ttl_secs)
+        # Lightweight TS key — same TTL so it expires together with the job payload.
+        pipe.set(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}", str(fetched_ts), ex=ttl_secs)
+        # Add to the key index (SADD is a no-op for existing members).
+        pipe.sadd(_KEYINDEX, f"{kw_norm}:{loc_norm}")
+        await pipe.execute()
         log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
     except Exception as e:
         log_app(f"cache set error: {e}", "ERROR")
+
+
+async def cache_get_all_keys() -> list[str]:
+    """Return all known 'keyword:location' pairs from the key index (O(1) vs SCAN).
+
+    The index is populated by cache_set. Falls back to an empty list if Redis is
+    unavailable or the index hasn't been built yet (e.g. fresh deployment).
+    """
+    try:
+        members = await get_redis().smembers(_KEYINDEX)
+        return list(members)
+    except Exception as e:
+        log_app(f"cache_get_all_keys error: {e}", "ERROR")
+        return []
+
+
+async def cache_get_ts(keyword: str, location: str) -> float | None:
+    """Return the fetched_ts for a cache entry without deserialising the job payload.
+
+    Returns None when the key does not exist (cache miss or expired).
+    Used by stale-checks in warmup and _cache_status_data so they don't have to
+    load potentially thousands of job records just to read a timestamp.
+    """
+    try:
+        kw_norm = keyword.lower().strip()
+        loc_norm = location.lower().strip()
+        raw = await get_redis().get(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}")
+        return float(raw) if raw else None
+    except Exception as e:
+        log_app(f"cache_get_ts error: {e}", "ERROR")
+        return None
 
 
 async def cache_fuzzy_get(
@@ -68,31 +124,38 @@ async def cache_fuzzy_get(
 ) -> tuple[list[dict], float, str] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
-    Scans all keys matching jobs:*:<location> and picks the one whose keyword
-    has the highest SequenceMatcher ratio against the query keyword, provided it
-    meets threshold. Returns (jobs, fetched_ts, matched_keyword) or None.
+    Uses cache:keyindex (a Redis SET maintained by cache_set) instead of a full
+    SCAN so enumeration is O(index size) rather than O(keyspace size).
+    Returns (jobs, fetched_ts, matched_keyword) or None.
     """
     try:
         loc = location.lower().strip()
-        pattern = f"jobs:*:{loc}"
-        keys = [k async for k in get_redis().scan_iter(pattern)]
-        if not keys:
+
+        # Read the index — this is a single SMEMBERS call, no SCAN needed.
+        index_entries = await cache_get_all_keys()
+        # Filter to entries that match the requested location.
+        loc_entries = [
+            entry for entry in index_entries
+            if entry.endswith(f":{loc}")
+        ]
+        if not loc_entries:
             return None
 
         kw_lower = keyword.lower().strip()
         kw_core = strip_level(kw_lower)
         kw_core_words = set(kw_core.split())
-        best_key: str | None = None
+        best_entry: str | None = None
         best_score = 0.0
 
-        for key in keys:
-            cached_kw = (
-                key[len("jobs:") : -len(f":{loc}")] if loc else key[len("jobs:") :]
-            )
+        for entry in loc_entries:
+            # entry format: "{kw}:{loc}"  — loc never contains ":" so rfind is safe.
+            cached_kw = entry[: -len(f":{loc}")]
+            if cached_kw == kw_lower:
+                continue  # exact match is handled by cache_get, not fuzzy
+
             cached_core = strip_level(cached_kw)
             cached_core_words = list(cached_core.split())
 
-            # Each word in the shorter phrase must fuzzy-match a word in the longer phrase
             shorter_words = (
                 kw_core_words
                 if len(kw_core_words) <= len(cached_core_words)
@@ -112,11 +175,12 @@ async def cache_fuzzy_get(
             score = SequenceMatcher(None, kw_core, cached_core).ratio()
             if score > best_score:
                 best_score = score
-                best_key = key
+                best_entry = entry
 
-        if best_score < threshold or best_key is None:
+        if best_score < threshold or best_entry is None:
             return None
 
+        best_key = f"jobs:{best_entry}"
         raw = await get_redis().get(best_key)
         if not raw:
             return None
@@ -124,11 +188,7 @@ async def cache_fuzzy_get(
         jobs = data["jobs"]
         if not jobs:
             return None
-        matched_kw = (
-            best_key[len("jobs:") : -len(f":{loc}")]
-            if loc
-            else best_key[len("jobs:") :]
-        )
+        matched_kw = best_entry[: -len(f":{loc}")]
         log_app(
             f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)"
         )

@@ -656,6 +656,18 @@ function renderTable(jobs: Job[]): void {
   _applyFilter();
 }
 
+/**
+ * Replace the entire displayed job list with a newly-sorted set.
+ * Used by the `rescore` SSE event when local embedding scores arrive
+ * after the initial `cached` event has already been rendered.
+ */
+export function replaceJobs(jobs: Job[]): Job[] {
+  _allJobs = jobs;
+  _rebuildFilterBar();
+  _applyFilter();
+  return jobs;
+}
+
 /** Build a table row element for a single job, wiring up the modal click handler. */
 function buildRow(job: Job, num: number): HTMLTableRowElement {
   const tr = document.createElement("tr");

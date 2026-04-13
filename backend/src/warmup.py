@@ -11,6 +11,7 @@ from src.cache import (
     get_redis,
     _key,
     cache_access_ts,
+    cache_get_ts,
     vector_mark_warmup_seen,
     vector_get_expired_nonwarmup,
     vector_get_warmup_scores,
@@ -680,13 +681,13 @@ async def warmup(executor, scrapers: dict) -> None:
     needs_scrape: list[tuple[str, str, float]] = []  # (kw, loc, last_fetched_ts)
     for kw in warmup_kws:
         for loc in _WARMUP_LOCATIONS:
-            cached = await cache_get(kw, loc)
-            if cached is None:
+            # Use lightweight TS key — avoids deserialising full job payloads
+            # just to check staleness (28+ calls at startup).
+            fetched_ts = await cache_get_ts(kw, loc)
+            if fetched_ts is None:
                 needs_scrape.append((kw, loc, 0.0))  # full backfill
-            else:
-                _, fetched_ts = cached
-                if now - fetched_ts > _STALE_THRESHOLD:
-                    needs_scrape.append((kw, loc, fetched_ts))  # incremental
+            elif now - fetched_ts > _STALE_THRESHOLD:
+                needs_scrape.append((kw, loc, fetched_ts))  # incremental
 
     if needs_scrape:
         missing_count = sum(1 for _, _, ts in needs_scrape if ts == 0.0)

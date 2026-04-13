@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs } from "./ui";
 import type { Job } from "./types";
 
 let currentJobs: Job[] = [];
@@ -121,6 +121,13 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     keywordEl.style.height = `${keywordEl.scrollHeight}px`;
   }
 
+  // Update the URL bar so the current search is always shareable by copying the address bar.
+  // Uses pushState so the browser back button returns the user to the previous search.
+  const shareUrl = new URL(window.location.origin + window.location.pathname);
+  shareUrl.searchParams.set("kw", keyword);
+  if (location) shareUrl.searchParams.set("loc", location);
+  history.pushState({ kw: keyword, loc: location ?? "" }, "", shareUrl.toString());
+
   fetchBtn.disabled = true;
   currentJobs = [];
   hideResults();
@@ -205,6 +212,10 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       },
       // onVectorResults (related jobs) is disabled for now
       () => {},
+      // onRescore: silently re-sort the table after local embedding scores arrive
+      (rescored) => {
+        currentJobs = replaceJobs(rescored);
+      },
     );
   } catch (err) {
     hideProgress();
@@ -328,19 +339,19 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 });
 
 // Deep-link support: /?kw=...&loc=... and optional &job=... to auto-open modal.
+// The URL is NOT cleared here — runSearch() will push the correct state to
+// the address bar so the link remains shareable throughout the session.
 (() => {
   const url = new URL(window.location.href);
   const kw = (url.searchParams.get("kw") ?? "").trim();
   const loc = (url.searchParams.get("loc") ?? "").trim();
   _pendingSharedJobLink = (url.searchParams.get("job") ?? "").trim() || null;
 
-  if (kw || loc || _pendingSharedJobLink) {
-    history.replaceState({}, "", window.location.pathname);
+  if (!kw && !_pendingSharedJobLink) return;
+
+  if (kw) {
+    keywordEl.value = kw;
   }
-
-  if (!kw) return;
-
-  keywordEl.value = kw;
   if (loc) {
     const option = [...locationSelect.options].find((o) => o.value === loc);
     if (option) {
@@ -364,4 +375,44 @@ document.addEventListener("visibilitychange", () => {
     fetchBtn.disabled = false;
     hideProgress();
   }
+});
+
+// Browser back/forward navigation: restore the search that matches the URL state.
+window.addEventListener("popstate", () => {
+  const url = new URL(window.location.href);
+  const kw = (url.searchParams.get("kw") ?? "").trim();
+  const loc = (url.searchParams.get("loc") ?? "").trim();
+
+  if (!kw) {
+    // Navigated back to the homepage — reset the UI.
+    abortController?.abort();
+    abortController = null;
+    hideResults();
+    hideProgress();
+    clearStatus();
+    setLinkedInEnriching(false);
+    setTopCVEnriching(false);
+    hideIntentBox();
+    (window as any)._slideshowShow?.();
+    currentJobs = [];
+    fetchBtn.disabled = false;
+    keywordEl.value = "";
+    keywordEl.style.height = "auto";
+    return;
+  }
+
+  // Restore keyword and location into the inputs, then re-run the search.
+  keywordEl.value = kw;
+  if (loc) {
+    const option = [...locationSelect.options].find((o) => o.value === loc);
+    if (option) {
+      locationSelect.value = loc;
+      locationCustom.classList.add("hidden");
+    } else {
+      locationSelect.value = "_custom";
+      locationCustom.classList.remove("hidden");
+      locationCustom.value = loc;
+    }
+  }
+  void runSearch(kw, loc || getLocation(), null);
 });

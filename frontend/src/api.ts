@@ -148,6 +148,7 @@ export async function scrapeJobsStream(
   onTopCVDone?: () => void,
   onCached?: (fetchedTs: number, fuzzy: boolean) => void,
   onVectorResults?: (jobs: Job[]) => void,
+  onRescore?: (jobs: Job[]) => void,
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/scrape-stream`, {
     method: "POST",
@@ -250,6 +251,16 @@ export async function scrapeJobsStream(
           try {
             const { jobs } = JSON.parse(payload) as { jobs: Job[]; count: number };
             if (jobs.length > 0 && onVectorResults) onVectorResults(jobs);
+          } catch { /* ignore */ }
+          eventType = "message";
+          continue;
+        }
+        if (eventType === "rescore") {
+          // Backend has finished local embedding scoring and re-sorted the job list.
+          // Replace the current table with the updated order.
+          try {
+            const { jobs } = JSON.parse(payload) as { jobs: Job[]; fetched_ts: number };
+            if (jobs.length > 0 && onRescore) onRescore(jobs);
           } catch { /* ignore */ }
           eventType = "message";
           continue;
