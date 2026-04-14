@@ -2136,6 +2136,18 @@
     .intent-box__alt:hover {
       background: rgba(255, 255, 255, 0.9);
     }
+
+    /* AdSense Container - restricts height to prevent layout jumps */
+    .ad-wrapper {
+      margin: 1.5rem auto;
+      text-align: center;
+      min-height: 100px;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
   </style>
 </head>
 
@@ -2209,6 +2221,30 @@
             <strong>Tìm việc từ CV hoặc kỹ năng</strong>
             <span>Dán CV hoặc liệt kê kỹ năng vào ô tìm kiếm — AI tự phân tích và tìm công việc phù hợp nhất.</span>
           </div>
+          <div class="slideshow-slide">
+            <strong>Sử dụng từ khóa tiếng Anh</strong>
+            <span>Ngành IT và đa số công ty đa quốc gia dùng chức danh tiếng Anh. Ví dụ: "AI Engineer", "Data Scientist" sẽ ra nhiều kết quả hơn tiếng Việt.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Lọc theo trình độ</strong>
+            <span>Nhập thêm "Senior", "Junior" hoặc "Intern" vào tên chức danh để thu hẹp kết quả phù hợp với số năm kinh nghiệm.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Tìm việc từ xa (Work from home)</strong>
+            <span>Chọn địa điểm là "Remote" để xem các vị trí không yêu cầu lên văn phòng.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Chia sẻ nhanh</strong>
+            <span>Bạn có thể chia sẻ link kết quả tìm kiếm hoặc đường link của 1 công việc cụ thể để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Đánh giá mức độ phù hợp</strong>
+            <span>Cột "Điểm phù hợp" cho biết mức độ khớp giữa yêu cầu công việc và kỹ năng của bạn (dựa trên AI). Dùng cột này để ưu tiên ứng tuyển những vị trí có điểm cao.</span>
+          </div>
+          <div class="slideshow-slide">
+            <strong>Nhập kỹ năng/CV</strong>
+            <span>Dán CV hoặc liệt kê kỹ năng — AI tự phân tích và tìm công việc phù hợp nhất. Ví dụ: "2 năm kinh nghiệm React, Node.js, PostgreSQL. Đã làm tại startup fintech, quen với CI/CD và Docker…"</span>
+          </div>
         </div>
         <div class="slideshow-dots" id="slideshowDots">
           <div class="slideshow-dot active" data-idx="0"></div>
@@ -2216,6 +2252,12 @@
           <div class="slideshow-dot" data-idx="2"></div>
           <div class="slideshow-dot" data-idx="3"></div>
           <div class="slideshow-dot" data-idx="4"></div>
+          <div class="slideshow-dot" data-idx="5"></div>
+          <div class="slideshow-dot" data-idx="6"></div>
+          <div class="slideshow-dot" data-idx="7"></div>
+          <div class="slideshow-dot" data-idx="8"></div>
+          <div class="slideshow-dot" data-idx="9"></div>
+          <div class="slideshow-dot" data-idx="10"></div>
         </div>
       </div><!-- end slideshow-row -->
     </div>
@@ -2266,6 +2308,19 @@
           <span class="suggestion-chip" data-kw="QA Engineer">QA Engineer</span>
         </div>
       </div>
+    </div>
+
+    <!-- Top Ad Placement - Flows naturally below the search grid -->
+    <div class="ad-wrapper">
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-1563090184756838"
+           data-ad-slot="YOUR_AD_SLOT_ID_HERE"
+           data-ad-format="auto"
+           data-full-width-responsive="true"></ins>
+      <script>
+           (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
     </div>
 
     <!-- Intent box — shown after AI classifies CV/skills input -->
@@ -2321,27 +2376,30 @@
       </div>
     </div>
 
-    <!-- About section — stays below results after searching -->
-    <section id="aboutSection" class="about-section">
-      <div class="about-popular">
-        <h3>Hướng dẫn tìm việc hiệu quả trên Good Jobs:</h3>
-        <ul>
-          <li><strong>Sử dụng từ khóa tiếng Anh:</strong> Ngành IT và đa số công ty đa quốc gia dùng chức danh tiếng
-            Anh. Ví dụ: "AI Engineer", "Data Scientist" sẽ ra nhiều kết quả hơn tiếng Việt.</li>
-          <li><strong>Lọc theo trình độ:</strong> Nhập thêm "Senior", "Junior" hoặc "Intern" vào tên chức danh để thu
-            hẹp kết quả phù hợp với số năm kinh nghiệm.</li>
-          <li><strong>Tìm việc từ xa (Work from home):</strong> Chọn địa điểm là "Remote" để xem các vị trí không yêu
-            cầu lên văn phòng.</li>
-          <li><strong>Chia sẻ nhanh:</strong> Bạn có thể chia sẻ link kết quả tìm kiếm hoặc đường link của 1 công việc
-            cụ thể để gửi cho bạn bè. Khi mở link, Good Jobs sẽ tải lại kết quả và mở popup đúng job.</li>
-          <li><strong>Đánh giá mức độ phù hợp:</strong> Cột "Điểm phù hợp" cho biết mức độ khớp giữa yêu cầu công việc
-            và kỹ năng của bạn (dựa trên AI). Dùng cột này để ưu tiên ứng tuyển những vị trí có điểm cao.</li>
-          <li><strong>Nhập kỹ năng/CV:</strong> Dán CV hoặc liệt kê kỹ năng — AI tự phân tích và tìm công việc phù hợp
-            nhất. Ví dụ: "2 năm kinh nghiệm React, Node.js, PostgreSQL. Đã làm tại startup fintech, quen với CI/CD và
-            Docker…"</li>
-        </ul>
-      </div>
+    <!-- Bottom Ad Placement - Stays below results so it doesn't interrupt reading -->
+    <div class="ad-wrapper">
+      <ins class="adsbygoogle"
+           style="display:block"
+           data-ad-client="ca-pub-1563090184756838"
+           data-ad-slot="YOUR_AD_SLOT_ID_HERE"
+           data-ad-format="auto"
+           data-full-width-responsive="true"></ins>
+      <script>
+           (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
+    </div>
 
+    <!-- About section — Summarized with link to blog -->
+    <section id="aboutSection" class="about-section" style="margin-top: 2.5rem; padding: 2.5rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);">
+      <div class="about-content" style="max-width: 800px; margin: 0 auto; line-height: 1.75; color: var(--text); text-align: center;">
+        <h2 style="font-size: 1.6rem; margin-bottom: 1rem; color: var(--primary); font-weight: 700;">Hệ Thống Phân Tích Việc Làm Thông Minh Good Jobs</h2>
+        <p style="margin-bottom: 1.5rem; font-size: 1rem; color: var(--muted); text-align: justify;">
+          Good Jobs là nền tảng máy học lưu trữ dữ liệu chuyên sâu kết hợp trí tuệ nhân tạo (Cloudflare Workers AI), tự động đồng bộ hàng vạn công việc từ LinkedIn, ITviec, TopCV và các trang lớn nhất Việt Nam. Khác với các hệ thống truyền thống, thuật toán Semantic Vector Search của Good Jobs hiểu ngữ cảnh kỹ năng và lịch sử hồ sơ của bạn, giúp tìm chính xác các cơ hội việc làm đa ngành với độ trùng khớp (Matching Score) cực cao.
+        </p>
+        <a href="/blog/" class="btn btn-primary" style="display: inline-block; background: var(--primary); color: white; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 600;">
+          Đọc Cẩm Nang Hướng Dẫn Tối Ưu Tìm Việc &rarr;
+        </a>
+      </div>
     </section>
 
   </div>
@@ -2403,6 +2461,7 @@
     <div style="display:flex; justify-content:center; gap:1.5rem; margin-bottom:1rem;">
       <a href="/privacy/" style="color:inherit; text-decoration:none; font-weight:500;">Chính sách bảo mật</a>
       <a href="/terms/" style="color:inherit; text-decoration:none; font-weight:500;">Điều khoản dịch vụ</a>
+      <a href="/blog/" style="color:inherit; text-decoration:none; font-weight:500;">Blog</a>
       <a href="/contact/" style="color:inherit; text-decoration:none; font-weight:500;">Liên hệ</a>
       <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener"
         style="color:inherit; text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:0.3rem;">
@@ -2460,6 +2519,12 @@
         '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
         '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
         '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+        '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
       ];
       const slides = document.querySelectorAll(".slideshow-slide");
       const dots = document.querySelectorAll(".slideshow-dot");

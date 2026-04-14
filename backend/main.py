@@ -684,6 +684,7 @@ async def admin_analytics(secret: str = ""):
             "intent": e.get("intent", ""),
         }
         for e in reversed(entries[-50:])
+        if e.get("intent") != "warmup"
     ]
 
     intent_breakdown = {
@@ -987,11 +988,6 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if rate_err:
         raise HTTPException(status_code=429, detail=rate_err, headers=rate_headers)
 
-    intent = req.intent or ("cv_or_skills" if req.raw_input else "job_title")
-    log_search(request, keyword, req.location, intent)
-    # Record this search in IP history for future intent suggestions (fire-and-forget)
-    asyncio.ensure_future(record_search(ip, keyword, req.location))
-
     warmup_kws = await get_warmup_keywords()
 
     # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
@@ -1016,7 +1012,6 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if not has_level and req.estimated_level in LEVEL_SYNONYMS:
         inferred_levels = LEVEL_SYNONYMS[req.estimated_level]
 
-    loop = asyncio.get_event_loop()
     cache_kw_core = strip_generic_role(cache_keyword)
     _is_warmup_kw = any(
         cache_kw_core == strip_generic_role(kw) for kw in warmup_kws
@@ -1025,6 +1020,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         req.location.strip().lower() == loc.strip().lower() for loc in _WARMUP_LOCATIONS
     )
     is_warmup = _is_warmup_kw and _is_warmup_loc
+
+    intent = req.intent or ("cv_or_skills" if req.raw_input else "job_title")
+    if is_warmup and intent == "job_title":
+        intent = "warmup_job"
+    log_search(request, keyword, req.location, intent)
+    # Record this search in IP history for future intent suggestions (fire-and-forget)
+    asyncio.ensure_future(record_search(ip, keyword, req.location))
 
     # For warmup, keep matching strict to reduce cache noise; for user searches, be looser.
     match_fn = title_matches if is_warmup else title_matches_loose
