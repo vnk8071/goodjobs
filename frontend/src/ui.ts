@@ -2,6 +2,158 @@ import type { Job } from "./types";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
+// ─── Apply Tracker ────────────────────────────────────────────────────────────
+
+const _APPLIED_KEY = "goodjobs:applied";
+
+function _getApplied(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(_APPLIED_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function _saveApplied(set: Set<string>): void {
+  try {
+    localStorage.setItem(_APPLIED_KEY, JSON.stringify([...set]));
+  } catch { /* storage quota exceeded — silently ignore */ }
+}
+
+export function isApplied(link: string): boolean {
+  return _getApplied().has(link);
+}
+
+export function markApplied(link: string): void {
+  const set = _getApplied();
+  set.add(link);
+  _saveApplied(set);
+}
+
+export function unmarkApplied(link: string): void {
+  const set = _getApplied();
+  set.delete(link);
+  _saveApplied(set);
+}
+
+// Pending-apply keys in sessionStorage (tab-scoped, survives page reload).
+const _PENDING_LINK_KEY  = "goodjobs:pending_apply_link";
+const _PENDING_TITLE_KEY = "goodjobs:pending_apply_title";
+
+/** Called by the Apply button click handler BEFORE opening the external link. */
+export function setPendingApply(link: string, title: string): void {
+  try {
+    sessionStorage.setItem(_PENDING_LINK_KEY, link);
+    sessionStorage.setItem(_PENDING_TITLE_KEY, title);
+  } catch { /* private browsing quota — ignore */ }
+}
+
+function _clearPendingApply(): void {
+  try {
+    sessionStorage.removeItem(_PENDING_LINK_KEY);
+    sessionStorage.removeItem(_PENDING_TITLE_KEY);
+  } catch { /* ignore */ }
+}
+
+/** Called from main.ts visibilitychange. Shows the prompt if a pending apply exists.
+ *  Reads from sessionStorage so it survives a page reload on the same tab. */
+export function applyTrackerHandleReturn(): void {
+  let link = "";
+  let title = "";
+  try {
+    link  = sessionStorage.getItem(_PENDING_LINK_KEY)  ?? "";
+    title = sessionStorage.getItem(_PENDING_TITLE_KEY) ?? "";
+  } catch { /* ignore */ }
+  if (!link) return;
+  _clearPendingApply();
+  // Already marked — don't re-prompt
+  if (isApplied(link)) return;
+  _showApplyToast(link, title);
+}
+
+// ─── Apply Toast ──────────────────────────────────────────────────────────────
+
+let _applyToast: HTMLDivElement | null = null;
+let _toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function initApplyToast(): void {
+  if (_applyToast) return;
+  const el = document.createElement("div");
+  el.id = "applyToast";
+  el.className = "apply-toast hidden";
+  el.innerHTML = `
+    <div class="apply-toast__icon">📋</div>
+    <div class="apply-toast__body">
+      <div class="apply-toast__q">Bạn đã ứng tuyển chưa?</div>
+      <div class="apply-toast__title" id="applyToastTitle"></div>
+    </div>
+    <div class="apply-toast__actions">
+      <button class="apply-toast__yes" id="applyToastYes">✓ Đã ứng tuyển</button>
+      <button class="apply-toast__no"  id="applyToastNo">✕ Chưa</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+  _applyToast = el;
+
+  el.querySelector("#applyToastYes")!.addEventListener("click", () => {
+    const link = el.dataset.link ?? "";
+    if (link) {
+      markApplied(link);
+      _refreshApplyUI(link);
+    }
+    _hideApplyToast();
+  });
+  el.querySelector("#applyToastNo")!.addEventListener("click", () => {
+    _hideApplyToast();
+  });
+}
+
+function _showApplyToast(link: string, title: string): void {
+  if (!_applyToast) return;
+  if (_toastTimeout) { clearTimeout(_toastTimeout); _toastTimeout = null; }
+  _applyToast.dataset.link = link;
+  const titleEl = _applyToast.querySelector<HTMLElement>("#applyToastTitle");
+  if (titleEl) titleEl.textContent = title;
+  _applyToast.classList.remove("hidden");
+  // Auto-dismiss after 12 seconds
+  _toastTimeout = setTimeout(_hideApplyToast, 12000);
+}
+
+function _hideApplyToast(): void {
+  _applyToast?.classList.add("hidden");
+  if (_toastTimeout) { clearTimeout(_toastTimeout); _toastTimeout = null; }
+}
+
+/** Refresh the apply button state for a given link in the table and modal. */
+function _refreshApplyUI(link: string): void {
+  const applied = isApplied(link);
+  // Update all apply buttons in the table for this link
+  document.querySelectorAll<HTMLButtonElement>(`[data-apply-link="${CSS.escape(link)}"]`).forEach(btn => {
+    _styleApplyBtn(btn, applied);
+  });
+  // Update modal if it's open for this job
+  const modalApplyBtn = document.getElementById("jobModalApplyBtn") as HTMLAnchorElement | null;
+  if (modalApplyBtn && modalApplyBtn.href === link) {
+    _styleModalApplyBtn(modalApplyBtn, applied);
+  }
+  // Re-render applied badge row indicator
+  document.querySelectorAll<HTMLTableRowElement>(`tr[data-job-link="${CSS.escape(link)}"]`).forEach(tr => {
+    if (applied) tr.classList.add("applied-row");
+    else tr.classList.remove("applied-row");
+  });
+}
+
+function _styleApplyBtn(btn: HTMLButtonElement, applied: boolean): void {
+  btn.classList.toggle("apply-btn--applied", applied);
+  btn.textContent = applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗";
+  btn.title = applied ? "Bạn đã đánh dấu là đã ứng tuyển. Nhấn để bỏ đánh dấu." : "Ứng tuyển vào vị trí này";
+}
+
+function _styleModalApplyBtn(btn: HTMLAnchorElement, applied: boolean): void {
+  btn.classList.toggle("modal-apply-btn--applied", applied);
+  btn.textContent = applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗";
+}
+
 // Generic role nouns and level words that carry no domain signal.
 const _ROLE_WORDS = new Set([
   "engineer", "developer", "dev", "specialist", "analyst", "consultant",
@@ -81,9 +233,8 @@ const jobModalLocation = document.getElementById("jobModalLocation") as HTMLSpan
 const jobModalPosted   = document.getElementById("jobModalPosted")   as HTMLSpanElement;
 const jobModalSource   = document.getElementById("jobModalSource")   as HTMLSpanElement;
 const jobModalDesc     = document.getElementById("jobModalDesc")     as HTMLDivElement;
-const jobModalLink     = document.getElementById("jobModalLink")     as HTMLAnchorElement;
-const jobModalShareBtn = document.getElementById("jobModalShareBtn") as HTMLButtonElement;
 const jobModalClose    = document.getElementById("jobModalClose")    as HTMLButtonElement;
+const jobModalShareBtn = document.getElementById("jobModalShareBtn") as HTMLButtonElement;
 const jobModalSkills   = document.getElementById("jobModalSkills")   as HTMLDivElement;
 const jobModalSummary  = document.getElementById("jobModalSummary")  as HTMLDivElement;
 const jobModalBody     = document.querySelector(".job-modal-body")    as HTMLDivElement;
@@ -236,7 +387,19 @@ function openJobModal(job: Job): void {
     jobModalSummary.textContent = "";
     jobModalSummary.classList.add("hidden");
   }
-  jobModalLink.href            = job.link;
+
+  const modalApplyBtn = document.getElementById("jobModalApplyBtn") as HTMLAnchorElement | null;
+  if (modalApplyBtn && job.link) {
+    const applied = isApplied(job.link);
+    modalApplyBtn.href = job.link;
+    _styleModalApplyBtn(modalApplyBtn, applied);
+    modalApplyBtn.onclick = (e) => {
+      e.preventDefault();
+      setPendingApply(job.link, job.title);
+      window.open(job.link, "_blank", "noopener");
+    };
+  }
+
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const descHtml = (!job.description && isEnriching)
@@ -684,6 +847,9 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
   const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
   const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
   const levelBadge = job.level_match ? `<span class="level-badge">✓ Phù hợp</span>` : "";
+  const applied = job.link ? isApplied(job.link) : false;
+  if (applied) tr.classList.add("applied-row");
+  if (job.link) tr.dataset.jobLink = job.link;
   tr.innerHTML = `
     <td class="num">${num}</td>
     <td class="title" data-company="${esc(job.company)}">
@@ -701,12 +867,29 @@ function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>
     <td class="desc">${esc(descText)}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
-    <td>
+    <td class="apply-cell">
       ${job.link
-        ? `<a href="${esc(job.link)}" target="_blank" rel="noopener" class="view-link" onclick="event.stopPropagation()">View ↗</a>`
+        ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? "Đã ứng tuyển — nhấn để bỏ đánh dấu" : "Ứng tuyển vào vị trí này"}" onclick="event.stopPropagation()">${applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗"}</button>`
         : `<span class="view-link" style="opacity:0.45;cursor:default">—</span>`}
     </td>
   `;
+
+  // Wire up Apply button: open job externally, set pending-apply state
+  if (job.link) {
+    const applyBtn = tr.querySelector<HTMLButtonElement>(".apply-btn");
+    applyBtn?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (isApplied(job.link)) {
+        // Toggle off
+        unmarkApplied(job.link);
+        _refreshApplyUI(job.link);
+      } else {
+        setPendingApply(job.link, job.title);
+        window.open(job.link, "_blank", "noopener");
+      }
+    });
+  }
+
   tr.addEventListener("click", () => openJobModal(job));
   return tr;
 }

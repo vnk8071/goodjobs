@@ -614,7 +614,7 @@ async def admin_analytics(secret: str = ""):
                 "top_keywords": [],
                 "requests_by_hour": {str(h): 0 for h in range(24)},
                 "requests_by_week": [],
-                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0},
+                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0, "warmup": 0},
                 "recent_searches": [],
             }
 
@@ -690,6 +690,7 @@ async def admin_analytics(secret: str = ""):
         "job_title": intent_counter.get("job_title", 0),
         "cv_or_skills": intent_counter.get("cv_or_skills", 0),
         "not_job": intent_counter.get("not_job", 0),
+        "warmup": intent_counter.get("warmup", 0),
     }
 
     result = {
@@ -1016,8 +1017,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
         inferred_levels = LEVEL_SYNONYMS[req.estimated_level]
 
     loop = asyncio.get_event_loop()
+    cache_kw_core = strip_generic_role(cache_keyword)
     _is_warmup_kw = any(
-        cache_keyword.lower().strip() == kw.lower().strip() for kw in warmup_kws
+        cache_kw_core == strip_generic_role(kw) for kw in warmup_kws
     )
     _is_warmup_loc = any(
         req.location.strip().lower() == loc.strip().lower() for loc in _WARMUP_LOCATIONS

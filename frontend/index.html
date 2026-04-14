@@ -807,17 +807,16 @@
         width: 5rem;
       }
 
-      /* Source */
+      /* Apply */
       table.jobs-table thead th:nth-child(10) {
-        width: 3.5rem;
+        width: 7rem;
       }
 
-      /* Link */
+      /* Apply column */
     }
 
-    /* Mobile: hide Link column ("View ↗") to save space */
+    /* Mobile: hide Apply column to save space — users tap the row to open modal */
     @media (max-width: 640px) {
-
       table.jobs-table thead th:nth-child(10),
       table.jobs-table tbody td:nth-child(10) {
         display: none;
@@ -910,6 +909,148 @@
       color: var(--primary-hover);
       text-decoration: underline;
     }
+
+    /* ── Apply tracker ───────────────────────────────── */
+    .apply-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.7rem;
+      border: 1.5px solid var(--primary);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--primary);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
+    }
+
+    .apply-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .apply-btn--applied {
+      background: #dcfce7;
+      border-color: #16a34a;
+      color: #15803d;
+    }
+
+    .apply-btn--applied:hover {
+      background: #bbf7d0;
+      color: #15803d;
+    }
+
+    td.apply-cell {
+      white-space: nowrap;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    /* Soft green tint on rows the user has applied to */
+    tr.applied-row td {
+      background: rgba(22, 163, 74, 0.04) !important;
+    }
+
+    tr.applied-row:hover td {
+      background: rgba(22, 163, 74, 0.09) !important;
+    }
+
+    /* Modal apply button */
+    .modal-apply-btn--applied {
+      background: #dcfce7 !important;
+      border-color: #16a34a !important;
+      color: #15803d !important;
+    }
+
+    /* Return-to-tab toast */
+    .apply-toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
+      padding: 1rem 1.2rem;
+      max-width: 340px;
+      animation: toastSlideIn 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    }
+
+    @keyframes toastSlideIn {
+      from { opacity: 0; transform: translateY(1.5rem) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0)      scale(1);    }
+    }
+
+    .apply-toast__icon {
+      font-size: 1.4rem;
+      line-height: 1;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .apply-toast__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .apply-toast__q {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 0.2rem;
+    }
+
+    .apply-toast__title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
+
+    .apply-toast__actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+
+    .apply-toast__yes {
+      padding: 0.3rem 0.8rem;
+      border: none;
+      border-radius: 6px;
+      background: #16a34a;
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .apply-toast__yes:hover { background: #15803d; }
+
+    .apply-toast__no {
+      padding: 0.3rem 0.8rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .apply-toast__no:hover { background: var(--bg); }
 
     td.empty {
       text-align: center;
@@ -2169,7 +2310,7 @@
               <th>Kỹ năng</th>
               <th>Mô tả</th>
               <th>Nguồn</th>
-              <th>Link</th>
+              <th>Ứng tuyển</th>
             </tr>
           </thead>
           <tbody id="jobsBody"></tbody>
@@ -2250,8 +2391,8 @@
       </div>
       <div class="job-modal-footer">
         <button id="jobModalShareBtn" type="button" class="btn btn-ghost">Chia sẻ link</button>
-        <a id="jobModalLink" href="#" target="_blank" rel="noopener" class="btn btn-primary">
-          Mở liên kết
+        <a id="jobModalApplyBtn" href="#" class="btn btn-primary">
+          Ứng tuyển ↗
         </a>
       </div>
     </div>

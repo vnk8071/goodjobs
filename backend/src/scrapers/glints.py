@@ -21,10 +21,21 @@ _NON_SKILL_TAGS = {
 }
 
 
+_GLINTS_LOCATION_KEYWORDS: dict[str, list[str]] = {
+    "ho chi minh": ["ho chi minh", "hồ chí minh", "hcm", "saigon", "sài gòn"],
+    "hanoi":       ["hanoi", "ha noi", "hà nội", "hà nội"],
+    "ha noi":      ["hanoi", "ha noi", "hà nội"],
+    "hà nội":      ["hanoi", "ha noi", "hà nội"],
+    "hcm":         ["ho chi minh", "hồ chí minh", "hcm", "saigon"],
+    "hồ chí minh": ["ho chi minh", "hồ chí minh", "hcm", "saigon"],
+}
+
+
 def scrape_glints(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
     if location.strip().lower() == "remote":
         location = "Ho Chi Minh City"
-    loc_param = _glints_loc_param(location or "Ho Chi Minh City")
+    effective_location = location or "Ho Chi Minh City"
+    loc_param = _glints_loc_param(effective_location)
     if loc_param is None:
         return []
     kw_encoded = keyword.strip().replace(" ", "+")
@@ -32,7 +43,20 @@ def scrape_glints(keyword: str, location: str = "Ho Chi Minh City", max_results:
         f"https://glints.com/vn/en/opportunities/jobs/explore"
         f"?keyword={kw_encoded}&country=VN&{loc_param}"
     )
-    return _glints_playwright_list(url, max_results)
+    jobs = _glints_playwright_list(url, max_results)
+    # Filter out jobs whose card location doesn't match the searched city
+    loc_key = effective_location.strip().lower()
+    allowed_terms = next(
+        (terms for candidate, terms in _GLINTS_LOCATION_KEYWORDS.items() if candidate in loc_key),
+        None,
+    )
+    if allowed_terms:
+        jobs = [
+            j for j in jobs
+            if not j.get("location")
+            or any(t in j["location"].lower() for t in allowed_terms)
+        ]
+    return jobs
 
 
 def scrape_glints_detail_one(job: dict, cooldown: float) -> None:
@@ -149,7 +173,7 @@ def _extract_glints_cards_js(page) -> list[dict]:
         return cards.map(card => {
             const titleEl = card.querySelector('[class*="JobCardTitleNoStyleAnchor"]');
             const companyEl = card.querySelector('[class*="CompanyLink-sc"]');
-            const postedEl = card.querySelector('[class*="UpdatedAtMessage"]');
+            const postedEl = card.querySelector('[class*="UpdatedAtMessage"], [class*="UpdatedAt"], [class*="PostedAt"], [class*="posted-at"], [class*="time-posted"]');
             const logoEl = card.querySelector('img[src*="aliyuncs"]');
             const locationEls = Array.from(card.querySelectorAll('[class*="JobCardLocationNoStyleAnchor"]'));
             const location = locationEls.map(e => e.textContent.trim()).filter(Boolean).join(', ');
@@ -175,7 +199,7 @@ def _extract_glints_cards_js(page) -> list[dict]:
 def _glints_days_ago(text: str) -> int:
     text = text.lower().strip()
     if not text:
-        return 9999
+        return 0  # unknown posted date — treat as fresh
     if "today" in text or "hour" in text or "just now" in text or "minute" in text:
         return 0
     m = re.search(r"(\d+)\s*day", text)

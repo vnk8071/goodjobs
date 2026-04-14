@@ -1,6 +1,9 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn } from "./ui";
 import type { Job } from "./types";
+
+// Initialise apply tracker toast (injected into DOM once)
+initApplyToast();
 
 let currentJobs: Job[] = [];
 
@@ -121,12 +124,9 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     keywordEl.style.height = `${keywordEl.scrollHeight}px`;
   }
 
-  // Update the URL bar so the current search is always shareable by copying the address bar.
-  // Uses pushState so the browser back button returns the user to the previous search.
-  const shareUrl = new URL(window.location.origin + window.location.pathname);
-  shareUrl.searchParams.set("kw", keyword);
-  if (location) shareUrl.searchParams.set("loc", location);
-  history.pushState({ kw: keyword, loc: location ?? "" }, "", shareUrl.toString());
+  // Keep the URL clean while browsing — params are only used for sharing via the share button.
+  // Store kw/loc in history state so the back button still restores the previous search.
+  history.pushState({ kw: keyword, loc: location ?? "" }, "", window.location.pathname);
 
   fetchBtn.disabled = true;
   currentJobs = [];
@@ -339,8 +339,8 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 });
 
 // Deep-link support: /?kw=...&loc=... and optional &job=... to auto-open modal.
-// The URL is NOT cleared here — runSearch() will push the correct state to
-// the address bar so the link remains shareable throughout the session.
+// The URL params are read once to seed the search, then cleared from the address bar
+// by runSearch(). Use the "Chia sẻ kết quả" button to get a shareable link.
 (() => {
   const url = new URL(window.location.href);
   const kw = (url.searchParams.get("kw") ?? "").trim();
@@ -369,6 +369,11 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 })();
 
 document.addEventListener("visibilitychange", () => {
+  // Apply tracker: prompt the user when they return after clicking Apply
+  if (document.visibilityState === "visible") {
+    applyTrackerHandleReturn();
+  }
+  // Unblock the search button if a scrape was in progress when the tab was hidden
   if (document.visibilityState === "visible" && fetchBtn.disabled) {
     abortController?.abort();
     abortController = null;
@@ -377,11 +382,11 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-// Browser back/forward navigation: restore the search that matches the URL state.
-window.addEventListener("popstate", () => {
-  const url = new URL(window.location.href);
-  const kw = (url.searchParams.get("kw") ?? "").trim();
-  const loc = (url.searchParams.get("loc") ?? "").trim();
+// Browser back/forward navigation: restore the search from history state.
+window.addEventListener("popstate", (event) => {
+  const state = event.state as { kw?: string; loc?: string } | null;
+  const kw = (state?.kw ?? "").trim();
+  const loc = (state?.loc ?? "").trim();
 
   if (!kw) {
     // Navigated back to the homepage — reset the UI.

@@ -21,7 +21,7 @@ from src.cache import (
 )
 from src.vector import upsert_jobs, delete_by_ids
 from src.constants import RECENT_DAYS, VECTOR_RETENTION_DAYS
-from src.logger import log_app
+from src.logger import log_app, log_search_warmup
 from src.matching import title_matches, extract_skills, posted_ts
 
 from src.scrapers import (
@@ -146,6 +146,7 @@ async def _scrape_keyword(
     """
     from src.scrapers.linkedin import scrape_linkedin
 
+    log_search_warmup(kw, loc)
     since_seconds = 86400 if last_fetched_ts > 0 else None
 
     # Minimum delay between consecutive site requests.

@@ -1,11 +1,9 @@
-import re
 import time as _time
-from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
 
-from ..constants import HEADERS, RECENT_DAYS
+from ..constants import HEADERS
 
 # ViecOi returns brotli-encoded responses which requests can't decode natively.
 # Override Accept-Encoding to request only gzip/deflate.
@@ -73,14 +71,6 @@ def _viecoi_requests(url: str, max_results: int) -> list[dict]:
             location_el = card.select_one("a.added_detail_information")
             skill_els = card.select("a.cp-tag")
 
-            # Date: pick the .added-detail-information div whose text looks like DD/MM/YYYY
-            date_text = ""
-            for el in card.select("div.added-detail-information"):
-                t = el.get_text(strip=True)
-                if re.match(r"\d{2}/\d{2}/\d{4}", t):
-                    date_text = t
-                    break
-
             title = title_el.get_text(strip=True) if title_el else ""
             link = link_el["href"] if link_el and link_el.get("href") else ""
             if not title or not link:
@@ -92,10 +82,9 @@ def _viecoi_requests(url: str, max_results: int) -> list[dict]:
             logo = logo_el.get("data-src", "") if logo_el else ""
             location_text = location_el.get_text(strip=True) if location_el else ""
             skills = [el.get_text(strip=True) for el in skill_els if el.get_text(strip=True)]
-            posted_ts_val, days_ago = _viecoi_parse_date(date_text, now)
-
-            if days_ago > RECENT_DAYS:
-                continue
+            # ViecOi shows a deadline date, not a posted date — use scrape time as posted_ts
+            posted_ts_val = now
+            days_ago = 0
 
             jobs.append({
                 "title":       title,
@@ -116,29 +105,3 @@ def _viecoi_requests(url: str, max_results: int) -> list[dict]:
     except Exception as e:
         print(f"[ViecOi] {e}")
         return []
-
-
-def _viecoi_parse_date(text: str, now: float) -> tuple[float, int]:
-    """Parse DD/MM/YYYY date or relative text. Returns (unix_ts, days_ago)."""
-    text = text.strip()
-    # Try DD/MM/YYYY
-    try:
-        dt = datetime.strptime(text, "%d/%m/%Y")
-        ts = dt.timestamp()
-        days = int((now - ts) / 86400)
-        return ts, max(0, days)
-    except ValueError:
-        pass
-    # Relative fallback
-    text_lower = text.lower()
-    if "hôm nay" in text_lower or "giờ" in text_lower or "phút" in text_lower:
-        return now, 0
-    m = re.search(r"(\d+)\s*ngày", text_lower)
-    if m:
-        days = int(m.group(1))
-        return now - days * 86400, days
-    m = re.search(r"(\d+)\s*tuần", text_lower)
-    if m:
-        days = int(m.group(1)) * 7
-        return now - days * 86400, days
-    return now, 9999

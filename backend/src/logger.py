@@ -50,6 +50,18 @@ def log_app(message: str, level: str = "INFO") -> None:
     getattr(_app_logger, level.lower())(message)
 
 
+def log_search_warmup(keyword: str, location: str) -> None:
+    """Log a warmup scrape as a search entry with intent='warmup'."""
+    entry: dict = {
+        "ts":       datetime.now(_TZ_ICT).strftime("%Y-%m-%dT%H:%M:%S+07:00"),
+        "ip":       "warmup",
+        "keyword":  keyword,
+        "location": location,
+        "intent":   "warmup",
+    }
+    _search_logger.info(json.dumps(entry, ensure_ascii=False))
+
+
 def log_search(request: Request, keyword: str, location: str, intent: str = "") -> None:
     ip = (
         request.headers.get("CF-Connecting-IP")
