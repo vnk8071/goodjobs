@@ -92,7 +92,7 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
       if (data.jobs_this_week > 0) {
         const rounded = Math.floor(data.jobs_this_week / 100) * 100;
         const display = rounded > 0 ? rounded.toLocaleString("vi-VN") : data.jobs_this_week;
-        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> việc làm mới tuần này`;
+        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> việc làm trong tuần qua`;
         weeklyStatsEl.classList.remove("hidden");
       }
     }

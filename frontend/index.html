@@ -1785,6 +1785,74 @@
       box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     }
 
+    /* Publisher-style summary block near page bottom */
+    .about-section--publisher {
+      margin-top: 2.5rem;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+    }
+
+    .about-section--publisher .about-content {
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.75;
+      color: var(--text);
+      text-align: center;
+    }
+
+    .about-section--publisher h2 {
+      font-size: 1.6rem;
+      margin-bottom: 1rem;
+      color: var(--primary);
+      font-weight: 800;
+      letter-spacing: -0.01em;
+    }
+
+    .about-section--publisher p {
+      margin: 0 0 1.5rem;
+      font-size: 1rem;
+      color: var(--muted);
+      text-align: justify;
+      text-wrap: pretty;
+    }
+
+    .about-cta {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      line-height: 1.1;
+      max-width: 100%;
+      white-space: normal;
+      text-align: center;
+    }
+
+    @media (max-width: 640px) {
+      .about-section--publisher {
+        padding: 1.25rem 1rem;
+        margin-top: 1.5rem;
+      }
+
+      .about-section--publisher h2 {
+        font-size: 1.25rem;
+        margin-bottom: 0.75rem;
+      }
+
+      .about-section--publisher p {
+        font-size: 0.95rem;
+        margin-bottom: 1rem;
+        text-align: left;
+      }
+
+      .about-cta {
+        width: 100%;
+        padding: 0.85rem 1rem;
+      }
+    }
+
     .about-section h2 {
       font-size: 1.2rem;
       font-weight: 700;
@@ -1905,9 +1973,78 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 1.25rem 1.5rem;
-      margin-bottom: 0.75rem;
+      margin-bottom: 1.75rem;
       box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
       overflow: hidden;
+    }
+
+    /* Make the intro block feel like a hero on desktop.
+       Goal: occupy most of the first viewport so the publisher/about block
+       stays below the fold without hiding it. */
+    @media (min-width: 768px) {
+      .feature-slideshow {
+        min-height: unset;
+        padding: 1.9rem 2.25rem;
+        gap: 1rem;
+        margin-bottom: 2.25rem;
+        justify-content: flex-start;
+      }
+
+      .slideshow-intro h2 {
+        font-size: clamp(1.35rem, 1.15rem + 1vw, 2rem);
+        margin-bottom: 0.6rem;
+        letter-spacing: -0.015em;
+      }
+
+      .slideshow-intro-head {
+        flex-wrap: nowrap;
+        align-items: flex-start;
+      }
+
+      .slideshow-intro-head h2 {
+        margin-bottom: 0;
+      }
+
+      .slideshow-intro p {
+        font-size: 1rem;
+        line-height: 1.75;
+        max-width: 70ch;
+      }
+
+      .slideshow-row {
+        margin-top: 0.9rem;
+        padding-top: 1.1rem;
+        gap: 1rem;
+      }
+
+      .slideshow-icon svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .slideshow-slide strong {
+        font-size: 1.05rem;
+      }
+
+      .slideshow-slide span {
+        font-size: 0.95rem;
+      }
+
+      .slideshow-dot {
+        width: 7px;
+        height: 7px;
+      }
+    }
+
+    /* Keep mobile compact and readable */
+    @media (max-width: 640px) {
+      .feature-slideshow {
+        padding: 1.1rem 1rem;
+      }
+
+      .slideshow-row {
+        padding-top: 0.65rem;
+      }
     }
 
     .feature-slideshow.hidden {
@@ -1919,6 +2056,24 @@
       font-weight: 700;
       color: var(--text);
       margin-bottom: 0.3rem;
+    }
+
+    .slideshow-intro-head {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      column-gap: 0.85rem;
+    }
+
+    .slideshow-intro-head h2 {
+      margin-bottom: 0;
+      grid-column: 1;
+      text-align: left;
+    }
+
+    .slideshow-intro-head .weekly-stats {
+      font-size: 1rem;
+      justify-self: right;
     }
 
     .slideshow-intro p {
@@ -2171,7 +2326,6 @@
           </div>
           <p>
             Tìm kiếm việc làm gần đây tại Việt Nam 🇻🇳
-            <span id="weeklyStats" class="weekly-stats hidden"></span>
           </p>
         </div>
       </a>
@@ -2186,7 +2340,10 @@
     <!-- Homepage intro + feature slideshow — merged, visible before any search -->
     <div id="featureSlideshow" class="feature-slideshow">
       <div class="slideshow-intro">
-        <h2>Tổng hợp việc làm tại Việt Nam</h2>
+        <div class="slideshow-intro-head">
+          <h2>Tổng hợp việc làm tại Việt Nam</h2>
+          <span id="weeklyStats" class="weekly-stats hidden"></span>
+        </div>
         <p>Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm công khai tại Việt Nam — LinkedIn, ITviec,
           TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet — vào một trang duy nhất. Công việc được cập
           nhật mỗi ngày, giúp bạn không bỏ lỡ cơ hội nào.</p>
@@ -2310,19 +2467,6 @@
       </div>
     </div>
 
-    <!-- Top Ad Placement - Flows naturally below the search grid -->
-    <div class="ad-wrapper">
-      <ins class="adsbygoogle"
-           style="display:block"
-           data-ad-client="ca-pub-1563090184756838"
-           data-ad-slot="YOUR_AD_SLOT_ID_HERE"
-           data-ad-format="auto"
-           data-full-width-responsive="true"></ins>
-      <script>
-           (adsbygoogle = window.adsbygoogle || []).push({});
-      </script>
-    </div>
-
     <!-- Intent box — shown after AI classifies CV/skills input -->
     <div id="intentBox" class="intent-box hidden"></div>
 
@@ -2390,13 +2534,13 @@
     </div>
 
     <!-- About section — Summarized with link to blog -->
-    <section id="aboutSection" class="about-section" style="margin-top: 2.5rem; padding: 2.5rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);">
-      <div class="about-content" style="max-width: 800px; margin: 0 auto; line-height: 1.75; color: var(--text); text-align: center;">
-        <h2 style="font-size: 1.6rem; margin-bottom: 1rem; color: var(--primary); font-weight: 700;">Hệ Thống Phân Tích Việc Làm Thông Minh Good Jobs</h2>
-        <p style="margin-bottom: 1.5rem; font-size: 1rem; color: var(--muted); text-align: justify;">
-          Good Jobs là nền tảng máy học lưu trữ dữ liệu chuyên sâu kết hợp trí tuệ nhân tạo (Cloudflare Workers AI), tự động đồng bộ hàng vạn công việc từ LinkedIn, ITviec, TopCV và các trang lớn nhất Việt Nam. Khác với các hệ thống truyền thống, thuật toán Semantic Vector Search của Good Jobs hiểu ngữ cảnh kỹ năng và lịch sử hồ sơ của bạn, giúp tìm chính xác các cơ hội việc làm đa ngành với độ trùng khớp (Matching Score) cực cao.
+    <section id="aboutSection" class="about-section about-section--publisher">
+      <div class="about-content">
+        <h2>Hệ Thống Phân Tích Việc Làm Thông Minh Good Jobs</h2>
+        <p>
+          Good Jobs là trang web tổng hợp việc làm kết hợp trí tuệ nhân tạo (Cloudflare Workers AI), tự động đồng bộ hàng nghìn công việc từ LinkedIn, ITviec, TopCV và các trang lớn nhất Việt Nam. Khác với các hệ thống truyền thống, thuật toán Semantic Vector Search của Good Jobs hiểu ngữ cảnh kỹ năng và lịch sử hồ sơ của bạn, giúp tìm chính xác các cơ hội việc làm đa ngành với độ trùng khớp (Matching Score) cực cao.
         </p>
-        <a href="/blog/" class="btn btn-primary" style="display: inline-block; background: var(--primary); color: white; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 600;">
+        <a href="/blog/" class="btn btn-primary about-cta">
           Đọc Cẩm Nang Hướng Dẫn Tối Ưu Tìm Việc &rarr;
         </a>
       </div>
