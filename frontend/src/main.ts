@@ -1,9 +1,26 @@
-import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn } from "./ui";
+import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, API_BASE } from "./api";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow } from "./ui";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
+
+// Load and render the 20 most recent jobs on the homepage
+(async () => {
+  const tbody = document.getElementById("recentJobsBody") as HTMLTableSectionElement | null;
+  const section = document.getElementById("recentJobsSection") as HTMLElement | null;
+  if (!tbody || !section) return;
+  try {
+    const res = await fetch(`${API_BASE}/recent-jobs?n=20`);
+    if (!res.ok) return;
+    const jobs: Job[] = await res.json();
+    if (!jobs.length) return;
+    jobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
+    section.classList.remove("hidden");
+  } catch {
+    // silently ignore — recent jobs is non-critical
+  }
+})();
 
 let currentJobs: Job[] = [];
 

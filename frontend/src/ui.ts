@@ -832,7 +832,7 @@ export function replaceJobs(jobs: Job[]): Job[] {
 }
 
 /** Build a table row element for a single job, wiring up the modal click handler. */
-function buildRow(job: Job, num: number): HTMLTableRowElement {
+export function buildRow(job: Job, num: number): HTMLTableRowElement {
   const tr = document.createElement("tr");
   if (job.level_match) tr.classList.add("level-match");
   if (!_fromCache) {

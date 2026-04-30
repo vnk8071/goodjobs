@@ -1775,6 +1775,21 @@
       transform: none;
     }
 
+    /* Recent jobs section */
+    .recent-jobs-section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+    }
+
+    .recent-jobs-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin: 0 0 1rem 0;
+      color: var(--text);
+    }
+
     /* About / publisher content section */
     .about-section {
       background: var(--card);
@@ -2520,18 +2535,29 @@
       </div>
     </div>
 
-    <!-- Bottom Ad Placement - Stays below results so it doesn't interrupt reading -->
-    <div class="ad-wrapper">
-      <ins class="adsbygoogle"
-           style="display:block"
-           data-ad-client="ca-pub-1563090184756838"
-           data-ad-slot="YOUR_AD_SLOT_ID_HERE"
-           data-ad-format="auto"
-           data-full-width-responsive="true"></ins>
-      <script>
-           (adsbygoogle = window.adsbygoogle || []).push({});
-      </script>
-    </div>
+    <!-- Recent Jobs section -->
+    <section id="recentJobsSection" class="recent-jobs-section hidden">
+      <h2 class="recent-jobs-title">Việc làm gần đây</h2>
+      <div class="table-wrapper">
+        <table class="jobs-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Chức danh</th>
+              <th>Công ty</th>
+              <th>Địa điểm</th>
+              <th>Ngày đăng</th>
+              <th>Điểm</th>
+              <th>Kỹ năng</th>
+              <th>Mô tả</th>
+              <th>Nguồn</th>
+              <th>Ứng tuyển</th>
+            </tr>
+          </thead>
+          <tbody id="recentJobsBody"></tbody>
+        </table>
+      </div>
+    </section>
 
     <!-- About section — Summarized with link to blog -->
     <section id="aboutSection" class="about-section about-section--publisher">

@@ -71,7 +71,7 @@ export async function scrapeLinkedInFallback(
   throw new Error("All LinkedIn fallback proxies failed");
 }
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "";
+export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 /**
  * Pre-verify user query with AI spell-check and intent mapping.

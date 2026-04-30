@@ -715,6 +715,46 @@ async def admin_analytics(secret: str = ""):
     return result
 
 
+@app.get("/recent-jobs")
+async def recent_jobs(n: int = 20):
+    """Return the N most recently posted unique jobs across all cached keyword×location pairs."""
+    seen_links: set[str] = set()
+    all_jobs: list[dict] = []
+    try:
+        redis = get_redis()
+        async for key in redis.scan_iter("jobs:*"):
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+                for job in data.get("jobs", []):
+                    link = job.get("link", "")
+                    if not link or link in seen_links:
+                        continue
+                    if not (job.get("description") or job.get("summary_description")):
+                        continue
+                    seen_links.add(link)
+                    all_jobs.append(job)
+            except Exception:
+                continue
+    except Exception as e:
+        log_app(f"[recent-jobs] error: {e}", "ERROR")
+    all_jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
+    import re as _re
+    _within_day = _re.compile(r"\b(\d+)\s*(minute|minutes|hour|hours|giờ|phút)\b", _re.IGNORECASE)
+    cutoff = time.time() - 86400
+    for job in all_jobs:
+        posted_text = (job.get("posted") or "").lower()
+        within_day_ts = (job.get("posted_ts") or 0.0) >= cutoff
+        within_day_text = bool(_within_day.search(posted_text)) or any(
+            w in posted_text for w in ("today", "hôm nay", "just now", "vừa xong")
+        )
+        if within_day_ts or within_day_text:
+            job["posted"] = "Today"
+    return all_jobs[:n]
+
+
 @app.get("/stats")
 async def stats():
     """Return total unique jobs posted in the last 7 days across all cached keys."""
