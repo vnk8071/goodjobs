@@ -470,13 +470,13 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab-btn" onclick="switchTab('analytics')">Analytics</button>
-      <button class="tab-btn active" onclick="switchTab('cache')">Cache Keys</button>
+      <button class="tab-btn active" onclick="switchTab('analytics')">Analytics</button>
+      <button class="tab-btn" onclick="switchTab('cache')">Cache Keys</button>
       <button class="tab-btn" onclick="switchTab('embedded')">Embedded Jobs</button>
     </div>
 
     <!-- Tab: Cache Keys -->
-    <div id="tab-cache" class="tab-panel active">
+    <div id="tab-cache" class="tab-panel">
       <div class="table-card">
         <div class="table-card-header">
           <h2>All Cache Keys</h2>
@@ -546,7 +546,7 @@
     </div>
 
     <!-- Tab: Analytics -->
-    <div id="tab-analytics" class="tab-panel">
+    <div id="tab-analytics" class="tab-panel active">
       <!-- Stat cards -->
       <div class="stats-grid" style="margin-bottom:1.5rem">
         <div class="stat-card">
@@ -1159,7 +1159,7 @@
     window.warmupAll = warmupAll;
     window.loadAnalytics = loadAnalytics;
 
-    // Manual-only: do not auto-fetch on page load.
+    loadAnalytics();
   </script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
 </body>

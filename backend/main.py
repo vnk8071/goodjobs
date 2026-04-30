@@ -741,6 +741,8 @@ async def recent_jobs(n: int = 20):
     except Exception as e:
         log_app(f"[recent-jobs] error: {e}", "ERROR")
     all_jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
+
+    # Normalize posted text for within-day jobs
     import re as _re
     _within_day = _re.compile(r"\b(\d+)\s*(minute|minutes|hour|hours|giờ|phút)\b", _re.IGNORECASE)
     cutoff = time.time() - 86400
@@ -752,7 +754,21 @@ async def recent_jobs(n: int = 20):
         )
         if within_day_ts or within_day_text:
             job["posted"] = "Today"
-    return all_jobs[:n]
+
+    # Round-robin by source so no single source dominates the feed
+    per_source: dict[str, list[dict]] = {}
+    for job in all_jobs:
+        src = (job.get("source") or "other").lower()
+        per_source.setdefault(src, []).append(job)
+
+    result: list[dict] = []
+    buckets = list(per_source.values())
+    while len(result) < n and any(buckets):
+        for bucket in buckets:
+            if bucket and len(result) < n:
+                result.append(bucket.pop(0))
+
+    return result
 
 
 @app.get("/stats")
