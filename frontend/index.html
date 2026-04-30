@@ -1775,6 +1775,28 @@
       transform: none;
     }
 
+    /* Recent jobs table: show location (col4), hide score (col6) */
+    .recent-jobs-table thead th:nth-child(4),
+    .recent-jobs-table tbody td:nth-child(4) {
+      display: table-cell !important;
+      width: 7rem;
+    }
+    .recent-jobs-table thead th:nth-child(6),
+    .recent-jobs-table tbody td:nth-child(6) {
+      display: none !important;
+    }
+    @media (min-width: 641px) {
+      .recent-jobs-table thead th:nth-child(1) { width: 2.2rem; }
+      .recent-jobs-table thead th:nth-child(2) { width: clamp(7rem, 9vw, 9rem); }
+      .recent-jobs-table thead th:nth-child(3) { width: clamp(6rem, 8vw, 8rem); }
+      .recent-jobs-table thead th:nth-child(4) { width: 7rem; }
+      .recent-jobs-table thead th:nth-child(5) { width: 5rem; }
+      .recent-jobs-table thead th:nth-child(6) { display: none !important; }
+      .recent-jobs-table thead th:nth-child(7) { width: 9rem; }
+      .recent-jobs-table thead th:nth-child(8) { width: 13rem; }
+      .recent-jobs-table thead th:nth-child(9) { width: 5rem; }
+    }
+
     /* Recent jobs section */
     .recent-jobs-section {
       background: var(--card);
@@ -2539,7 +2561,7 @@
     <section id="recentJobsSection" class="recent-jobs-section hidden">
       <h2 class="recent-jobs-title">Việc làm gần đây</h2>
       <div class="table-wrapper">
-        <table class="jobs-table">
+        <table class="jobs-table recent-jobs-table">
           <thead>
             <tr>
               <th>#</th>
@@ -2547,7 +2569,7 @@
               <th>Công ty</th>
               <th>Địa điểm</th>
               <th>Ngày đăng</th>
-              <th>Điểm</th>
+              <th>Địa điểm</th>
               <th>Kỹ năng</th>
               <th>Mô tả</th>
               <th>Nguồn</th>

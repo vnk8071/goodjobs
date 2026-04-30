@@ -5,10 +5,15 @@ import type { Job } from "./types";
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
 
+const recentJobsSection = document.getElementById("recentJobsSection") as HTMLElement | null;
+
+function hideRecentJobs(): void { recentJobsSection?.classList.add("hidden"); }
+function showRecentJobs(): void { recentJobsSection?.classList.remove("hidden"); }
+
 // Load and render the 20 most recent jobs on the homepage
 (async () => {
   const tbody = document.getElementById("recentJobsBody") as HTMLTableSectionElement | null;
-  const section = document.getElementById("recentJobsSection") as HTMLElement | null;
+  const section = recentJobsSection;
   if (!tbody || !section) return;
   try {
     const res = await fetch(`${API_BASE}/recent-jobs?n=20`);
@@ -59,6 +64,7 @@ homeLink.addEventListener("click", (e) => {
   setLinkedInEnriching(false);
   setTopCVEnriching(false);
   hideIntentBox();
+  showRecentJobs();
   (window as any)._slideshowShow?.();
   currentJobs = [];
   fetchBtn.disabled = false;
@@ -148,6 +154,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   fetchBtn.disabled = true;
   currentJobs = [];
   hideResults();
+  hideRecentJobs();
   (window as any)._slideshowHide?.();
   // related jobs feature is disabled for now
   hideProgress();

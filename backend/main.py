@@ -742,18 +742,21 @@ async def recent_jobs(n: int = 20):
         log_app(f"[recent-jobs] error: {e}", "ERROR")
     all_jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
 
-    # Normalize posted text for within-day jobs
+    # Keep only jobs posted today; normalize their posted field
     import re as _re
     _within_day = _re.compile(r"\b(\d+)\s*(minute|minutes|hour|hours|giờ|phút)\b", _re.IGNORECASE)
     cutoff = time.time() - 86400
+    today_jobs: list[dict] = []
     for job in all_jobs:
         posted_text = (job.get("posted") or "").lower()
         within_day_ts = (job.get("posted_ts") or 0.0) >= cutoff
         within_day_text = bool(_within_day.search(posted_text)) or any(
             w in posted_text for w in ("today", "hôm nay", "just now", "vừa xong")
         )
-        if within_day_ts or within_day_text:
+        if within_day_ts or within_day_text or not job.get("posted"):
             job["posted"] = "Today"
+            today_jobs.append(job)
+    all_jobs = today_jobs
 
     # Round-robin by source so no single source dominates the feed
     per_source: dict[str, list[dict]] = {}

@@ -29,7 +29,7 @@ def scrape_viecoi(keyword: str, location: str = "Ho Chi Minh City", max_results:
     city_slug, city_id = params
     keyword_slug = keyword.strip().lower().replace(" ", "-")
     url = f"https://viecoi.vn/tim-viec/key-{keyword_slug}-khu-vuc-{city_slug}-{city_id}.html"
-    return _viecoi_requests(url, max_results)
+    return _viecoi_requests(url, max_results, location)
 
 
 def scrape_viecoi_detail_one(job: dict, cooldown: float) -> None:
@@ -55,7 +55,7 @@ def _viecoi_city_params(location: str) -> tuple[str, str] | None:
     return None
 
 
-def _viecoi_requests(url: str, max_results: int) -> list[dict]:
+def _viecoi_requests(url: str, max_results: int, location: str = "") -> list[dict]:
     try:
         resp = requests.get(url, headers=_VIECOI_HEADERS, timeout=15)
         resp.raise_for_status()
@@ -80,7 +80,7 @@ def _viecoi_requests(url: str, max_results: int) -> list[dict]:
 
             company = company_el.get_text(strip=True) if company_el else "N/A"
             logo = logo_el.get("data-src", "") if logo_el else ""
-            location_text = location_el.get_text(strip=True) if location_el else ""
+            location_text = (location_el.get_text(strip=True) if location_el else "") or location
             skills = [el.get_text(strip=True) for el in skill_els if el.get_text(strip=True)]
             # ViecOi shows a deadline date, not a posted date — use scrape time as posted_ts
             posted_ts_val = now

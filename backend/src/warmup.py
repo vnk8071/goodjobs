@@ -210,7 +210,9 @@ async def _scrape_keyword(
                 and j.get("link") not in seen_links
             ):
                 seen_links.add(j["link"])
-                j["posted_ts"] = posted_ts(j)
+                parsed = posted_ts(j)
+                # Fall back to scraper-supplied posted_ts (e.g. ViecOi/Glints use scrape time)
+                j["posted_ts"] = parsed if parsed > 0.0 else j.get("posted_ts", 0.0)
                 jobs.append(j)
                 if j.get("source") == "LinkedIn":
                     linkedin_jobs.append(j)

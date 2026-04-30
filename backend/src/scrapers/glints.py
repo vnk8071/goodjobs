@@ -149,7 +149,7 @@ def _glints_playwright_list(url: str, max_results: int) -> list[dict]:
             jobs.append({
                 "title":       title,
                 "company":     c.get("company", "N/A"),
-                "location":    c.get("location", ""),
+                "location":    c.get("location", "") or location,
                 "link":        link,
                 "source":      "Glints",
                 "posted":      _relative_display(days_ago),
