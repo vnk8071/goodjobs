@@ -1526,6 +1526,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     "TopDev",
                     "CareerViet",
                     "CareerLink",
+                    "ViecOi",
+                    "Glints",
                 }
                 by_link: dict[str, dict] = {}
                 for job in all_jobs:
