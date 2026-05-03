@@ -226,17 +226,21 @@ async def cache_preserve_posted_dates(
         if not existing:
             return
         existing_by_link: dict[str, dict] = {j["link"]: j for j in existing[0] if j.get("link")}
+        now = time.time()
         for job in new_jobs:
             link = job.get("link")
             if not link or link not in existing_by_link:
                 continue
             prev = existing_by_link[link]
-            if prev.get("posted_ts") is not None:
-                job["posted_ts"] = prev["posted_ts"]
-            if prev.get("posted_date"):
-                job["posted_date"] = prev["posted_date"]
-            if prev.get("posted"):
-                job["posted"] = prev["posted"]
+            prev_ts = prev.get("posted_ts")
+            if prev_ts is not None:
+                age_days = (now - prev_ts) / 86400.0
+                if age_days <= 7:
+                    job["posted_ts"] = prev_ts
+                    if prev.get("posted_date"):
+                        job["posted_date"] = prev["posted_date"]
+                    if prev.get("posted"):
+                        job["posted"] = prev["posted"]
     except Exception as e:
         log_app(f"cache_preserve_posted_dates error: {e}", "ERROR")
 

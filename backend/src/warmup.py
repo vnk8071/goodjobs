@@ -34,6 +34,7 @@ from src.scrapers import (
     scrape_careerlink_detail_one,
     scrape_glints_detail_one,
     scrape_viecoi_detail_one,
+    scrape_topdev_detail_one,
 )
 from src.background_summarizer import run_background_summarization
 
@@ -185,6 +186,7 @@ async def _scrape_keyword(
     careerlink_jobs: list[dict] = []
     glints_jobs: list[dict] = []
     viecoi_jobs: list[dict] = []
+    topdev_jobs: list[dict] = []
     seen_links: set[str] = set()
     site_succeeded: set[str] = set()
     site_timeouts: set[str] = set()
@@ -232,6 +234,8 @@ async def _scrape_keyword(
                     glints_jobs.append(j)
                 elif j.get("source") == "ViecOi":
                     viecoi_jobs.append(j)
+                elif j.get("source") == "TopDev":
+                    topdev_jobs.append(j)
         # Inter-site delay with jitter — only between sites, not after the last one.
         if i < len(scrapers) - 1:
             base = _SITE_DELAY.get(site, 4.0)
@@ -269,6 +273,15 @@ async def _scrape_keyword(
                 j["description"] = cached["description"]
             if not j.get("summary_description") and cached.get("summary_description"):
                 j["summary_description"] = cached["summary_description"]
+            prev_ts = cached.get("posted_ts")
+            if prev_ts is not None:
+                age_days = (time.time() - prev_ts) / 86400.0
+                if age_days <= 7:
+                    j["posted_ts"] = prev_ts
+                    if cached.get("posted_date"):
+                        j["posted_date"] = cached["posted_date"]
+                    if cached.get("posted"):
+                        j["posted"] = cached["posted"]
     for j in new_jobs_recent:
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
@@ -294,6 +307,7 @@ async def _scrape_keyword(
         ("CareerLink", careerlink_jobs, scrape_careerlink_detail_one, 10, False),
         ("Glints", glints_jobs, scrape_glints_detail_one, 10, False),
         ("ViecOi", viecoi_jobs, scrape_viecoi_detail_one, 10, False),
+        ("TopDev", topdev_jobs, scrape_topdev_detail_one, 10, False),
     ]
 
     any_enriched = False
@@ -548,6 +562,9 @@ async def _enrich_cycle(executor, loop) -> None:
         "CareerViet": scrape_careerviet_detail_one,
         "JobsGo": scrape_jobsgo_detail_one,
         "CareerLink": scrape_careerlink_detail_one,
+        "Glints": scrape_glints_detail_one,
+        "ViecOi": scrape_viecoi_detail_one,
+        "TopDev": scrape_topdev_detail_one,
     }
 
     log_app("[warmup][enrich] starting description enrich pass over cached jobs...")
