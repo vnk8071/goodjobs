@@ -821,6 +821,10 @@
       table.jobs-table tbody td:nth-child(10) {
         display: none;
       }
+
+      .card {
+        padding: 1.25rem 1rem;
+      }
     }
 
     thead th {
@@ -1775,26 +1779,34 @@
       transform: none;
     }
 
-    /* Recent jobs table: show location (col4), hide score (col6) */
+    /* Recent jobs table: show location (col4), hide score (col6), hide posted (col5) */
     .recent-jobs-table thead th:nth-child(4),
     .recent-jobs-table tbody td:nth-child(4) {
       display: table-cell !important;
       width: 7rem;
     }
+    .recent-jobs-table thead th:nth-child(5),
+    .recent-jobs-table tbody td:nth-child(5),
     .recent-jobs-table thead th:nth-child(6),
     .recent-jobs-table tbody td:nth-child(6) {
       display: none !important;
     }
     @media (min-width: 641px) {
       .recent-jobs-table thead th:nth-child(1) { width: 2.2rem; }
-      .recent-jobs-table thead th:nth-child(2) { width: clamp(7rem, 9vw, 9rem); }
+      .recent-jobs-table thead th:nth-child(2) { width: clamp(10rem, 16vw, 18rem); }
       .recent-jobs-table thead th:nth-child(3) { width: clamp(6rem, 8vw, 8rem); }
       .recent-jobs-table thead th:nth-child(4) { width: 7rem; }
-      .recent-jobs-table thead th:nth-child(5) { width: 5rem; }
       .recent-jobs-table thead th:nth-child(6) { display: none !important; }
       .recent-jobs-table thead th:nth-child(7) { width: 9rem; }
       .recent-jobs-table thead th:nth-child(8) { width: 13rem; }
       .recent-jobs-table thead th:nth-child(9) { width: 5rem; }
+    }
+    @media (max-width: 640px) {
+      .recent-jobs-table thead th:nth-child(4),
+      .recent-jobs-table tbody td:nth-child(4) {
+        width: 5rem;
+      }
+      table.jobs-table.recent-jobs-table thead th:nth-child(9) { width: 3.5rem; }
     }
 
     /* Recent jobs section */
@@ -1803,6 +1815,13 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 1.5rem 1.75rem;
+      overflow-x: hidden;
+    }
+
+    @media (max-width: 640px) {
+      .recent-jobs-section {
+        padding: 1rem;
+      }
     }
 
     .recent-jobs-title {
