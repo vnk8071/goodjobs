@@ -901,6 +901,25 @@
       line-height: 1.5;
     }
 
+    /* Shimmer placeholder shown while a streamed job's description is still being fetched (Phase 2). */
+    .desc-loading {
+      display: inline-block;
+      font-size: 0.78rem;
+      font-style: italic;
+      color: var(--muted);
+      opacity: 0.7;
+      background: linear-gradient(90deg, transparent, rgba(127, 127, 127, 0.18), transparent);
+      background-size: 200% 100%;
+      animation: desc-shimmer 1.3s ease-in-out infinite;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+
+    @keyframes desc-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
     .view-link {
       color: var(--primary);
       text-decoration: none;

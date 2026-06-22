@@ -844,6 +844,11 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
   // Keep rows compact: show fewer skills in the table.
   const skillsHtml = renderSkillTags(job.skills, 6);
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
+  // Job listings stream in before their descriptions are fetched (Phase 2 enrichment).
+  // Show a shimmer placeholder so streamed-but-not-yet-enriched rows never look blank.
+  const descCell = descText
+    ? esc(descText)
+    : `<span class="desc-loading">Đang tải mô tả…</span>`;
   const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
   const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
   const levelBadge = job.level_match ? `<span class="level-badge">✓ Phù hợp</span>` : "";
@@ -865,7 +870,7 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td class="posted">${esc(job.posted ?? "")}</td>
     <td class="score" title="Vector similarity score">${esc(score)}</td>
     <td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>
-    <td class="desc">${esc(descText)}</td>
+    <td class="desc">${descCell}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td class="apply-cell">
       ${job.link
