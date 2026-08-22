@@ -84,12 +84,12 @@ export function initApplyToast(): void {
   el.innerHTML = `
     <div class="apply-toast__icon">📋</div>
     <div class="apply-toast__body">
-      <div class="apply-toast__q">Bạn đã ứng tuyển chưa?</div>
+      <div class="apply-toast__q">Have you applied yet?</div>
       <div class="apply-toast__title" id="applyToastTitle"></div>
     </div>
     <div class="apply-toast__actions">
-      <button class="apply-toast__yes" id="applyToastYes">✓ Đã ứng tuyển</button>
-      <button class="apply-toast__no"  id="applyToastNo">✕ Chưa</button>
+      <button class="apply-toast__yes" id="applyToastYes">✓ Applied</button>
+      <button class="apply-toast__no"  id="applyToastNo">✕ Not yet</button>
     </div>
   `;
   document.body.appendChild(el);
@@ -145,13 +145,13 @@ function _refreshApplyUI(link: string): void {
 
 function _styleApplyBtn(btn: HTMLButtonElement, applied: boolean): void {
   btn.classList.toggle("apply-btn--applied", applied);
-  btn.textContent = applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗";
-  btn.title = applied ? "Bạn đã đánh dấu là đã ứng tuyển. Nhấn để bỏ đánh dấu." : "Ứng tuyển vào vị trí này";
+  btn.textContent = applied ? "✓ Applied" : "Apply ↗";
+  btn.title = applied ? "You've marked this as applied. Click to unmark." : "Apply to this position";
 }
 
 function _styleModalApplyBtn(btn: HTMLAnchorElement, applied: boolean): void {
   btn.classList.toggle("modal-apply-btn--applied", applied);
-  btn.textContent = applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗";
+  btn.textContent = applied ? "✓ Applied" : "Apply ↗";
 }
 
 // Generic role nouns and level words that carry no domain signal.
@@ -285,7 +285,7 @@ async function _copyToClipboard(text: string): Promise<boolean> {
 function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
   const original = btn.textContent ?? "";
   void _copyToClipboard(text).then((ok) => {
-    btn.textContent = ok ? "Đã sao chép" : "Không thể chia sẻ";
+    btn.textContent = ok ? "Copied" : "Couldn't share";
     btn.disabled = true;
     window.setTimeout(() => {
       btn.textContent = original;
@@ -373,7 +373,7 @@ function openJobModal(job: Job): void {
     (_linkedinEnriching && job.source === "LinkedIn") ||
     (_topcvEnriching    && job.source === "TopCV");
   if (!job.skills?.length && isEnriching) {
-    jobModalSkills.innerHTML = '<span class="desc-loading">Đang tìm kỹ năng…</span>';
+    jobModalSkills.innerHTML = '<span class="desc-loading">Finding skills…</span>';
   } else {
     // Modal can show more skills than the table.
     jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
@@ -403,7 +403,7 @@ function openJobModal(job: Job): void {
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const descHtml = (!job.description && isEnriching)
-    ? '<span class="desc-loading">Đang tìm mô tả…</span>'
+    ? '<span class="desc-loading">Finding description…</span>'
     : (job.description || "");
   requestAnimationFrame(() => {
     jobModalBody.scrollTop = 0;
@@ -550,8 +550,8 @@ export function markSiteLoading(site: string, count: number): void {
   const pill = document.createElement("span");
   pill.className = "progress-pill progress-pill-loading";
   pill.dataset.site = label;
-  pill.textContent = `${label} đang tải mô tả…`;
-  pill.title = `Đang tải mô tả cho ${count} việc làm`;
+  pill.textContent = `${label} loading description…`;
+  pill.title = `Loading description for ${count} jobs`;
   progressPills.appendChild(pill);
 }
 
@@ -565,13 +565,13 @@ export function markSiteDone(site: string, count: number): void {
   pill.className = "progress-pill progress-pill-done";
   pill.dataset.site = label;
   pill.textContent = `${label} ${count}`;
-  pill.title = `${count} việc làm`;
+  pill.title = `${count} jobs`;
   progressPills.appendChild(pill);
 }
 
 /** Show the queue banner indicating the user's position in the scrape queue. */
 export function showQueuedMessage(position: number): void {
-  queueBanner.textContent = `⏳ Máy chủ đang bận — bạn đang ở vị trí #${position} trong hàng đợi. Vui lòng chờ…`;
+  queueBanner.textContent = `⏳ Server is busy — you're at position #${position} in the queue. Please wait…`;
   queueBanner.classList.remove("hidden");
 }
 
@@ -641,7 +641,7 @@ function _applyFilter(): void {
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
     jobsBody.innerHTML =
-      '<tr><td colspan="10" class="empty">Không có việc làm nào phù hợp với bộ lọc đã chọn.</td></tr>';
+      '<tr><td colspan="10" class="empty">No jobs match the selected filters.</td></tr>';
   } else {
     visible.forEach((job, i) => jobsBody.appendChild(buildRow(job, i + 1)));
   }
@@ -650,8 +650,8 @@ function _applyFilter(): void {
   const shown = visible.length;
   jobCountEl.textContent =
     shown === total
-      ? `${total} kết quả`
-      : `${shown} trong ${total} kết quả`;
+      ? `${total} results`
+      : `${shown} of ${total} results`;
 }
 
 /** Rebuild the source filter pill bar from current _allJobs. */
@@ -848,10 +848,10 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
   // Show a shimmer placeholder so streamed-but-not-yet-enriched rows never look blank.
   const descCell = descText
     ? esc(descText)
-    : `<span class="desc-loading">Đang tải mô tả…</span>`;
+    : `<span class="desc-loading">Loading description…</span>`;
   const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
   const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
-  const levelBadge = job.level_match ? `<span class="level-badge">✓ Phù hợp</span>` : "";
+  const levelBadge = job.level_match ? `<span class="level-badge">✓ Match</span>` : "";
   const applied = job.link ? isApplied(job.link) : false;
   if (applied) tr.classList.add("applied-row");
   if (job.link) tr.dataset.jobLink = job.link;
@@ -874,7 +874,7 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td class="apply-cell">
       ${job.link
-        ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? "Đã ứng tuyển — nhấn để bỏ đánh dấu" : "Ứng tuyển vào vị trí này"}" onclick="event.stopPropagation()">${applied ? "✓ Đã ứng tuyển" : "Ứng tuyển ↗"}</button>`
+        ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? "Applied — click to unmark" : "Apply to this position"}" onclick="event.stopPropagation()">${applied ? "✓ Applied" : "Apply ↗"}</button>`
         : `<span class="view-link" style="opacity:0.45;cursor:default">—</span>`}
     </td>
   `;
@@ -912,18 +912,18 @@ export function showIntentBox(keyword: string, inputType: "job_title" | "cv_or_s
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
-        Có vẻ đây không phải tên công việc — bạn có muốn tìm:
+        This doesn't look like a job title — did you mean:
       </div>
     `;
   } else {
-    const label = inputType === "cv_or_skills" ? "Hồ sơ / kỹ năng" : "Chức danh";
+    const label = inputType === "cv_or_skills" ? "Resume / skills" : "Job title";
     _intentBox.innerHTML = `
       <div class="intent-box__header">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
-        AI nhận diện: <span style="font-weight:400;color:#374151;">${label}</span>
-        &rarr; tìm kiếm với từ khóa <span class="intent-box__keyword">${esc(keyword)}</span>
+        AI detected: <span style="font-weight:400;color:#374151;">${label}</span>
+        &rarr; searching with keyword <span class="intent-box__keyword">${esc(keyword)}</span>
       </div>
       ${reasoning ? `<div class="intent-box__reasoning">${esc(reasoning)}</div>` : ""}
     `;
@@ -942,7 +942,7 @@ export function setIntentAlternatives(
 
   const row = document.createElement("div");
   row.className = "intent-box__alts";
-  row.innerHTML = `<span class="intent-box__alts-label">Gợi ý:</span>`;
+  row.innerHTML = `<span class="intent-box__alts-label">Suggestions:</span>`;
 
   for (const t of top) {
     const btn = document.createElement("button");
@@ -986,13 +986,13 @@ export function showSuggestionBanner(
   corrected: string,
   onAccept: (corrected: string) => void,
   onDismiss: () => void,
-  label = "Ý bạn là: ",
+  label = "Did you mean: ",
 ): void {
   const banner = _getOrCreateSuggestionBanner();
   banner.innerHTML = `
     <span class="suggestion-banner__text">${label}</span>
     <button class="suggestion-banner__accept" type="button">${corrected}</button>
-    <button class="suggestion-banner__dismiss" type="button" aria-label="Bỏ qua">✕</button>
+    <button class="suggestion-banner__dismiss" type="button" aria-label="Dismiss">✕</button>
   `;
   banner.classList.remove("hidden");
 
