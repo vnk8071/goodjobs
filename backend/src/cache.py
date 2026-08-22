@@ -34,9 +34,15 @@ def get_redis() -> Redis:
     return _redis
 
 
-def _key(keyword: str, location: str) -> str:
-    """Build the canonical Redis key for a keyword+location pair."""
-    return f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
+def _key(keyword: str, location: str, country: str = "VN") -> str:
+    """Build the canonical Redis key for a keyword+location pair.
+
+    country="VN" (the default) produces the exact same key as before —
+    existing VN cache entries need no migration. Any other country is
+    namespaced into the key so global and VN results never collide.
+    """
+    base = f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
+    return base if country == "VN" else f"jobs:{country.lower()}:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
 def _access_key(keyword: str, location: str) -> str:
@@ -44,10 +50,10 @@ def _access_key(keyword: str, location: str) -> str:
     return f"jobs-access:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
-async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | None:
+async def cache_get(keyword: str, location: str, country: str = "VN") -> tuple[list[dict], float] | None:
     """Return (jobs, fetched_ts) from cache, or None on miss."""
     try:
-        raw = await get_redis().get(_key(keyword, location))
+        raw = await get_redis().get(_key(keyword, location, country))
         if not raw:
             return None
         data = json.loads(raw)
@@ -58,7 +64,8 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
 
 
 async def cache_set(
-    keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = RECENT_DAYS
+    keyword: str, location: str, jobs: list[dict], fetched_ts: float,
+    ttl_days: int = RECENT_DAYS, country: str = "VN",
 ) -> None:
     """Store jobs in cache with a TTL (default RECENT_DAYS) to prevent unbounded Redis growth.
 
@@ -72,18 +79,19 @@ async def cache_set(
         redis = get_redis()
         kw_norm = keyword.lower().strip()
         loc_norm = location.lower().strip()
+        ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
         )
         ttl_secs = ttl_days * 86400
         pipe = redis.pipeline()
-        pipe.set(_key(keyword, location), payload, ex=ttl_secs)
+        pipe.set(_key(keyword, location, country), payload, ex=ttl_secs)
         # Lightweight TS key — same TTL so it expires together with the job payload.
-        pipe.set(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}", str(fetched_ts), ex=ttl_secs)
+        pipe.set(f"{_TS_KEY_PREFIX}{ts_suffix}", str(fetched_ts), ex=ttl_secs)
         # Add to the key index (SADD is a no-op for existing members).
-        pipe.sadd(_KEYINDEX, f"{kw_norm}:{loc_norm}")
+        pipe.sadd(_KEYINDEX, ts_suffix)
         await pipe.execute()
-        log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
+        log_app(f"cache stored {len(jobs)} jobs for {keyword!r} (country={country})")
     except Exception as e:
         log_app(f"cache set error: {e}", "ERROR")
 
@@ -102,7 +110,7 @@ async def cache_get_all_keys() -> list[str]:
         return []
 
 
-async def cache_get_ts(keyword: str, location: str) -> float | None:
+async def cache_get_ts(keyword: str, location: str, country: str = "VN") -> float | None:
     """Return the fetched_ts for a cache entry without deserialising the job payload.
 
     Returns None when the key does not exist (cache miss or expired).
@@ -112,7 +120,8 @@ async def cache_get_ts(keyword: str, location: str) -> float | None:
     try:
         kw_norm = keyword.lower().strip()
         loc_norm = location.lower().strip()
-        raw = await get_redis().get(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}")
+        ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
+        raw = await get_redis().get(f"{_TS_KEY_PREFIX}{ts_suffix}")
         return float(raw) if raw else None
     except Exception as e:
         log_app(f"cache_get_ts error: {e}", "ERROR")
