@@ -12,6 +12,7 @@ from src.cache import (
     _key,
     cache_access_ts,
     cache_get_ts,
+    is_vn_cache_key,
     vector_mark_warmup_seen,
     vector_get_expired_nonwarmup,
     vector_get_warmup_scores,
@@ -443,6 +444,14 @@ async def _cleanup_nonwarmup_stale_keys() -> None:
         deleted = 0
 
         async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                # Global (country-namespaced) entries are deliberately excluded from
+                # this access-tracking cleanup — they rely purely on cache_set's TTL
+                # for expiry, since cache_touch/cache_access_ts were never made
+                # country-aware and doing so isn't needed (global search results are
+                # cached-on-search only, never proactively warmed, so there's nothing
+                # for access-tracking to protect here beyond what the TTL already does).
+                continue
             # Extract keyword part from key: "jobs:{kw}:{loc}"
             # Key format guarantees at least one colon after "jobs:"
             remainder = key[len("jobs:") :]

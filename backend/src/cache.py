@@ -50,6 +50,21 @@ def _access_key(keyword: str, location: str) -> str:
     return f"jobs-access:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
+def is_vn_cache_key(key: str) -> bool:
+    """Return True if a raw Redis key from the "jobs:*" keyspace is a VN-namespace
+    entry (format "jobs:{kw}:{loc}") rather than a country-namespaced global entry
+    (format "jobs:{country}:{kw}:{loc}").
+
+    Mirrors the VN/non-VN disambiguation already used by cache_fuzzy_get: keywords
+    and locations are assumed colon-free, so a VN key has exactly one colon after
+    the "jobs:" prefix and a global key has exactly two.
+    """
+    if not key.startswith("jobs:"):
+        return False
+    remainder = key[len("jobs:"):]
+    return remainder.count(":") == 1
+
+
 async def cache_get(keyword: str, location: str, country: str = "VN") -> tuple[list[dict], float] | None:
     """Return (jobs, fetched_ts) from cache, or None on miss."""
     try:
@@ -234,7 +249,7 @@ async def cache_ttl(keyword: str, location: str) -> int:
 
 
 async def cache_preserve_posted_dates(
-    keyword: str, location: str, new_jobs: list[dict]
+    keyword: str, location: str, new_jobs: list[dict], country: str = "VN"
 ) -> None:
     """Preserve posted_ts/posted_date/posted from existing cache for already-seen jobs.
 
@@ -248,7 +263,7 @@ async def cache_preserve_posted_dates(
     expires and the next scrape naturally assigns a new date.
     """
     try:
-        existing = await cache_get(keyword, location)
+        existing = await cache_get(keyword, location, country)
         if not existing:
             return
         existing_by_link: dict[str, dict] = {j["link"]: j for j in existing[0] if j.get("link")}

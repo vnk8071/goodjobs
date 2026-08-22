@@ -22,6 +22,7 @@ from src.cache import (
     cache_preserve_posted_dates,
     cache_touch,
     get_redis,
+    is_vn_cache_key,
     vector_mark_nonwarmup_seen,
     embedded_links_filter,
     embedded_links_add,
@@ -792,6 +793,8 @@ async def recent_jobs(n: int = 20):
     try:
         redis = get_redis()
         async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                continue  # global (country-namespaced) entries never appear in the VN homepage feed
             raw = await redis.get(key)
             if not raw:
                 continue
@@ -852,6 +855,8 @@ async def stats():
     try:
         redis = get_redis()
         async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                continue  # global (country-namespaced) entries never appear in the VN homepage feed
             raw = await redis.get(key)
             if not raw:
                 continue
@@ -1669,7 +1674,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         log_app(
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
-                await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs)
+                await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs, country=country)
                 await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=country)
                 if not is_warmup:
                     try:
