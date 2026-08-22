@@ -22,6 +22,7 @@ from src.cache import (
     cache_preserve_posted_dates,
     cache_touch,
     get_redis,
+    is_vn_cache_key,
     vector_mark_nonwarmup_seen,
     embedded_links_filter,
     embedded_links_add,
@@ -250,6 +251,50 @@ _SCRAPERS = {
     "glints": scrape_glints,
     "viecoi": scrape_viecoi,
 }
+
+_GLOBAL_SCRAPERS = {
+    "linkedin": scrape_linkedin,
+    "remoteok": scrape_remoteok,
+    "weworkremotely": scrape_weworkremotely,
+    "glassdoor": scrape_glassdoor,
+}
+
+
+def _global_scraper_registry(country: str) -> dict:
+    """Build the global scraper registry for one request, binding `country` into
+    the scrapers (indeed, glassdoor) whose target domain/region depends on it."""
+    registry = dict(_GLOBAL_SCRAPERS)
+    registry["indeed"] = lambda kw, loc: scrape_indeed(kw, loc, country=country)
+    registry["glassdoor"] = lambda kw, loc: scrape_glassdoor(kw, loc, country=country)
+    return registry
+
+
+# Initial supported non-VN countries only (US/UK/SG) — matches _INDEED_DOMAINS
+# and _GLASSDOOR_LOC_IDS. A handful of major cities per country; unrecognized
+# text (including every VN city) defaults to VN. Same lightweight-lookup-table
+# pattern as linkedin.py's _LINKEDIN_LOCATION_MAP — extend this list rather
+# than trying to cover "every city" up front.
+_GLOBAL_CITY_COUNTRY: dict[str, str] = {
+    # United States
+    "new york": "US", "new york city": "US", "nyc": "US",
+    "san francisco": "US", "los angeles": "US", "seattle": "US",
+    "austin": "US", "chicago": "US", "boston": "US",
+    # United Kingdom
+    "london": "UK", "manchester": "UK", "edinburgh": "UK", "birmingham": "UK",
+    # Singapore
+    "singapore": "SG",
+}
+
+
+def _resolve_country(location: str) -> str:
+    """Infer which country registry to route a search to from free-text city input.
+
+    Only the initially-supported non-VN countries (US/UK/SG) are recognized —
+    anything else, including every VN city, defaults to "VN".
+    """
+    key = (location or "").strip().lower()
+    return _GLOBAL_CITY_COUNTRY.get(key, "VN")
+
 
 NON_WARMUP_ENRICH_LIMIT = 10
 _active_bg_rescrapes: set[str] = set()
@@ -748,6 +793,8 @@ async def recent_jobs(n: int = 20):
     try:
         redis = get_redis()
         async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                continue  # global (country-namespaced) entries never appear in the VN homepage feed
             raw = await redis.get(key)
             if not raw:
                 continue
@@ -808,6 +855,8 @@ async def stats():
     try:
         redis = get_redis()
         async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                continue  # global (country-namespaced) entries never appear in the VN homepage feed
             raw = await redis.get(key)
             if not raw:
                 continue
@@ -1062,6 +1111,9 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
+    country = (req.country or "VN").strip().upper()
+    if country == "VN":
+        country = _resolve_country(req.location)
 
     ip = (
         request.headers.get("CF-Connecting-IP")
@@ -1159,7 +1211,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             cache_fetched_ts_list = []
             related_keywords = _get_related_keywords(cache_keyword)
             for related_kw in related_keywords:
-                cached = await cache_get(related_kw, req.location)
+                cached = await cache_get(related_kw, req.location, country=country)
                 if cached:
                     cached_jobs, cache_fetched_ts = cached
                     all_cached_jobs.extend(cached_jobs)
@@ -1331,7 +1383,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 cached_prefill_jobs = unique_jobs
                 cached_prefill_latest_ts = latest_ts
 
-            fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
+            fuzzy = await cache_fuzzy_get(cache_keyword, req.location, country=country)
             if fuzzy:
                 fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
                 age_cutoff_fuzzy = time.time() - 8 * 86400
@@ -1363,7 +1415,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         return
                     asyncio.create_task(
                         cache_set(
-                            cache_keyword, req.location, refiltered, fuzzy_fetched_ts
+                            cache_keyword, req.location, refiltered, fuzzy_fetched_ts,
+                            country=country,
                         )
                     )
                     asyncio.create_task(cache_touch(cache_keyword, req.location))
@@ -1407,10 +1460,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             _executor, timed_scrape, site, fn, scrape_kw, req.location
                         )
 
+                active_scrapers = (
+                    _SCRAPERS if country == "VN" else _global_scraper_registry(country)
+                )
                 futures: dict = {
                     asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin"
                 }
-                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
+                other_scrapers = {k: v for k, v in active_scrapers.items() if k != "linkedin"}
                 for site, fn in other_scrapers.items():
                     futures[asyncio.ensure_future(_run_listing(site, fn))] = site
 
@@ -1423,6 +1479,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 enrich_limit = NON_WARMUP_ENRICH_LIMIT if not is_warmup else 30
 
                 # Per-site enrich config: (display_name, detail_fn, cooldown, initial_sleep)
+                # Only LinkedIn needs Phase-2 detail-page enrichment among the global sites —
+                # Indeed enriches inline during Phase 1, RemoteOK/WWR already return full
+                # descriptions from their API/RSS payload, and Glassdoor is list-page-only
+                # by design (see Task 5).
                 _ENRICH_CFG = [
                     ("linkedin", scrape_linkedin_detail_one, 3.0, 10.0),
                     ("topcv", scrape_topcv_detail_one, 2.0, 0.0),
@@ -1432,6 +1492,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     ("careerlink", scrape_careerlink_detail_one, 2.0, 0.0),
                     ("glints", scrape_glints_detail_one, 2.0, 0.0),
                     ("viecoi", scrape_viecoi_detail_one, 2.0, 0.0),
+                ] if country == "VN" else [
+                    ("linkedin", scrape_linkedin_detail_one, 3.0, 10.0),
                 ]
                 # queue and task keyed by site name
                 enrich_queues: dict[str, asyncio.Queue] = {
@@ -1612,8 +1674,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         log_app(
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
-                await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs)
-                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
+                await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs, country=country)
+                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=country)
                 if not is_warmup:
                     try:
                         await cache_touch(cache_keyword, req.location)

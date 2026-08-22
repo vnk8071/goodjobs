@@ -34,9 +34,15 @@ def get_redis() -> Redis:
     return _redis
 
 
-def _key(keyword: str, location: str) -> str:
-    """Build the canonical Redis key for a keyword+location pair."""
-    return f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
+def _key(keyword: str, location: str, country: str = "VN") -> str:
+    """Build the canonical Redis key for a keyword+location pair.
+
+    country="VN" (the default) produces the exact same key as before —
+    existing VN cache entries need no migration. Any other country is
+    namespaced into the key so global and VN results never collide.
+    """
+    base = f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
+    return base if country == "VN" else f"jobs:{country.lower()}:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
 def _access_key(keyword: str, location: str) -> str:
@@ -44,10 +50,25 @@ def _access_key(keyword: str, location: str) -> str:
     return f"jobs-access:{keyword.lower().strip()}:{location.lower().strip()}"
 
 
-async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | None:
+def is_vn_cache_key(key: str) -> bool:
+    """Return True if a raw Redis key from the "jobs:*" keyspace is a VN-namespace
+    entry (format "jobs:{kw}:{loc}") rather than a country-namespaced global entry
+    (format "jobs:{country}:{kw}:{loc}").
+
+    Mirrors the VN/non-VN disambiguation already used by cache_fuzzy_get: keywords
+    and locations are assumed colon-free, so a VN key has exactly one colon after
+    the "jobs:" prefix and a global key has exactly two.
+    """
+    if not key.startswith("jobs:"):
+        return False
+    remainder = key[len("jobs:"):]
+    return remainder.count(":") == 1
+
+
+async def cache_get(keyword: str, location: str, country: str = "VN") -> tuple[list[dict], float] | None:
     """Return (jobs, fetched_ts) from cache, or None on miss."""
     try:
-        raw = await get_redis().get(_key(keyword, location))
+        raw = await get_redis().get(_key(keyword, location, country))
         if not raw:
             return None
         data = json.loads(raw)
@@ -58,7 +79,8 @@ async def cache_get(keyword: str, location: str) -> tuple[list[dict], float] | N
 
 
 async def cache_set(
-    keyword: str, location: str, jobs: list[dict], fetched_ts: float, ttl_days: int = RECENT_DAYS
+    keyword: str, location: str, jobs: list[dict], fetched_ts: float,
+    ttl_days: int = RECENT_DAYS, country: str = "VN",
 ) -> None:
     """Store jobs in cache with a TTL (default RECENT_DAYS) to prevent unbounded Redis growth.
 
@@ -72,18 +94,19 @@ async def cache_set(
         redis = get_redis()
         kw_norm = keyword.lower().strip()
         loc_norm = location.lower().strip()
+        ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
         )
         ttl_secs = ttl_days * 86400
         pipe = redis.pipeline()
-        pipe.set(_key(keyword, location), payload, ex=ttl_secs)
+        pipe.set(_key(keyword, location, country), payload, ex=ttl_secs)
         # Lightweight TS key — same TTL so it expires together with the job payload.
-        pipe.set(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}", str(fetched_ts), ex=ttl_secs)
+        pipe.set(f"{_TS_KEY_PREFIX}{ts_suffix}", str(fetched_ts), ex=ttl_secs)
         # Add to the key index (SADD is a no-op for existing members).
-        pipe.sadd(_KEYINDEX, f"{kw_norm}:{loc_norm}")
+        pipe.sadd(_KEYINDEX, ts_suffix)
         await pipe.execute()
-        log_app(f"cache stored {len(jobs)} jobs for {keyword!r}")
+        log_app(f"cache stored {len(jobs)} jobs for {keyword!r} (country={country})")
     except Exception as e:
         log_app(f"cache set error: {e}", "ERROR")
 
@@ -102,7 +125,7 @@ async def cache_get_all_keys() -> list[str]:
         return []
 
 
-async def cache_get_ts(keyword: str, location: str) -> float | None:
+async def cache_get_ts(keyword: str, location: str, country: str = "VN") -> float | None:
     """Return the fetched_ts for a cache entry without deserialising the job payload.
 
     Returns None when the key does not exist (cache miss or expired).
@@ -112,7 +135,8 @@ async def cache_get_ts(keyword: str, location: str) -> float | None:
     try:
         kw_norm = keyword.lower().strip()
         loc_norm = location.lower().strip()
-        raw = await get_redis().get(f"{_TS_KEY_PREFIX}{kw_norm}:{loc_norm}")
+        ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
+        raw = await get_redis().get(f"{_TS_KEY_PREFIX}{ts_suffix}")
         return float(raw) if raw else None
     except Exception as e:
         log_app(f"cache_get_ts error: {e}", "ERROR")
@@ -120,24 +144,41 @@ async def cache_get_ts(keyword: str, location: str) -> float | None:
 
 
 async def cache_fuzzy_get(
-    keyword: str, location: str, threshold: float = 0.85
+    keyword: str, location: str, threshold: float = 0.85, country: str = "VN"
 ) -> tuple[list[dict], float, str] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
     Uses cache:keyindex (a Redis SET maintained by cache_set) instead of a full
     SCAN so enumeration is O(index size) rather than O(keyspace size).
     Returns (jobs, fetched_ts, matched_keyword) or None.
+
+    Index entries follow the same VN/non-VN scheme as `_key`: VN entries are
+    plain "{kw}:{loc}", non-VN entries are namespaced "{country}:{kw}:{loc}".
+    Filtering/reconstruction below is country-aware so a VN search never
+    fuzzy-matches a global entry (or vice versa) and the reconstructed
+    keyword never carries a stray country prefix into the scrape.
     """
     try:
         loc = location.lower().strip()
 
         # Read the index — this is a single SMEMBERS call, no SCAN needed.
         index_entries = await cache_get_all_keys()
-        # Filter to entries that match the requested location.
-        loc_entries = [
-            entry for entry in index_entries
-            if entry.endswith(f":{loc}")
-        ]
+        # Filter to entries that match the requested location AND country,
+        # carrying forward the country-stripped keyword for each match.
+        loc_entries: list[tuple[str, str]] = []  # (entry, cached_kw_without_country_prefix)
+        for entry in index_entries:
+            if not entry.endswith(f":{loc}"):
+                continue
+            with_prefix = entry[: -len(f":{loc}")]
+            if country == "VN":
+                if ":" in with_prefix:
+                    continue  # namespaced non-VN entry, not a VN one
+                loc_entries.append((entry, with_prefix))
+            else:
+                prefix = f"{country.lower()}:"
+                if not with_prefix.startswith(prefix):
+                    continue
+                loc_entries.append((entry, with_prefix[len(prefix):]))
         if not loc_entries:
             return None
 
@@ -145,11 +186,10 @@ async def cache_fuzzy_get(
         kw_core = strip_level(kw_lower)
         kw_core_words = set(kw_core.split())
         best_entry: str | None = None
+        best_cached_kw: str | None = None
         best_score = 0.0
 
-        for entry in loc_entries:
-            # entry format: "{kw}:{loc}"  — loc never contains ":" so rfind is safe.
-            cached_kw = entry[: -len(f":{loc}")]
+        for entry, cached_kw in loc_entries:
             if cached_kw == kw_lower:
                 continue  # exact match is handled by cache_get, not fuzzy
 
@@ -176,6 +216,7 @@ async def cache_fuzzy_get(
             if score > best_score:
                 best_score = score
                 best_entry = entry
+                best_cached_kw = cached_kw
 
         if best_score < threshold or best_entry is None:
             return None
@@ -188,7 +229,7 @@ async def cache_fuzzy_get(
         jobs = data["jobs"]
         if not jobs:
             return None
-        matched_kw = best_entry[: -len(f":{loc}")]
+        matched_kw = best_cached_kw
         log_app(
             f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)"
         )
@@ -208,7 +249,7 @@ async def cache_ttl(keyword: str, location: str) -> int:
 
 
 async def cache_preserve_posted_dates(
-    keyword: str, location: str, new_jobs: list[dict]
+    keyword: str, location: str, new_jobs: list[dict], country: str = "VN"
 ) -> None:
     """Preserve posted_ts/posted_date/posted from existing cache for already-seen jobs.
 
@@ -222,7 +263,7 @@ async def cache_preserve_posted_dates(
     expires and the next scrape naturally assigns a new date.
     """
     try:
-        existing = await cache_get(keyword, location)
+        existing = await cache_get(keyword, location, country)
         if not existing:
             return
         existing_by_link: dict[str, dict] = {j["link"]: j for j in existing[0] if j.get("link")}

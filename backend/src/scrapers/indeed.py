@@ -8,26 +8,44 @@ from bs4 import BeautifulSoup
 from ..constants import CHROMIUM_ARGS, RECENT_DAYS
 from ..utils import _parse_iso_date, _relative_display, _clean_html, _truncate, _fmt_num
 
+# VN keeps its existing "jobs." subdomain prefix; other countries confirmed live
+# 2026-08-22 to use the bare country-code subdomain (no "jobs." prefix).
+_INDEED_DOMAINS: dict[str, str] = {
+    "VN": "jobs.vn.indeed.com",
+    "US": "www.indeed.com",
+    "UK": "uk.indeed.com",
+    "SG": "sg.indeed.com",
+}
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def scrape_indeed(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
+def scrape_indeed(
+    keyword: str,
+    location: str = "Ho Chi Minh City",
+    max_results: int = 25,
+    country: str = "VN",
+) -> list[dict]:
     """
-    Scrapes Indeed Vietnam (vn.indeed.com) using Playwright.
+    Scrapes Indeed for the given country's domain using Playwright.
     Uses JSON-LD on each detail page to get datePosted and description.
     Only returns jobs posted within RECENT_DAYS days.
     """
+    domain = _INDEED_DOMAINS.get(country.upper())
+    if not domain:
+        print(f"[Indeed] no domain mapped for country={country!r} — skipping")
+        return []
     keyword_enc  = quote_plus(keyword)
     location_enc = quote_plus(location or "Ho Chi Minh City")
-    url = f"https://jobs.vn.indeed.com/jobs?q={keyword_enc}&l={location_enc}&sort=date"
-    return _indeed_playwright(url, max_results)
+    url = f"https://{domain}/jobs?q={keyword_enc}&l={location_enc}&sort=date"
+    return _indeed_playwright(url, max_results, domain)
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _indeed_playwright(url: str, max_results: int) -> list[dict]:
+def _indeed_playwright(url: str, max_results: int, domain: str) -> list[dict]:
     try:
         from playwright.sync_api import sync_playwright
         from playwright_stealth import Stealth
@@ -73,10 +91,10 @@ def _indeed_playwright(url: str, max_results: int) -> list[dict]:
                 jk   = link_el.get("data-jk", "")
                 href = link_el.get("href", "")
                 link = (
-                    f"https://jobs.vn.indeed.com{href}"
+                    f"https://{domain}{href}"
                     if href.startswith("/") else href
                 )
-                view_link = f"https://jobs.vn.indeed.com/viewjob?jk={jk}" if jk else link
+                view_link = f"https://{domain}/viewjob?jk={jk}" if jk else link
 
                 company_el = card.select_one("span[data-testid='company-name']")
                 company = company_el.get_text(strip=True) if company_el else "N/A"
