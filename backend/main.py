@@ -103,6 +103,31 @@ app.add_middleware(
 )
 
 _executor = ThreadPoolExecutor(max_workers=6)
+# Separate lane for requests-only scrapers so they aren't starved waiting behind
+# slow Chromium scrapers in the shared pool. Near-zero CPU/RAM, so first results
+# (e.g. ViecOi) paint in 1-3s instead of ~14s.
+_light_executor = ThreadPoolExecutor(max_workers=2)
+
+# Hard cap on simultaneous headless Chromium across BOTH phases (listing + detail).
+# The server is 1 CPU / 2GiB: more than ~2 Chromium thrashes the single CPU and
+# pushes RAM toward the 2GiB ceiling (the cause of mid-stream OOM restarts).
+_CHROMIUM_LIMIT = int(os.getenv("CHROMIUM_LIMIT", "3"))
+_chromium_sem: asyncio.Semaphore | None = None
+
+# Scrapers whose *listing* pass is requests-based (no Chromium) → safe for the light lane.
+_LIGHT_LISTING = {"viecoi", "linkedin"}
+# Scrapers whose *detail* pass is requests-based. LinkedIn listing is light but its
+# detail pass launches Chromium, so LinkedIn is intentionally absent here.
+_LIGHT_DETAIL = {"viecoi"}
+
+
+def _get_chromium_sem() -> asyncio.Semaphore:
+    """Return the global Chromium concurrency gate, creating it on first call."""
+    global _chromium_sem
+    if _chromium_sem is None:
+        _chromium_sem = asyncio.Semaphore(_CHROMIUM_LIMIT)
+    return _chromium_sem
+
 
 _MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_SCRAPES", str(MAX_CONCURRENT)))
 _scrape_sem: asyncio.Semaphore | None = None
@@ -1364,22 +1389,30 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 fetch_ts = time.time()
 
                 scrape_kw = fuzzy_matched_kw if fuzzy_matched_kw else cache_keyword
-                linkedin_fut = loop.run_in_executor(
-                    _executor,
-                    timed_scrape,
-                    "linkedin",
-                    scrape_linkedin,
-                    scrape_kw,
-                    req.location,
-                )
-                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
-                futures: dict = {linkedin_fut: "linkedin"}
-                for site, fn in other_scrapers.items():
-                    futures[
-                        loop.run_in_executor(
+                chromium_sem = _get_chromium_sem()
+
+                async def _run_listing(site: str, fn) -> list[dict]:
+                    """Run a listing scrape on the right lane.
+
+                    Requests-only scrapers use the light executor so they return
+                    immediately; Chromium scrapers go through the global gate so no
+                    more than _CHROMIUM_LIMIT browsers are ever alive at once.
+                    """
+                    if site in _LIGHT_LISTING:
+                        return await loop.run_in_executor(
+                            _light_executor, timed_scrape, site, fn, scrape_kw, req.location
+                        )
+                    async with chromium_sem:
+                        return await loop.run_in_executor(
                             _executor, timed_scrape, site, fn, scrape_kw, req.location
                         )
-                    ] = site
+
+                futures: dict = {
+                    asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin"
+                }
+                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
+                for site, fn in other_scrapers.items():
+                    futures[asyncio.ensure_future(_run_listing(site, fn))] = site
 
                 all_jobs: list[dict] = (
                     list(cached_prefill_jobs) if cached_prefill_jobs else []
@@ -1425,9 +1458,21 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     for i, job in enumerate(jobs[:enrich_limit]):
                         cd = cooldown if i > 0 else 0.0
                         try:
-                            ok = await loop.run_in_executor(
-                                _executor, detail_fn, job, cd
-                            )
+                            if site in _LIGHT_DETAIL:
+                                ok = await loop.run_in_executor(
+                                    _light_executor, detail_fn, job, cd
+                                )
+                            else:
+                                # Wait out the per-site rate-limit cooldown BEFORE taking a
+                                # Chromium slot, so cooldowns don't block other sites' browsers.
+                                if cd:
+                                    await asyncio.sleep(cd)
+                                # Chromium detail fetch — share the global browser gate
+                                # with listing scrapes so total live Chromium stays <= limit.
+                                async with chromium_sem:
+                                    ok = await loop.run_in_executor(
+                                        _executor, detail_fn, job, 0.0
+                                    )
                         except Exception as e:
                             log_app(f"{site} detail error job {i}: {e}", "ERROR")
                             ok = True
