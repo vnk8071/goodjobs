@@ -268,6 +268,33 @@ def _global_scraper_registry(country: str) -> dict:
     return registry
 
 
+# Initial supported non-VN countries only (US/UK/SG) — matches _INDEED_DOMAINS
+# and _GLASSDOOR_LOC_IDS. A handful of major cities per country; unrecognized
+# text (including every VN city) defaults to VN. Same lightweight-lookup-table
+# pattern as linkedin.py's _LINKEDIN_LOCATION_MAP — extend this list rather
+# than trying to cover "every city" up front.
+_GLOBAL_CITY_COUNTRY: dict[str, str] = {
+    # United States
+    "new york": "US", "new york city": "US", "nyc": "US",
+    "san francisco": "US", "los angeles": "US", "seattle": "US",
+    "austin": "US", "chicago": "US", "boston": "US",
+    # United Kingdom
+    "london": "UK", "manchester": "UK", "edinburgh": "UK", "birmingham": "UK",
+    # Singapore
+    "singapore": "SG",
+}
+
+
+def _resolve_country(location: str) -> str:
+    """Infer which country registry to route a search to from free-text city input.
+
+    Only the initially-supported non-VN countries (US/UK/SG) are recognized —
+    anything else, including every VN city, defaults to "VN".
+    """
+    key = (location or "").strip().lower()
+    return _GLOBAL_CITY_COUNTRY.get(key, "VN")
+
+
 NON_WARMUP_ENRICH_LIMIT = 10
 _active_bg_rescrapes: set[str] = set()
 _active_bg_rescrapes_lock = asyncio.Lock()
@@ -1080,6 +1107,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
     country = (req.country or "VN").strip().upper()
+    if country == "VN":
+        country = _resolve_country(req.location)
 
     ip = (
         request.headers.get("CF-Connecting-IP")
