@@ -36,9 +36,10 @@ def scrape_remoteok(keyword: str, location: str = "") -> list[dict]:
             continue
 
         epoch = item.get("epoch")
-        if not epoch:
+        try:
+            posted_ts = float(epoch)
+        except (TypeError, ValueError):
             continue
-        posted_ts = float(epoch)
         if posted_ts < cutoff:
             continue
         days_ago = int((now - posted_ts) // 86400)
