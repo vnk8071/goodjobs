@@ -1,6 +1,7 @@
 import re
 import time as _time
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote_plus
 
 from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS
 from ..utils import _clean_html, _truncate
@@ -43,7 +44,7 @@ def scrape_glassdoor(keyword: str, location: str = "", country: str = "US") -> l
         from playwright.sync_api import sync_playwright
         from playwright_stealth import Stealth
 
-        url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={keyword}&locId={loc_id}&locT=N"
+        url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={quote_plus(keyword)}&locId={loc_id}&locT=N"
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
             context = browser.new_context(
@@ -56,7 +57,9 @@ def scrape_glassdoor(keyword: str, location: str = "", country: str = "US") -> l
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
             _time.sleep(2)
 
-            if "just a moment" in page.title().lower():
+            page_title = page.title().lower()
+            page_text = page.inner_text("body").lower() if page.query_selector("body") else ""
+            if "just a moment" in page_title or "enable javascript" in page_text:
                 log_app("[Glassdoor] blocked by anti-bot wall — skipping", "WARN")
                 browser.close()
                 return []
