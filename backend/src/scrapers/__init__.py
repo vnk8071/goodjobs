@@ -5,6 +5,7 @@ from .vietnamworks import scrape_vietnamworks, scrape_vietnamworks_detail_one
 from .topdev import scrape_topdev, scrape_topdev_detail_one
 from .indeed import scrape_indeed
 from .remoteok import scrape_remoteok
+from .weworkremotely import scrape_weworkremotely
 from .careerviet import scrape_careerviet, scrape_careerviet_detail_one
 from .jobsgo import scrape_jobsgo, scrape_jobsgo_detail_one
 from .careerlink import scrape_careerlink, scrape_careerlink_detail_one
@@ -25,6 +26,7 @@ __all__ = [
     "scrape_topdev_detail_one",
     "scrape_indeed",
     "scrape_remoteok",
+    "scrape_weworkremotely",
     "scrape_careerviet",
     "scrape_careerviet_detail_one",
     "scrape_jobsgo",
