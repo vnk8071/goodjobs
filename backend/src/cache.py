@@ -129,24 +129,41 @@ async def cache_get_ts(keyword: str, location: str, country: str = "VN") -> floa
 
 
 async def cache_fuzzy_get(
-    keyword: str, location: str, threshold: float = 0.85
+    keyword: str, location: str, threshold: float = 0.85, country: str = "VN"
 ) -> tuple[list[dict], float, str] | None:
     """Find the closest cached keyword by similarity and return its jobs.
 
     Uses cache:keyindex (a Redis SET maintained by cache_set) instead of a full
     SCAN so enumeration is O(index size) rather than O(keyspace size).
     Returns (jobs, fetched_ts, matched_keyword) or None.
+
+    Index entries follow the same VN/non-VN scheme as `_key`: VN entries are
+    plain "{kw}:{loc}", non-VN entries are namespaced "{country}:{kw}:{loc}".
+    Filtering/reconstruction below is country-aware so a VN search never
+    fuzzy-matches a global entry (or vice versa) and the reconstructed
+    keyword never carries a stray country prefix into the scrape.
     """
     try:
         loc = location.lower().strip()
 
         # Read the index — this is a single SMEMBERS call, no SCAN needed.
         index_entries = await cache_get_all_keys()
-        # Filter to entries that match the requested location.
-        loc_entries = [
-            entry for entry in index_entries
-            if entry.endswith(f":{loc}")
-        ]
+        # Filter to entries that match the requested location AND country,
+        # carrying forward the country-stripped keyword for each match.
+        loc_entries: list[tuple[str, str]] = []  # (entry, cached_kw_without_country_prefix)
+        for entry in index_entries:
+            if not entry.endswith(f":{loc}"):
+                continue
+            with_prefix = entry[: -len(f":{loc}")]
+            if country == "VN":
+                if ":" in with_prefix:
+                    continue  # namespaced non-VN entry, not a VN one
+                loc_entries.append((entry, with_prefix))
+            else:
+                prefix = f"{country.lower()}:"
+                if not with_prefix.startswith(prefix):
+                    continue
+                loc_entries.append((entry, with_prefix[len(prefix):]))
         if not loc_entries:
             return None
 
@@ -154,11 +171,10 @@ async def cache_fuzzy_get(
         kw_core = strip_level(kw_lower)
         kw_core_words = set(kw_core.split())
         best_entry: str | None = None
+        best_cached_kw: str | None = None
         best_score = 0.0
 
-        for entry in loc_entries:
-            # entry format: "{kw}:{loc}"  — loc never contains ":" so rfind is safe.
-            cached_kw = entry[: -len(f":{loc}")]
+        for entry, cached_kw in loc_entries:
             if cached_kw == kw_lower:
                 continue  # exact match is handled by cache_get, not fuzzy
 
@@ -185,6 +201,7 @@ async def cache_fuzzy_get(
             if score > best_score:
                 best_score = score
                 best_entry = entry
+                best_cached_kw = cached_kw
 
         if best_score < threshold or best_entry is None:
             return None
@@ -197,7 +214,7 @@ async def cache_fuzzy_get(
         jobs = data["jobs"]
         if not jobs:
             return None
-        matched_kw = best_entry[: -len(f":{loc}")]
+        matched_kw = best_cached_kw
         log_app(
             f"cache fuzzy hit — {keyword!r} ~ {best_key!r} (score={best_score:.2f}, {len(jobs)} jobs)"
         )

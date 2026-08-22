@@ -1079,6 +1079,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
+    country = (req.country or "VN").strip().upper()
 
     ip = (
         request.headers.get("CF-Connecting-IP")
@@ -1176,7 +1177,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             cache_fetched_ts_list = []
             related_keywords = _get_related_keywords(cache_keyword)
             for related_kw in related_keywords:
-                cached = await cache_get(related_kw, req.location, country=req.country)
+                cached = await cache_get(related_kw, req.location, country=country)
                 if cached:
                     cached_jobs, cache_fetched_ts = cached
                     all_cached_jobs.extend(cached_jobs)
@@ -1348,7 +1349,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 cached_prefill_jobs = unique_jobs
                 cached_prefill_latest_ts = latest_ts
 
-            fuzzy = await cache_fuzzy_get(cache_keyword, req.location)
+            fuzzy = await cache_fuzzy_get(cache_keyword, req.location, country=country)
             if fuzzy:
                 fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
                 age_cutoff_fuzzy = time.time() - 8 * 86400
@@ -1381,7 +1382,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     asyncio.create_task(
                         cache_set(
                             cache_keyword, req.location, refiltered, fuzzy_fetched_ts,
-                            country=req.country,
+                            country=country,
                         )
                     )
                     asyncio.create_task(cache_touch(cache_keyword, req.location))
@@ -1426,7 +1427,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         )
 
                 active_scrapers = (
-                    _SCRAPERS if req.country == "VN" else _global_scraper_registry(req.country)
+                    _SCRAPERS if country == "VN" else _global_scraper_registry(country)
                 )
                 futures: dict = {
                     asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin"
@@ -1457,7 +1458,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     ("careerlink", scrape_careerlink_detail_one, 2.0, 0.0),
                     ("glints", scrape_glints_detail_one, 2.0, 0.0),
                     ("viecoi", scrape_viecoi_detail_one, 2.0, 0.0),
-                ] if req.country == "VN" else [
+                ] if country == "VN" else [
                     ("linkedin", scrape_linkedin_detail_one, 3.0, 10.0),
                 ]
                 # queue and task keyed by site name
@@ -1640,7 +1641,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
                 await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs)
-                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=req.country)
+                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=country)
                 if not is_warmup:
                     try:
                         await cache_touch(cache_keyword, req.location)
