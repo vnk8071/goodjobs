@@ -251,6 +251,23 @@ _SCRAPERS = {
     "viecoi": scrape_viecoi,
 }
 
+_GLOBAL_SCRAPERS = {
+    "linkedin": scrape_linkedin,
+    "remoteok": scrape_remoteok,
+    "weworkremotely": scrape_weworkremotely,
+    "glassdoor": scrape_glassdoor,
+}
+
+
+def _global_scraper_registry(country: str) -> dict:
+    """Build the global scraper registry for one request, binding `country` into
+    the scrapers (indeed, glassdoor) whose target domain/region depends on it."""
+    registry = dict(_GLOBAL_SCRAPERS)
+    registry["indeed"] = lambda kw, loc: scrape_indeed(kw, loc, country=country)
+    registry["glassdoor"] = lambda kw, loc: scrape_glassdoor(kw, loc, country=country)
+    return registry
+
+
 NON_WARMUP_ENRICH_LIMIT = 10
 _active_bg_rescrapes: set[str] = set()
 _active_bg_rescrapes_lock = asyncio.Lock()
@@ -1159,7 +1176,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             cache_fetched_ts_list = []
             related_keywords = _get_related_keywords(cache_keyword)
             for related_kw in related_keywords:
-                cached = await cache_get(related_kw, req.location)
+                cached = await cache_get(related_kw, req.location, country=req.country)
                 if cached:
                     cached_jobs, cache_fetched_ts = cached
                     all_cached_jobs.extend(cached_jobs)
@@ -1363,7 +1380,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         return
                     asyncio.create_task(
                         cache_set(
-                            cache_keyword, req.location, refiltered, fuzzy_fetched_ts
+                            cache_keyword, req.location, refiltered, fuzzy_fetched_ts,
+                            country=req.country,
                         )
                     )
                     asyncio.create_task(cache_touch(cache_keyword, req.location))
@@ -1407,10 +1425,13 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             _executor, timed_scrape, site, fn, scrape_kw, req.location
                         )
 
+                active_scrapers = (
+                    _SCRAPERS if req.country == "VN" else _global_scraper_registry(req.country)
+                )
                 futures: dict = {
                     asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin"
                 }
-                other_scrapers = {k: v for k, v in _SCRAPERS.items() if k != "linkedin"}
+                other_scrapers = {k: v for k, v in active_scrapers.items() if k != "linkedin"}
                 for site, fn in other_scrapers.items():
                     futures[asyncio.ensure_future(_run_listing(site, fn))] = site
 
@@ -1423,6 +1444,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 enrich_limit = NON_WARMUP_ENRICH_LIMIT if not is_warmup else 30
 
                 # Per-site enrich config: (display_name, detail_fn, cooldown, initial_sleep)
+                # Only LinkedIn needs Phase-2 detail-page enrichment among the global sites —
+                # Indeed enriches inline during Phase 1, RemoteOK/WWR already return full
+                # descriptions from their API/RSS payload, and Glassdoor is list-page-only
+                # by design (see Task 5).
                 _ENRICH_CFG = [
                     ("linkedin", scrape_linkedin_detail_one, 3.0, 10.0),
                     ("topcv", scrape_topcv_detail_one, 2.0, 0.0),
@@ -1432,6 +1457,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     ("careerlink", scrape_careerlink_detail_one, 2.0, 0.0),
                     ("glints", scrape_glints_detail_one, 2.0, 0.0),
                     ("viecoi", scrape_viecoi_detail_one, 2.0, 0.0),
+                ] if req.country == "VN" else [
+                    ("linkedin", scrape_linkedin_detail_one, 3.0, 10.0),
                 ]
                 # queue and task keyed by site name
                 enrich_queues: dict[str, asyncio.Queue] = {
@@ -1613,7 +1640,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
                 await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs)
-                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts)
+                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=req.country)
                 if not is_warmup:
                     try:
                         await cache_touch(cache_keyword, req.location)
