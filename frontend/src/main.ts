@@ -114,8 +114,8 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
       const data = await res.json() as { jobs_this_week: number };
       if (data.jobs_this_week > 0) {
         const rounded = Math.floor(data.jobs_this_week / 100) * 100;
-        const display = rounded > 0 ? rounded.toLocaleString("vi-VN") : data.jobs_this_week;
-        weeklyStatsEl.innerHTML = `<strong>${display}+</strong>việc làm`;
+        const display = rounded > 0 ? rounded.toLocaleString("en-US") : data.jobs_this_week;
+        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> jobs`;
         weeklyStatsEl.classList.remove("hidden");
       }
     }
@@ -192,21 +192,21 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         hideProgress();
         const count = currentJobs.length;
         if (count === 0) {
-          setStatus("Không tìm thấy việc làm phù hợp trong tuần qua. Thử từ khóa khác.", "error");
+          setStatus("No matching jobs found in the past week. Try a different keyword.", "error");
           return;
         }
 
         if (sharedJobLink && !openJobByLink(sharedJobLink)) {
-          setStatus("Không tìm thấy job từ link chia sẻ (có thể đã hết hạn).", "error");
+          setStatus("Couldn't find the job from the shared link (it may have expired).", "error");
           return;
         }
 
         if (_isCacheHit || _isFuzzyCache) {
-          setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
+          setStatus(`Found ${count} jobs from the past week.`, "success");
         } else if (fromCvOrSkills) {
-          setStatus(`Tìm thấy ${count} việc làm phù hợp với hồ sơ — đang tải mô tả…`, "success");
+          setStatus(`Found ${count} jobs matching your profile — loading descriptions…`, "success");
         } else {
-          setStatus(`Tìm thấy ${count} việc làm — đang tải mô tả…`, "success");
+          setStatus(`Found ${count} jobs — loading descriptions…`, "success");
         }
       },
       abortController.signal,
@@ -221,12 +221,12 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       () => {
         setLinkedInEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
+        setStatus(`Found ${count} jobs from the past week.`, "success");
       },
       () => {
         setTopCVEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Tìm thấy ${count} việc làm trong tuần qua.`, "success");
+        setStatus(`Found ${count} jobs from the past week.`, "success");
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
@@ -247,7 +247,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     currentJobs = [];
     const isNetworkDown = err instanceof TypeError && err.message.toLowerCase().includes("fetch");
     if (isNetworkDown) {
-      setStatus("Máy chủ đang bận — đang thử tìm kiếm trực tiếp từ LinkedIn…", "error");
+      setStatus("Server is busy — trying a direct LinkedIn search…", "error");
       try {
         const fallbackJobs = await scrapeLinkedInFallback(
           keyword,
@@ -258,21 +258,21 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
           currentJobs = appendJobs([], fallbackJobs);
           const count = fallbackJobs.length;
           setStatus(
-            `Máy chủ bận — chỉ hiển thị ${count} kết quả từ LinkedIn.`,
+            `Server busy — showing only ${count} LinkedIn results.`,
             "error",
           );
         } else {
-          setStatus("Máy chủ đang bận. Vui lòng thử lại sau.", "error");
+          setStatus("Server is busy. Please try again later.", "error");
         }
       } catch {
-        setStatus("Máy chủ đang bận. Vui lòng thử lại sau.", "error");
+        setStatus("Server is busy. Please try again later.", "error");
       }
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("quá nhiều lần") || msg.includes("Too Many") || msg.includes("429")) {
-        setStatus("Bạn đã tìm kiếm quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.", "error");
+      if (msg.includes("searched too many times") || msg.includes("Too Many") || msg.includes("429")) {
+        setStatus("You've searched too many times. Please wait 1 minute and try again.", "error");
       } else {
-        setStatus(`Lỗi: ${msg}`, "error");
+        setStatus(`Error: ${msg}`, "error");
       }
     }
   } finally {
@@ -285,7 +285,7 @@ fetchBtn.addEventListener("click", async () => {
   _pendingSharedJobLink = null;
 
   if (locationSelect.value === "_custom" && !locationCustom.value.trim()) {
-    setStatus("Vui lòng nhập địa điểm.", "error");
+    setStatus("Please enter a location.", "error");
     locationCustom.classList.remove("hidden");
     locationCustom.focus();
     return;
@@ -293,7 +293,7 @@ fetchBtn.addEventListener("click", async () => {
 
   const rawInput = keywordEl.value.trim();
   if (!rawInput) {
-    setStatus("Vui lòng nhập tên công việc hoặc dán kỹ năng/CV.", "error");
+    setStatus("Please enter a job title or paste your skills/CV.", "error");
     return;
   }
 
@@ -310,7 +310,7 @@ fetchBtn.addEventListener("click", async () => {
   }
 
   // Classify all non-warmup input via AI (job title vs CV/skills).
-  setStatus("Đang phân tích…", "info");
+  setStatus("Analyzing…", "info");
   fetchBtn.disabled = true;
   const classifyTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
   const classified = await Promise.race([
@@ -364,7 +364,7 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 
 // Deep-link support: /?kw=...&loc=... and optional &job=... to auto-open modal.
 // The URL params are read once to seed the search, then cleared from the address bar
-// by runSearch(). Use the "Chia sẻ kết quả" button to get a shareable link.
+// by runSearch(). Use the "Share results" button to get a shareable link.
 (() => {
   const url = new URL(window.location.href);
   const kw = (url.searchParams.get("kw") ?? "").trim();

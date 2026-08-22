@@ -37,12 +37,12 @@ def check_rate_limit(ip: str) -> Tuple[Optional[str], dict]:
     if len(dq) >= _RATE_LIMIT_MAX:
         headers["X-RateLimit-Limit"] = "0"
         return (
-            "Bạn đã tìm kiếm quá nhiều lần. Vui lòng chờ 1 phút rồi thử lại.",
+            "You've searched too many times. Please wait 1 minute and try again.",
             headers,
         )
     if _ip_active[ip] >= _RATE_LIMIT_MAX_CONCURRENT:
         return (
-            "Bạn đang có một tìm kiếm đang chạy. Vui lòng chờ kết quả trước.",
+            "You already have a search in progress. Please wait for the results first.",
             headers,
         )
     dq.append(now)
