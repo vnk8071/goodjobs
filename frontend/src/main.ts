@@ -278,11 +278,13 @@ fetchBtn.addEventListener("click", async () => {
   }
 
   const rawLocation = getLocation();
+  fetchBtn.disabled = true;
   const cityTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
   const normalized = await Promise.race([
     normalizeCity(rawLocation, abortController?.signal ?? undefined),
     cityTimeout,
   ]);
+  fetchBtn.disabled = false;
   const location = normalized?.city?.trim() || rawLocation || undefined;
 
   // Warmup chips are curated — skip AI classification entirely.
