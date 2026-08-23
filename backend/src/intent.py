@@ -412,25 +412,52 @@ Return ONLY a JSON object:
 }
 
 Rules:
-- Correct obvious typos and expand common abbreviations, e.g. "hcmc" / "hcm" / "sai gon" → "Ho Chi Minh City", "ha noi" / "hanoi" → "Hanoi", "nyc" / "new york city" → "New York", "sg" / "singapore" → "Singapore", "london uk" → "London".
+- Correct obvious typos and expand common abbreviations, e.g. "hcmc" / "hcm" / "sai gon" → "Ho Chi Minh City", "ha noi" / "hanoi" → "Ha Noi", "nyc" / "new york city" → "New York", "sg" / "singapore" → "Singapore", "london uk" → "London", "remote" → "Remote".
 - If the input already looks like a clean, correctly-spelled city name, return it unchanged (do not paraphrase or translate a city name that's already correct).
 - If the input is empty, unclear, or not a recognizable place name, return it unchanged as "city" — do not guess or fabricate a city.
 - Do not add a country name or extra text to the "city" field — city name only.
 - Return ONLY the JSON, no markdown, no explanation.
 """
 
+# Snap AI-normalized (or raw, if AI is unavailable) city text back to the exact
+# canonical forms the warmup cache and scrapers already use — case/spacing
+# differences here silently break cache hits, since cache keys require an
+# EXACT location match (see cache.py's _key(), cache_fuzzy_get()) and the
+# warmup system writes under these precise strings (see warmup.py's
+# _WARMUP_LOCATIONS). This is the actual safety net; the system prompt's
+# own wording is a secondary signal, not a guarantee.
+_CITY_CANONICAL_ALIASES: dict[str, str] = {
+    "hanoi": "Ha Noi",
+    "ha noi": "Ha Noi",
+    "ho chi minh city": "Ho Chi Minh City",
+    "ho chi minh": "Ho Chi Minh City",
+    "hcm": "Ho Chi Minh City",
+    "hcmc": "Ho Chi Minh City",
+    "sai gon": "Ho Chi Minh City",
+    "saigon": "Ho Chi Minh City",
+    "remote": "Remote",
+}
+
+
+def _canonicalize_city(city: str) -> str:
+    """Snap a city string to its exact canonical form if it's a known alias,
+    otherwise return it unchanged."""
+    return _CITY_CANONICAL_ALIASES.get(city.strip().lower(), city)
+
 
 def normalize_city(raw_city: str) -> dict:
     """Normalize free-text city input via AI (typo correction, abbreviation expansion).
 
     Falls back to the trimmed raw input if AI is unavailable or the response
-    is unparseable — never blocks or fails the search.
+    is unparseable — never blocks or fails the search. Both paths are passed
+    through _canonicalize_city() so known aliases always resolve to the exact
+    string the warmup cache and scrapers expect, regardless of AI availability.
     """
-    raw = raw_city.strip()
+    raw = raw_city.strip()[:100]
     if not raw:
         return {"city": "", "reasoning": "empty input"}
 
-    fallback = {"city": raw, "reasoning": "AI unavailable"}
+    fallback = {"city": _canonicalize_city(raw), "reasoning": "AI unavailable"}
     raw_reply = _call_cloudflare_ai_with_system(
         _CITY_NORMALIZE_SYSTEM_PROMPT, f'City input: "{raw}"', max_tokens=100
     )
@@ -444,7 +471,7 @@ def normalize_city(raw_city: str) -> dict:
     city = (parsed.get("city") or raw).strip()
     if not city:
         return fallback
-    return {"city": city, "reasoning": parsed.get("reasoning", "")}
+    return {"city": _canonicalize_city(city), "reasoning": parsed.get("reasoning", "")}
 
 
 async def suggest_query(

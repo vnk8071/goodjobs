@@ -11,6 +11,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from src.graphql_schema import schema
@@ -1017,7 +1018,7 @@ async def normalize_city_endpoint(req: ScrapeRequest):
     raw = req.location.strip()
     if not raw:
         raise HTTPException(status_code=400, detail="location is required")
-    return normalize_city(raw)
+    return await run_in_threadpool(normalize_city, raw)
 
 
 @app.post("/scrape", response_model=list[Job])
