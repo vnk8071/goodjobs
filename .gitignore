@@ -23,6 +23,11 @@ env/
 
 # Playwright
 playwright-browsers/
+.playwright-mcp/
+
+# Claude local settings
+.claude/settings.local.json
+.claude/worktrees/
 
 # macOS
 .DS_Store
