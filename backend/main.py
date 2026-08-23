@@ -266,6 +266,12 @@ def _global_scraper_registry(country: str) -> dict:
     registry = dict(_GLOBAL_SCRAPERS)
     registry["indeed"] = lambda kw, loc: scrape_indeed(kw, loc, country=country)
     registry["glassdoor"] = lambda kw, loc: scrape_glassdoor(kw, loc, country=country)
+    if country == "US":
+        # US-only sources: USAJOBS is federal-government-specific, Dice is a
+        # US-market board with no equivalent UK/SG presence — unlike
+        # LinkedIn/Indeed/Glassdoor, which already serve all three countries.
+        registry["usajobs"] = scrape_usajobs
+        registry["dice"] = scrape_dice
     return registry
 
 

@@ -7,6 +7,8 @@ from .indeed import scrape_indeed
 from .remoteok import scrape_remoteok
 from .weworkremotely import scrape_weworkremotely
 from .glassdoor import scrape_glassdoor
+from .usajobs import scrape_usajobs
+from .dice import scrape_dice
 from .careerviet import scrape_careerviet, scrape_careerviet_detail_one
 from .jobsgo import scrape_jobsgo, scrape_jobsgo_detail_one
 from .careerlink import scrape_careerlink, scrape_careerlink_detail_one
@@ -29,6 +31,8 @@ __all__ = [
     "scrape_remoteok",
     "scrape_weworkremotely",
     "scrape_glassdoor",
+    "scrape_usajobs",
+    "scrape_dice",
     "scrape_careerviet",
     "scrape_careerviet_detail_one",
     "scrape_jobsgo",
