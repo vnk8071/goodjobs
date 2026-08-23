@@ -125,6 +125,29 @@ export async function classifyInput(
   }
 }
 
+export interface NormalizeCityResult {
+  city: string;
+  reasoning: string;
+}
+
+export async function normalizeCity(
+  rawCity: string,
+  signal?: AbortSignal,
+): Promise<NormalizeCityResult | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/normalize-city`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: "", location: rawCity }),
+      signal,
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as NormalizeCityResult;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Streams job results from the backend via SSE (VPS) or plain JSON (Lambda).
  * Calls `onBatch` each time a scraper finishes with its jobs.

@@ -1,4 +1,4 @@
-import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, API_BASE } from "./api";
+import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, API_BASE } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow } from "./ui";
 import type { Job } from "./types";
 
@@ -31,24 +31,11 @@ let currentJobs: Job[] = [];
 
 const fetchBtn        = document.getElementById("fetchBtn")        as HTMLButtonElement;
 const keywordEl       = document.getElementById("keyword")         as HTMLTextAreaElement;
-const locationSelect  = document.getElementById("locationSelect")  as HTMLSelectElement;
-const locationCustom  = document.getElementById("locationCustom")  as HTMLInputElement;
+const locationInput   = document.getElementById("locationInput")   as HTMLInputElement;
 
-locationSelect.addEventListener("change", () => {
-  if (locationSelect.value === "_custom") {
-    locationCustom.classList.remove("hidden");
-    locationCustom.focus();
-  } else {
-    locationCustom.classList.add("hidden");
-  }
-});
-
-/** Return the resolved location string from the dropdown or custom text input. */
+/** Return the resolved location string from the free-text input. */
 function getLocation(): string {
-  if (locationSelect.value === "_custom") {
-    return locationCustom.value.trim() || "Ho Chi Minh City";
-  }
-  return locationSelect.value;
+  return locationInput.value.trim() || "Ho Chi Minh City";
 }
 
 const homeLink = document.getElementById("homeLink") as HTMLAnchorElement;
@@ -284,20 +271,19 @@ fetchBtn.addEventListener("click", async () => {
   const sharedJobLink = _pendingSharedJobLink;
   _pendingSharedJobLink = null;
 
-  if (locationSelect.value === "_custom" && !locationCustom.value.trim()) {
-    setStatus("Please enter a location.", "error");
-    locationCustom.classList.remove("hidden");
-    locationCustom.focus();
-    return;
-  }
-
   const rawInput = keywordEl.value.trim();
   if (!rawInput) {
     setStatus("Please enter a job title or paste your skills/CV.", "error");
     return;
   }
 
-  const location = getLocation() || undefined;
+  const rawLocation = getLocation();
+  const cityTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
+  const normalized = await Promise.race([
+    normalizeCity(rawLocation, abortController?.signal ?? undefined),
+    cityTimeout,
+  ]);
+  const location = normalized?.city?.trim() || rawLocation || undefined;
 
   // Warmup chips are curated — skip AI classification entirely.
   const isWarmupKeyword = [...suggestionChips].some(
@@ -377,15 +363,7 @@ showIntentBox(extractedKeyword, inputType, reasoning);
     keywordEl.value = kw;
   }
   if (loc) {
-    const option = [...locationSelect.options].find((o) => o.value === loc);
-    if (option) {
-      locationSelect.value = loc;
-      locationCustom.classList.add("hidden");
-    } else {
-      locationSelect.value = "_custom";
-      locationCustom.classList.remove("hidden");
-      locationCustom.value = loc;
-    }
+    locationInput.value = loc;
   }
 
   // Kick off the search after the initial DOM is ready.
@@ -433,15 +411,7 @@ window.addEventListener("popstate", (event) => {
   // Restore keyword and location into the inputs, then re-run the search.
   keywordEl.value = kw;
   if (loc) {
-    const option = [...locationSelect.options].find((o) => o.value === loc);
-    if (option) {
-      locationSelect.value = loc;
-      locationCustom.classList.add("hidden");
-    } else {
-      locationSelect.value = "_custom";
-      locationCustom.classList.remove("hidden");
-      locationCustom.value = loc;
-    }
+    locationInput.value = loc;
   }
   void runSearch(kw, loc || getLocation(), null);
 });

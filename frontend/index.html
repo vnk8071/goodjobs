@@ -538,10 +538,6 @@
       cursor: pointer;
     }
 
-    #locationCustom {
-      margin-top: 0.4rem;
-    }
-
     .suggestions {
       display: flex;
       flex-wrap: nowrap;
@@ -2512,15 +2508,8 @@
         </div>
 
         <div class="field location-field">
-          <label for="locationSelect">Location</label>
-          <select id="locationSelect">
-            <option value="Ho Chi Minh City">Ho Chi Minh City</option>
-            <option value="Ha Noi">Hanoi</option>
-            <option value="Da Nang">Da Nang</option>
-            <option value="Remote">Remote</option>
-            <option value="_custom">Other…</option>
-          </select>
-          <input id="locationCustom" type="text" placeholder="Enter a city name" class="hidden" autocomplete="off" />
+          <label for="locationInput">Location</label>
+          <input id="locationInput" type="text" placeholder="Enter a city name (e.g. Ho Chi Minh City, London, New York)" autocomplete="off" />
         </div>
 
         <div class="field button-field">
