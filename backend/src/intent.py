@@ -400,6 +400,53 @@ async def classify_and_extract(raw_input: str) -> dict:
     }
 
 
+# ── City normalization ────────────────────────────────────────────────────────
+
+_CITY_NORMALIZE_SYSTEM_PROMPT = """\
+You are a location-normalization assistant for a job search app covering Vietnam, the United States, the United Kingdom, and Singapore. Given free-text city input (which may contain typos, abbreviations, or extra text like a country name), return the canonical city name.
+
+Return ONLY a JSON object:
+{
+  "city": "<canonical city name>",
+  "reasoning": "<one short sentence>"
+}
+
+Rules:
+- Correct obvious typos and expand common abbreviations, e.g. "hcmc" / "hcm" / "sai gon" → "Ho Chi Minh City", "ha noi" / "hanoi" → "Hanoi", "nyc" / "new york city" → "New York", "sg" / "singapore" → "Singapore", "london uk" → "London".
+- If the input already looks like a clean, correctly-spelled city name, return it unchanged (do not paraphrase or translate a city name that's already correct).
+- If the input is empty, unclear, or not a recognizable place name, return it unchanged as "city" — do not guess or fabricate a city.
+- Do not add a country name or extra text to the "city" field — city name only.
+- Return ONLY the JSON, no markdown, no explanation.
+"""
+
+
+def normalize_city(raw_city: str) -> dict:
+    """Normalize free-text city input via AI (typo correction, abbreviation expansion).
+
+    Falls back to the trimmed raw input if AI is unavailable or the response
+    is unparseable — never blocks or fails the search.
+    """
+    raw = raw_city.strip()
+    if not raw:
+        return {"city": "", "reasoning": "empty input"}
+
+    fallback = {"city": raw, "reasoning": "AI unavailable"}
+    raw_reply = _call_cloudflare_ai_with_system(
+        _CITY_NORMALIZE_SYSTEM_PROMPT, f'City input: "{raw}"', max_tokens=100
+    )
+    if not raw_reply:
+        return fallback
+
+    parsed = _parse_ai_response(raw_reply)
+    if not parsed or "city" not in parsed:
+        return fallback
+
+    city = (parsed.get("city") or raw).strip()
+    if not city:
+        return fallback
+    return {"city": city, "reasoning": parsed.get("reasoning", "")}
+
+
 async def suggest_query(
     raw_keyword: str,
     ip: str,

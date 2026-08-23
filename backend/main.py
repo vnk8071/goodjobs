@@ -46,7 +46,7 @@ from src.matching import (
     LEVEL_SYNONYMS,
 )
 from src.models import Job, ScrapeRequest
-from src.intent import suggest_query, record_search, classify_and_extract
+from src.intent import suggest_query, record_search, classify_and_extract, normalize_city
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.scrapers import *
 from src.vector import (
@@ -1002,6 +1002,22 @@ async def classify_input_endpoint(req: ScrapeRequest):
     if not raw:
         raise HTTPException(status_code=400, detail="keyword is required")
     return await classify_and_extract(raw)
+
+
+@app.post("/normalize-city")
+async def normalize_city_endpoint(req: ScrapeRequest):
+    """Normalize free-text city input via AI (typo correction, abbreviation expansion).
+
+    Response:
+      {
+        "city": str,
+        "reasoning": str,
+      }
+    """
+    raw = req.location.strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="location is required")
+    return normalize_city(raw)
 
 
 @app.post("/scrape", response_model=list[Job])
