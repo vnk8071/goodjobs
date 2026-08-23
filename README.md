@@ -7,6 +7,8 @@
   <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-vanilla%20TS-3178C6?logo=typescript&logoColor=white"></a>
   <a href="https://redis.io"><img alt="Redis" src="https://img.shields.io/badge/Redis-cache-DC382D?logo=redis&logoColor=white"></a>
   <a href="https://playwright.dev"><img alt="Playwright" src="https://img.shields.io/badge/Playwright-scraping-2EAD33?logo=playwright&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-yellow"></a>
+  <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen"></a>
 </p>
 
 > **One search box → every job board.** Good Jobs is a self-hosted job search aggregator that scrapes recently posted jobs from **18 sources** and streams results to your browser in real time over SSE — with AI-powered intent detection, skill extraction, vector-based related-job supplements, and a permanent Redis cache warmed every 2 hours.
@@ -191,6 +193,10 @@ This repo ships [agent skills](.claude/skills/) so coding agents (Claude Code, o
 - [`cache-ops`](.claude/skills/cache-ops/SKILL.md) — inspecting, flushing, and reasoning about the Redis cache
 - [`run-and-verify`](.claude/skills/run-and-verify/SKILL.md) — start the stack and verify changes end-to-end
 
-## 📄 Legal
+## 🤝 Contributing
 
-Each job posting links back to its original source. See [privacy](frontend/privacy/) and [terms](frontend/terms/) pages.
+PRs are welcome! The most valuable contribution is a **new job board for your country** — see [CONTRIBUTING.md](CONTRIBUTING.md) and the [`add-scraper`](.claude/skills/add-scraper/SKILL.md) guide.
+
+## 📄 License
+
+[MIT](LICENSE) — each job posting links back to its original source. See also our [privacy](frontend/privacy/) and [terms](frontend/terms/) pages.
