@@ -69,6 +69,11 @@ RECENT_DAYS         = 8
 MAX_CONCURRENT      = 6
 REDIS_URL           = os.getenv("REDIS_URL", "redis://redis:6379")
 ADMIN_SECRET        = os.getenv("ADMIN_SECRET", "")
+
+# USAJOBS.gov official API — self-service key at https://developer.usajobs.gov/apirequest/.
+# USER_AGENT must be the exact email address registered for the key (not a browser UA).
+USAJOBS_API_KEY     = os.getenv("USAJOBS_API_KEY", "")
+USAJOBS_USER_AGENT  = os.getenv("USAJOBS_USER_AGENT", "")
 VECTOR_RETENTION_DAYS = 8
 
 # Summarizer configuration
