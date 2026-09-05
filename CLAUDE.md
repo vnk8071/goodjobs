@@ -67,6 +67,6 @@ Claude Code is allowed to run the following git commands without asking for conf
 
 ## Deployment
 
-- Push to `main` → GitHub Actions SSHes into the server, `git reset --hard origin/main`s the checkout there, builds the backend image natively (server is arm64; no cross-arch registry image), and restarts the container
+- Push to `main` → GitHub Actions builds Docker image → SSH deploys to server
 - Frontend deploys to GitHub Pages via separate workflow
 - Secrets configured in GitHub Actions (see README for full list)
