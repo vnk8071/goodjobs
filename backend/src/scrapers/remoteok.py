@@ -26,10 +26,13 @@ def scrape_remoteok(keyword: str, location: str = "") -> list[dict]:
     jobs: list[dict] = []
 
     for item in data:
-        if "position" not in item:
-            continue  # skip the leading {"legal": ...} metadata entry
+        if not isinstance(item, dict):
+            continue  # skip the leading {"legal": ...} metadata entry / malformed rows
 
         title = item.get("position", "")
+        if not isinstance(title, str) or not title.strip():
+            continue
+        title = title.strip()
         tags = item.get("tags", []) or []
         haystack = f"{title} {' '.join(tags)}".lower()
         if kw_lower and kw_lower not in haystack:
@@ -44,18 +47,22 @@ def scrape_remoteok(keyword: str, location: str = "") -> list[dict]:
             continue
         days_ago = int((now - posted_ts) // 86400)
 
-        jobs.append({
-            "title": title,
-            "company": item.get("company", ""),
-            "location": item.get("location", "") or "Remote",
-            "posted": _relative_display(days_ago),
-            "posted_date": datetime.fromtimestamp(posted_ts, tz=timezone.utc).strftime("%Y-%m-%d"),
-            "posted_ts": posted_ts,
-            "link": item.get("url") or item.get("apply_url", ""),
-            "description": _truncate(_clean_html(item.get("description", ""))),
-            "source": "RemoteOK",
-            "skills": [t for t in tags if isinstance(t, str)],
-            "logo": item.get("company_logo") or item.get("logo", ""),
-        })
+        jobs.append(
+            {
+                "title": title,
+                "company": item.get("company", ""),
+                "location": item.get("location", "") or "Remote",
+                "posted": _relative_display(days_ago),
+                "posted_date": datetime.fromtimestamp(
+                    posted_ts, tz=timezone.utc
+                ).strftime("%Y-%m-%d"),
+                "posted_ts": posted_ts,
+                "link": item.get("url") or item.get("apply_url", ""),
+                "description": _truncate(_clean_html(item.get("description", ""))),
+                "source": "RemoteOK",
+                "skills": [t for t in tags if isinstance(t, str)],
+                "logo": item.get("company_logo") or item.get("logo", ""),
+            }
+        )
 
     return jobs

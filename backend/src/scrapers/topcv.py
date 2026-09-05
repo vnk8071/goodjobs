@@ -9,35 +9,36 @@ from ..utils import _relative_display, _clean_html, _extract_html, _truncate
 
 _TOPCV_CITY_PARAMS: dict[str, tuple[str, str, str]] = {
     "ho chi minh": ("ho-chi-minh", "kl2", "l2"),
-    "hcm":         ("ho-chi-minh", "kl2", "l2"),
+    "hcm": ("ho-chi-minh", "kl2", "l2"),
     "hồ chí minh": ("ho-chi-minh", "kl2", "l2"),
-    "hanoi":       ("ha-noi",      "kl1", "l1"),
-    "ha noi":      ("ha-noi",      "kl1", "l1"),
-    "hà nội":      ("ha-noi",      "kl1", "l1"),
-    "da nang":     ("da-nang",     "kl8", "l8"),
-    "danang":      ("da-nang",     "kl8", "l8"),
-    "đà nẵng":     ("da-nang",     "kl8", "l8"),
+    "hanoi": ("ha-noi", "kl1", "l1"),
+    "ha noi": ("ha-noi", "kl1", "l1"),
+    "hà nội": ("ha-noi", "kl1", "l1"),
+    "da nang": ("da-nang", "kl8", "l8"),
+    "danang": ("da-nang", "kl8", "l8"),
+    "đà nẵng": ("da-nang", "kl8", "l8"),
 }
 
 _TOPCV_CITY_KEYWORDS: dict[str, list[str]] = {
     "ho chi minh": ["hồ chí minh", "ho chi minh", "hcm", "tp.hcm", "tp hcm"],
-    "ha noi":      ["hà nội", "ha noi", "hanoi"],
-    "da nang":     ["đà nẵng", "da nang", "danang"],
+    "ha noi": ["hà nội", "ha noi", "hanoi"],
+    "da nang": ["đà nẵng", "da nang", "danang"],
 }
 
-_TOPCV_BOILERPLATE = re.compile(
-    r"Cách\s*thức\s*ứng\s*tuyển", re.IGNORECASE
-)
+_TOPCV_BOILERPLATE = re.compile(r"Cách\s*thức\s*ứng\s*tuyển", re.IGNORECASE)
 
-def scrape_topcv(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
+
+def scrape_topcv(
+    keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25
+) -> list[dict]:
     """
     Scrapes TopCV using Playwright (Vue-rendered page).
     Only returns jobs posted within RECENT_DAYS days.
     """
     if location.strip().lower() == "remote":
-        keyword  = f"remote {keyword}"
+        keyword = f"remote {keyword}"
         location = "Ho Chi Minh City"
-    keyword_slug              = keyword.strip().lower().replace(" ", "-")
+    keyword_slug = keyword.strip().lower().replace(" ", "-")
     result = _topcv_city_params(location or "Ho Chi Minh City")
     if result is None:
         return []
@@ -59,6 +60,7 @@ def scrape_topcv_detail_one(job: dict, cooldown: float) -> None:
         _time.sleep(cooldown)
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
             try:
@@ -89,6 +91,7 @@ def scrape_topcv_detail_one(job: dict, cooldown: float) -> None:
     except Exception as e:
         print(f"[TopCV detail] {e}")
 
+
 def _topcv_city_params(location: str) -> tuple[str, str, str] | None:
     """Return (city_slug, city_code, loc_param) for the TopCV URL from a location string."""
     key = location.strip().lower()
@@ -102,6 +105,7 @@ def _topcv_playwright(url: str, max_results: int, location: str = "") -> list[di
     """Scrape TopCV job listings via headless Chromium."""
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
             try:
@@ -189,14 +193,18 @@ def _parse_topcv_description(soup: BeautifulSoup) -> str:
 
     heading = None
     for tag in ("h2", "h3", "h4", "div", "p"):
-        heading = soup.find(tag, string=re.compile(r"Mô\s*tả\s*công\s*việc", re.IGNORECASE))
+        heading = soup.find(
+            tag, string=re.compile(r"Mô\s*tả\s*công\s*việc", re.IGNORECASE)
+        )
         if heading:
             break
 
     if heading:
         parts = [str(heading)]
         for sib in heading.next_siblings:
-            if _TOPCV_BOILERPLATE.search(sib.get_text() if hasattr(sib, "get_text") else str(sib)):
+            if _TOPCV_BOILERPLATE.search(
+                sib.get_text() if hasattr(sib, "get_text") else str(sib)
+            ):
                 break
             parts.append(str(sib))
         desc = "".join(parts).strip()
@@ -206,7 +214,9 @@ def _parse_topcv_description(soup: BeautifulSoup) -> str:
     return ""
 
 
-def _parse_topcv(soup: BeautifulSoup, max_results: int, search_location: str = "") -> list[dict]:
+def _parse_topcv(
+    soup: BeautifulSoup, max_results: int, search_location: str = ""
+) -> list[dict]:
     """Parse job card elements from a TopCV search results page."""
     cards = soup.select("div.job-item-search-result")
     jobs = []
@@ -219,9 +229,11 @@ def _parse_topcv(soup: BeautifulSoup, max_results: int, search_location: str = "
             continue
 
         title = title_el.get_text(strip=True)
-        href  = title_el.get("href", "").split("?")[0]
+        href = title_el.get("href", "").split("?")[0]
         if not href:
             continue
+        if not href.startswith("http"):
+            href = "https://www.topcv.vn" + href
 
         company_el = card.select_one("a.company, div.company a, span.company-name")
         company = company_el.get_text(strip=True) if company_el else "N/A"
@@ -229,16 +241,21 @@ def _parse_topcv(soup: BeautifulSoup, max_results: int, search_location: str = "
         loc_el = card.select_one("div.address, span.address, label.address")
         location = loc_el.get_text(strip=True) if loc_el else ""
 
-        salary_el = card.select_one("label.title-salary, div.salary, span.salary, label[class*='salary']")
+        salary_el = card.select_one(
+            "label.title-salary, div.salary, span.salary, label[class*='salary']"
+        )
         salary = salary_el.get_text(strip=True) if salary_el else ""
 
-        date_el = card.select_one("label.deadline, div.deadline, span[class*='date'], label[class*='date']")
+        date_el = card.select_one(
+            "label.deadline, div.deadline, span[class*='date'], label[class*='date']"
+        )
         posted_text = date_el.get_text(strip=True) if date_el else ""
-        days_ago    = _topcv_days_ago(posted_text)
+        days_ago = _topcv_days_ago(posted_text)
 
         posted_date = (
             (date.today() - timedelta(days=days_ago)).isoformat()
-            if days_ago < 9999 else ""
+            if days_ago < 9999
+            else ""
         )
 
         if days_ago > RECENT_DAYS:
@@ -247,18 +264,20 @@ def _parse_topcv(soup: BeautifulSoup, max_results: int, search_location: str = "
         if location and not _topcv_location_matches(location, search_location):
             continue
 
-        jobs.append({
-            "title":       title,
-            "company":     company,
-            "location":    location,
-            "link":        href,
-            "source":      "TopCV",
-            "posted":      _topcv_display(posted_text, days_ago),
-            "posted_date": posted_date,
-            "description": "",
-            "logo":        "",
-            "salary":      salary,
-        })
+        jobs.append(
+            {
+                "title": title,
+                "company": company,
+                "location": location,
+                "link": href,
+                "source": "TopCV",
+                "posted": _topcv_display(posted_text, days_ago),
+                "posted_date": posted_date,
+                "description": "",
+                "logo": "",
+                "salary": salary,
+            }
+        )
 
         if len(jobs) >= max_results:
             break
