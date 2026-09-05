@@ -23,28 +23,32 @@ function showRecentJobs(): void {
   }
 }
 
-// Load and render the 20 most recent jobs on the homepage
+// Load and render recent jobs on the homepage: up to 20 direct jobs + recent scraped jobs
 (async () => {
   const tbody = document.getElementById("recentJobsBody") as HTMLTableSectionElement | null;
   const section = recentJobsSection;
   if (!tbody || !section) return;
   try {
-    const res = await fetch(`${API_BASE}/recent-jobs?n=20`);
-    if (!res.ok) return;
-    const jobs: Job[] = await res.json();
-    if (!jobs.length) return;
+    const [directRes, mixedRes] = await Promise.all([
+      fetch(`${API_BASE}/recent-jobs?n=20&source=Direct`),
+      fetch(`${API_BASE}/recent-jobs?n=20`),
+    ]);
 
-    const directJobs  = jobs.filter((j) => j.source === "Direct");
-    const scrapedJobs = jobs.filter((j) => j.source !== "Direct");
-
-    if (directJobs.length > 0 && directRecentBody && directRecentSection) {
-      directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1)));
-      directRecentSection.classList.remove("hidden");
+    if (directRes.ok) {
+      const directJobs: Job[] = await directRes.json();
+      if (directJobs.length > 0 && directRecentBody && directRecentSection) {
+        directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1)));
+        directRecentSection.classList.remove("hidden");
+      }
     }
 
-    if (scrapedJobs.length > 0) {
-      scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
-      section.classList.remove("hidden");
+    if (mixedRes.ok) {
+      const jobs: Job[] = await mixedRes.json();
+      const scrapedJobs = jobs.filter((j) => j.source !== "Direct");
+      if (scrapedJobs.length > 0) {
+        scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
+        section.classList.remove("hidden");
+      }
     }
   } catch {
     // silently ignore — recent jobs is non-critical

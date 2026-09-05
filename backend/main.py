@@ -831,8 +831,12 @@ async def admin_analytics(secret: str = ""):
 
 
 @app.get("/recent-jobs")
-async def recent_jobs(n: int = 20):
-    """Return the N most recently posted unique jobs across all cached keyword×location pairs."""
+async def recent_jobs(n: int = 20, source: str = ""):
+    """Return the N most recently posted unique jobs across all cached keyword×location pairs.
+
+    If `source` is given, return only jobs from that source (exact top-N, no
+    round-robin dilution) instead of the round-robin mix across all sources.
+    """
     seen_links: set[str] = set()
     all_jobs: list[dict] = []
     try:
@@ -889,6 +893,10 @@ async def recent_jobs(n: int = 20):
             job["posted"] = "Today"
             today_jobs.append(job)
     all_jobs = today_jobs
+
+    if source:
+        matched = [j for j in all_jobs if (j.get("source") or "").lower() == source.lower()]
+        return matched[:n]
 
     # Round-robin by source so no single source dominates the feed
     per_source: dict[str, list[dict]] = {}
