@@ -290,6 +290,30 @@ _GLOBAL_CITY_COUNTRY: dict[str, str] = {
     "london": "UK", "manchester": "UK", "edinburgh": "UK", "birmingham": "UK",
     # Singapore
     "singapore": "SG",
+    # Brazil — mirrors the city set in linkedin.py's _LINKEDIN_LOCATION_MAP.
+    # indeed/glassdoor have no BR domain/loc-id mapped yet, so they no-op for
+    # this country (same graceful skip as any other unmapped country); only
+    # linkedin/remoteok/weworkremotely serve these searches for now.
+    "brasil": "BR", "brazil": "BR", "remoto": "BR",
+    "sao paulo": "BR", "são paulo": "BR", "sp": "BR", "sampa": "BR",
+    "guarulhos": "BR", "osasco": "BR", "barueri": "BR", "alphaville": "BR",
+    "santo andre": "BR", "santo andré": "BR",
+    "sao bernardo do campo": "BR", "são bernardo do campo": "BR", "sbc": "BR",
+    "sao caetano do sul": "BR", "são caetano do sul": "BR",
+    "diadema": "BR", "maua": "BR", "mauá": "BR",
+    "mogi das cruzes": "BR", "jundiai": "BR", "jundiaí": "BR",
+    "campinas": "BR", "sorocaba": "BR", "santos": "BR",
+    "sao jose dos campos": "BR", "são josé dos campos": "BR", "sjc": "BR",
+    "ribeirao preto": "BR", "ribeirão preto": "BR",
+    "sao jose do rio preto": "BR", "são josé do rio preto": "BR",
+    "piracicaba": "BR", "bauru": "BR", "taubate": "BR", "taubaté": "BR",
+    "franca": "BR", "americana": "BR", "indaiatuba": "BR",
+    "cotia": "BR", "itapevi": "BR", "carapicuiba": "BR", "carapicuíba": "BR",
+    "taboao da serra": "BR", "taboão da serra": "BR",
+    "embu das artes": "BR", "ribeirao pires": "BR", "ribeirão pires": "BR",
+    "sao roque": "BR", "são roque": "BR", "atibaia": "BR",
+    "mairipora": "BR", "mairiporã": "BR", "aruja": "BR", "arujá": "BR",
+    "franco da rocha": "BR", "caieiras": "BR",
 }
 
 

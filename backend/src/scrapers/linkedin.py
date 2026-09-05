@@ -17,44 +17,12 @@ _LINKEDIN_GEO_IDS: dict[str, list[str]] = {
     "Vietnam":          ["104195383"],
     "Remote":           ["103697962", "102267004", "90010187", "109912426", "100126839", "105790653", "90010186", "104195383"],
 
-    #Brazil
-    "Brasil" : ["106057199"],
-    "São Paulo": ["105871508", "90009574"],
-    "Remoto": ["103451405"],
-    "Guarulhos": ["104730895"],
-    "Osasco": ["105724459"],
-    "Barueri": ["102601179"],
-    "Santo André": ["103088753"],
-    "São Bernardo do Campo": ["105861958"],
-    "São Caetano do Sul": ["102620040"], 
-    "Diadema": ["102626157"],
-    "Mauá": ["101368829"],
-    "Mogi das Cruzes": ["100891666"],
-    "Jundiaí": ["102043228"],
-    "Campinas": ["103451405"],
-    "Sorocaba": ["100218040"],
-    "Santos": ["105900002"],
-    "São José dos Campos": ["105104646"],
-    "Ribeirão Preto": ["100030857"],
-    "São José do Rio Preto": ["103377214"],
-    "Piracicaba": ["105575383"],
-    "Bauru": ["101039681"],
-    "Taubaté": ["106549435"],
-    "Franca": ["104498470"],
-    "Americana": ["101250528"],
-    "Indaiatuba": ["100056477"],
-    "Cotia": ["104447881"],
-    "Itapevi": ["106269082"],
-    "Carapicuíba": ["104204620"],
-    "Taboão da Serra": ["106211670"],
-    "Embu das Artes": ["104294746"],
-    "Ribeirão Pires": ["106470015"],
-    "São Roque": ["106602295"],
-    "Atibaia": ["103626595"],
-    "Mairiporã": ["102792998"],
-    "Arujá": ["117026033"],
-    "Franco da Rocha": ["104180278"],
-    "Caieiras": ["105848426"],
+    # Brazil intentionally has no geoId entries here: unlike the Vietnam IDs
+    # above (scraped/verified against LinkedIn directly), Brazil geoIds are
+    # unverified and error-prone (see _LINKEDIN_LOCATION_MAP below for the
+    # canonical names). Locations that resolve to a name with no entry in
+    # this dict fall through to plain-text `&location=` search in
+    # scrape_linkedin(), which is what every Brazil city should use.
 }
 
 _LINKEDIN_LOCATION_MAP: dict[str, str] = {
@@ -153,7 +121,8 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
     mapped_location = _linkedin_location(location or "Ho Chi Minh City")
     geo_ids         = _LINKEDIN_GEO_IDS.get(mapped_location)
     tpr_param       = f"&f_TPR=r{since_seconds}" if since_seconds else ""
-    remote_param    = "&f_WT=2" if mapped_location == "Remote" else ""
+    is_remote       = mapped_location in ("Remote", "Remoto")
+    remote_param    = "&f_WT=2" if is_remote else ""
 
     def _fetch_all_pages(kw: str) -> list[dict]:
         kw_enc    = quote_plus(kw)
@@ -165,6 +134,11 @@ def scrape_linkedin(keyword: str, location: str = "Ho Chi Minh City", since_seco
             while len(all_jobs) < _LINKEDIN_MAX_RESULTS:
                 if geo_id:
                     loc_param = f"&geoId={geo_id}"
+                elif is_remote:
+                    # "Remote"/"Remoto" is a work-type filter, not a place — f_WT=2
+                    # already scopes to remote jobs, so skip the bogus location=
+                    # text search that would otherwise send LinkedIn a non-place string.
+                    loc_param = ""
                 else:
                     loc_param = f"&location={quote_plus(mapped_location)}"
                 url = (
@@ -249,7 +223,10 @@ def _linkedin_location(location: str) -> str:
     """Normalise a free-text location string to a canonical LinkedIn location name."""
     key = location.strip().lower()
     for candidate, mapped in _LINKEDIN_LOCATION_MAP.items():
-        if candidate in key:
+        # Word-boundary match, not plain substring: a short code like "sp" or
+        # "sjc" must not match inside an unrelated word (e.g. "sp" inside
+        # "espírito santo").
+        if re.search(rf"\b{re.escape(candidate)}\b", key):
             return mapped
     return location
 
