@@ -12,7 +12,8 @@ export interface Job {
     | "Indeed"
     | "CareerViet"
     | "JobsGo"
-    | "CareerLink";
+    | "CareerLink"
+    | "Direct";
   posted?: string;
   posted_date?: string;   // ISO date YYYY-MM-DD for sorting
   posted_ts?: number;     // Unix timestamp for precise sort (newer = larger)

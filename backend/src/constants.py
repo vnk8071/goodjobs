@@ -65,10 +65,12 @@ CHROMIUM_ARGS = [
 ]
 
 DESC_MAX_CHARS      = 4000
-RECENT_DAYS         = 8
+RECENT_DAYS         = 14
 MAX_CONCURRENT      = 6
 REDIS_URL           = os.getenv("REDIS_URL", "redis://redis:6379")
 ADMIN_SECRET        = os.getenv("ADMIN_SECRET", "")
+SUBMISSION_RATE_LIMIT       = 5     # max /submissions POSTs per IP...
+SUBMISSION_RATE_WINDOW_SECS = 3600  # ...within this many seconds
 
 # USAJOBS.gov official API — self-service key at https://developer.usajobs.gov/apirequest/.
 # USER_AGENT must be the exact email address registered for the key (not a browser UA).

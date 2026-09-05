@@ -5,10 +5,23 @@ import type { Job } from "./types";
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
 
-const recentJobsSection = document.getElementById("recentJobsSection") as HTMLElement | null;
+const recentJobsSection  = document.getElementById("recentJobsSection")  as HTMLElement | null;
+// Direct submissions (source "Direct") get their own featured table on the
+// default homepage feed too, shown above the scraped "Recent Jobs" table.
+const directRecentSection = document.getElementById("directRecentSection") as HTMLElement | null;
+const directRecentBody    = document.getElementById("directRecentBody")    as HTMLTableSectionElement | null;
 
-function hideRecentJobs(): void { recentJobsSection?.classList.add("hidden"); }
-function showRecentJobs(): void { recentJobsSection?.classList.remove("hidden"); }
+function hideRecentJobs(): void {
+  recentJobsSection?.classList.add("hidden");
+  directRecentSection?.classList.add("hidden");
+}
+function showRecentJobs(): void {
+  recentJobsSection?.classList.remove("hidden");
+  // Only re-show the direct table if it actually has rows from the initial load.
+  if (directRecentBody && directRecentBody.children.length > 0) {
+    directRecentSection?.classList.remove("hidden");
+  }
+}
 
 // Load and render the 20 most recent jobs on the homepage
 (async () => {
@@ -20,8 +33,19 @@ function showRecentJobs(): void { recentJobsSection?.classList.remove("hidden");
     if (!res.ok) return;
     const jobs: Job[] = await res.json();
     if (!jobs.length) return;
-    jobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
-    section.classList.remove("hidden");
+
+    const directJobs  = jobs.filter((j) => j.source === "Direct");
+    const scrapedJobs = jobs.filter((j) => j.source !== "Direct");
+
+    if (directJobs.length > 0 && directRecentBody && directRecentSection) {
+      directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1)));
+      directRecentSection.classList.remove("hidden");
+    }
+
+    if (scrapedJobs.length > 0) {
+      scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
+      section.classList.remove("hidden");
+    }
   } catch {
     // silently ignore — recent jobs is non-critical
   }

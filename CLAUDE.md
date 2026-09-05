@@ -20,7 +20,7 @@ docker compose up
 
 - Search results stream via **SSE** (`/scrape` endpoint)
 - Two phases: Phase 1 = all scrapers concurrently, Phase 2 = LinkedIn/TopCV description enrichment
-- Redis cache by `(keyword, location)` — permanent, jobs pruned after 8 days (`RECENT_DAYS`)
+- Redis cache by `(keyword, location)` — permanent, jobs pruned after 14 days (`RECENT_DAYS`)
 - Background warmup runs every 2 hours across ~30 keyword×location pairs
 - Semaphore (`MAX_CONCURRENT`) limits concurrent scrapes; user requests take priority over warmup
 
@@ -54,6 +54,7 @@ Each scraper in `backend/src/scrapers/` follows the same contract:
 - **Add a skill keyword**: update `_SKILL_PATTERNS` in `backend/src/constants.py`
 - **Add a warmup keyword**: `POST /warmup/keywords` or edit `_WARMUP_KEYWORDS` in `backend/src/warmup.py`
 - **Check cache state**: `GET /cache/status`
+- **Review a pending job submission**: `GET /admin/submissions/pending?secret=...`, then `POST /admin/submissions/{id}/approve` or `/reject`
 
 ## Permissions
 

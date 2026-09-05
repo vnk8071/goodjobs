@@ -638,6 +638,9 @@ function _applyFilter(): void {
     return true;
   });
 
+  // Direct submissions (source "Direct") are merged into the same results
+  // table as scraped jobs when searching — they only get a separate table
+  // on the default homepage "Recent Jobs" feed (see main.ts).
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
     jobsBody.innerHTML =

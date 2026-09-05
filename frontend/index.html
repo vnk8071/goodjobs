@@ -1184,6 +1184,11 @@
       color: #3730a3;
     }
 
+    .badge-direct {
+      background: #dcfce7;
+      color: #166534;
+    }
+
     .badge-viecoi {
       background: #fef3c7;
       color: #92400e;
@@ -1846,6 +1851,31 @@
       color: var(--text);
     }
 
+    /* Direct-submission (source "Direct") sections — a lighter "featured" treatment,
+       distinguishing curated direct postings from scraped listings without a
+       separate component system (mirrors .recent-jobs-section's structure). */
+    .direct-section {
+      background: var(--card);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.75rem;
+      margin-bottom: 1.25rem;
+      overflow-x: hidden;
+    }
+
+    @media (max-width: 640px) {
+      .direct-section {
+        padding: 1rem;
+      }
+    }
+
+    .direct-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 0 1rem 0;
+      color: var(--text);
+    }
+
     /* About / publisher content section */
     .about-section {
       background: var(--card);
@@ -2400,6 +2430,15 @@
           </p>
         </div>
       </a>
+      <a id="postJobLink" href="/post-job/"
+        style="display:inline-flex; align-items:center; gap:0.4rem; height:40px; padding:0 1rem; border-radius:var(--radius); background:var(--primary); color:#fff; font-weight:600; font-size:0.85rem; white-space:nowrap; text-decoration:none; flex-shrink:0; transition:all 0.3s cubic-bezier(0.4,0,0.2,1);"
+        onmouseover="this.style.background='var(--primary-hover)'" onmouseout="this.style.background='var(--primary)'"
+        aria-label="Post a job to Good Jobs" title="Post a Job">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Post a Job
+      </a>
       <a id="githubLink" class="theme-toggle" href="https://github.com/vnk8071/goodjobs" target="_blank"
         rel="noopener noreferrer" aria-label="View source on GitHub" title="GitHub">
         <svg fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -2592,6 +2631,30 @@
       </div>
     </div>
 
+    <!-- Direct submissions (GoodJobs source) on the default homepage feed -->
+    <section id="directRecentSection" class="direct-section hidden">
+      <h3 class="direct-title">📌 Posted Directly to Good Jobs</h3>
+      <div class="table-wrapper">
+        <table class="jobs-table direct-table recent-jobs-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Title</th>
+              <th>Company</th>
+              <th>Location</th>
+              <th>Posted</th>
+              <th>Location</th>
+              <th>Skills</th>
+              <th>Description</th>
+              <th>Source</th>
+              <th>Apply</th>
+            </tr>
+          </thead>
+          <tbody id="directRecentBody"></tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Recent Jobs section -->
     <section id="recentJobsSection" class="recent-jobs-section hidden">
       <h2 class="recent-jobs-title">Recent Jobs</h2>
@@ -2689,6 +2752,7 @@
     <div style="display:flex; justify-content:center; gap:1.5rem; margin-bottom:1rem;">
       <a href="/privacy/" style="color:inherit; text-decoration:none; font-weight:500;">Privacy Policy</a>
       <a href="/terms/" style="color:inherit; text-decoration:none; font-weight:500;">Terms of Service</a>
+      <a href="/post-job/" style="color:inherit; text-decoration:none; font-weight:500;">Post a Job</a>
       <a href="/contact/" style="color:inherit; text-decoration:none; font-weight:500;">Contact</a>
       <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener"
         style="color:inherit; text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:0.3rem;">

@@ -30,7 +30,7 @@ from src.cache import (
     cache_get_all_keys,
     cache_get_ts,
 )
-from src.constants import MAX_CONCURRENT, ADMIN_SECRET
+from src.constants import MAX_CONCURRENT, ADMIN_SECRET, RECENT_DAYS
 from src.logger import log_search, log_app
 from src.utils import timed_scrape
 from src.matching import (
@@ -46,9 +46,19 @@ from src.matching import (
     _LEVEL_WORDS,
     LEVEL_SYNONYMS,
 )
-from src.models import Job, ScrapeRequest
+from src.models import Job, ScrapeRequest, SubmissionRequest
 from src.intent import suggest_query, record_search, classify_and_extract, normalize_city
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
+from src.submissions import (
+    create_submission,
+    list_pending,
+    approve,
+    reject,
+    check_rate_limit as check_submission_rate_limit,
+    search_submissions,
+    validate_submission,
+    list_approved_as_jobs,
+)
 from src.scrapers import *
 from src.vector import (
     ensure_index,
@@ -210,7 +220,7 @@ async def _fetch_vector_supplement(
             return
         try:
             data = json.loads(raw)
-            age_cutoff = time.time() - 8 * 86400
+            age_cutoff = time.time() - RECENT_DAYS * 86400
             for job in data.get("jobs", []):
                 link = job.get("link", "")
                 if link in target and job.get("posted_ts", 0) >= age_cutoff:
@@ -441,7 +451,7 @@ async def cache_overview(secret: str = ""):
         raise HTTPException(status_code=403, detail="Forbidden")
     now = time.time()
     STALE_THRESHOLD = 7200
-    age_cutoff = now - 8 * 86400
+    age_cutoff = now - RECENT_DAYS * 86400
 
     redis = get_redis()
     # Pass 1 — collect all cache keys and their fresh job links
@@ -604,7 +614,7 @@ async def admin_embed_test(secret: str = "", n: int = 3):
 
     # Find up to n unembedded fresh jobs from the cache
     redis = get_redis()
-    age_cutoff = time.time() - 8 * 86400
+    age_cutoff = time.time() - RECENT_DAYS * 86400
     candidates: list[dict] = []
     try:
         async for key in redis.scan_iter("jobs:*"):
@@ -843,6 +853,21 @@ async def recent_jobs(n: int = 20):
                 continue
     except Exception as e:
         log_app(f"[recent-jobs] error: {e}", "ERROR")
+
+    # GoodJobs submissions are deliberately never written into the keyword/
+    # location cache (admin approve/reject must take effect immediately), so
+    # the scan above never sees them — merge them in directly.
+    try:
+        for goodjobs_job in await list_approved_as_jobs():
+            link = goodjobs_job.get("link", "")
+            if not link or link in seen_links:
+                continue
+            goodjobs_job["posted_ts"] = posted_ts(goodjobs_job)
+            seen_links.add(link)
+            all_jobs.append(goodjobs_job)
+    except Exception as e:
+        log_app(f"[recent-jobs] goodjobs merge error: {e}", "ERROR")
+
     all_jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
 
     # Keep only jobs posted today; normalize their posted field
@@ -879,8 +904,8 @@ async def recent_jobs(n: int = 20):
 
 @app.get("/stats")
 async def stats():
-    """Return total unique jobs posted in the last 7 days across all cached keys."""
-    cutoff = time.time() - 8 * 86400
+    """Return total unique jobs posted in the last RECENT_DAYS days across all cached keys."""
+    cutoff = time.time() - RECENT_DAYS * 86400
     seen_links: set[str] = set()
     count = 0
     try:
@@ -960,6 +985,60 @@ async def cache_scrape(
         {"keyword": k["keyword"], "location": k["location"]} for k in keys_to_scrape
     ]
     return {"triggered": len(triggered), "keys": triggered}
+
+
+@app.post("/submissions")
+async def submit_job(body: SubmissionRequest, request: Request):
+    """Public endpoint: a headhunter submits a job for review."""
+    if body.website.strip():
+        # Honeypot tripped — fake success, store nothing, don't tip off the bot.
+        return {"ok": True, "message": "Submitted for review"}
+
+    data = body.model_dump(exclude={"website"})
+    try:
+        validate_submission(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    if not await check_submission_rate_limit(ip):
+        raise HTTPException(status_code=429, detail="Too many submissions, try again later")
+
+    try:
+        await create_submission(data, submitter_ip=ip)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"ok": True, "message": "Submitted for review"}
+
+
+@app.get("/admin/submissions/pending")
+async def admin_submissions_pending(secret: str = ""):
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return await list_pending()
+
+
+@app.post("/admin/submissions/{sub_id}/approve")
+async def admin_submissions_approve(sub_id: str, secret: str = ""):
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not await approve(sub_id):
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return {"ok": True}
+
+
+@app.post("/admin/submissions/{sub_id}/reject")
+async def admin_submissions_reject(sub_id: str, secret: str = ""):
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not await reject(sub_id):
+        raise HTTPException(status_code=404, detail="Submission not found")
+    return {"ok": True}
 
 
 @app.get("/warmup/keywords")
@@ -1108,6 +1187,7 @@ async def scrape(req: ScrapeRequest, request: Request):
     ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
+    results = list(results) + [await search_submissions(cache_keyword, req.location)]
 
     jobs: list[dict] = []
     linkedin_jobs: list[dict] = []
@@ -1129,7 +1209,7 @@ async def scrape(req: ScrapeRequest, request: Request):
         j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
 
     await cache_preserve_posted_dates(cache_keyword, req.location, jobs)
-    await cache_set(cache_keyword, req.location, jobs, time.time())
+    await cache_set(cache_keyword, req.location, [j for j in jobs if j.get("source") != "Direct"], time.time())
     _refresh_posted_times(jobs)
     return jobs
 
@@ -1279,7 +1359,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 ]
 
                 # Build combined map: start with keyword-cache jobs, then overlay vector matches.
-                age_cutoff_cv = time.time() - 8 * 86400
+                age_cutoff_cv = time.time() - RECENT_DAYS * 86400
                 combined_by_link: dict[str, dict] = {}
                 unique_cache: list[dict] = []  # initialise here so Phase 2 rescore is always safe
                 if all_cached_jobs:
@@ -1392,7 +1472,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         ]
                 for j in unique_jobs:
                     _tag_level(j)
-                age_cutoff = time.time() - 8 * 86400
+                age_cutoff = time.time() - RECENT_DAYS * 86400
                 unique_jobs = [
                     j for j in unique_jobs if j.get("posted_ts", 0) >= age_cutoff
                 ]
@@ -1404,6 +1484,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 yield f"event: cached\ndata: {json.dumps({'jobs': unique_jobs, 'fetched_ts': latest_ts, 'fuzzy': is_warmup}, ensure_ascii=False)}\n\n"
 
                 if is_warmup and unique_jobs:
+                    existing_links = {str(j.get("link", "")) for j in unique_jobs}
+                    direct_jobs = _process(await search_submissions(cache_keyword, req.location))
+                    direct_jobs = [j for j in direct_jobs if str(j.get("link", "")) not in existing_links]
+                    if direct_jobs:
+                        yield f"data: {json.dumps(direct_jobs, ensure_ascii=False)}\n\n"
                     yield "event: done\ndata: {}\n\n"
                     seen_links = {str(j["link"]) for j in unique_jobs if j.get("link")}
                     vector_query = req.raw_input.strip() or keyword
@@ -1433,7 +1518,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             fuzzy = await cache_fuzzy_get(cache_keyword, req.location, country=country)
             if fuzzy:
                 fuzzy_jobs, fuzzy_fetched_ts, fuzzy_matched_kw = fuzzy
-                age_cutoff_fuzzy = time.time() - 8 * 86400
+                age_cutoff_fuzzy = time.time() - RECENT_DAYS * 86400
                 refiltered = [
                     j
                     for j in fuzzy_jobs
@@ -1458,6 +1543,11 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     _refresh_posted_times(refiltered)
                     yield f"event: cached\ndata: {json.dumps({'jobs': refiltered, 'fetched_ts': fuzzy_fetched_ts, 'fuzzy': True}, ensure_ascii=False)}\n\n"
                     if is_warmup:
+                        existing_links = {str(j.get("link", "")) for j in refiltered}
+                        direct_jobs = _process(await search_submissions(cache_keyword, req.location))
+                        direct_jobs = [j for j in direct_jobs if str(j.get("link", "")) not in existing_links]
+                        if direct_jobs:
+                            yield f"data: {json.dumps(direct_jobs, ensure_ascii=False)}\n\n"
                         yield "event: done\ndata: {}\n\n"
                         return
                     asyncio.create_task(
@@ -1511,7 +1601,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     _SCRAPERS if country == "VN" else _global_scraper_registry(country)
                 )
                 futures: dict = {
-                    asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin"
+                    asyncio.ensure_future(_run_listing("linkedin", scrape_linkedin)): "linkedin",
+                    asyncio.ensure_future(search_submissions(scrape_kw, req.location)): "direct",
                 }
                 other_scrapers = {k: v for k, v in active_scrapers.items() if k != "linkedin"}
                 for site, fn in other_scrapers.items():
@@ -1722,7 +1813,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             f"[vector] appended {len(vector_supplement)} related jobs for {keyword!r}"
                         )
                 await cache_preserve_posted_dates(cache_keyword, req.location, all_jobs, country=country)
-                await cache_set(cache_keyword, req.location, all_jobs, fetch_ts, country=country)
+                await cache_set(cache_keyword, req.location, [j for j in all_jobs if j.get("source") != "Direct"], fetch_ts, country=country)
                 if not is_warmup:
                     try:
                         await cache_touch(cache_keyword, req.location)

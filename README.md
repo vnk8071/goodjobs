@@ -62,7 +62,7 @@ Every posting keeps its original link — Good Jobs never republishes, it points
 | 🤖 **AI intent detection** | Paste a CV, a skill list, or a vague phrase — an LLM maps it to a canonical job keyword (with Vietnamese ↔ English translation) |
 | 🧠 **Vector supplement** | Related jobs from other cached keywords are retrieved via embeddings and appended on cache misses |
 | 🏷️ **Skill extraction** | Tech skills auto-tagged per job from title + description, rendered as pills in the UI |
-| 🔁 **Self-warming cache** | ~30 keyword×location pairs re-scraped every 2 hours; new jobs merged by link dedup; jobs pruned after 8 days |
+| 🔁 **Self-warming cache** | ~30 keyword×location pairs re-scraped every 2 hours; new jobs merged by link dedup; jobs pruned after 14 days |
 | 🌐 **Free-text locations** | No dropdowns. "hcmc" → Ho Chi Minh City, typos corrected, country inferred from the city |
 | 🚦 **Fair concurrency** | A semaphore caps concurrent scrapes; user requests jump ahead of background warmups |
 
@@ -125,7 +125,8 @@ Phase 2 ── Per-site description enrichment — VN sources (LinkedIn, TopCV,
 
 ### Caching & warmup
 
-- Results are cached permanently in Redis by `(keyword, location)`; individual jobs are pruned after **8 days** (`RECENT_DAYS`). Global entries are namespaced (`jobs:{country}:…`) and excluded from VN-facing views and warmup.
+- Results are cached permanently in Redis by `(keyword, location)`; individual jobs are pruned after **14 days** (`RECENT_DAYS`). Global entries are namespaced (`jobs:{country}:…`) and excluded from VN-facing views and warmup.
+- 📝 **Direct submissions**: Headhunters can submit a job via `POST /submissions`; after admin review (`/admin/submissions/*`, gated by `ADMIN_SECRET`) it's merged into search results as source `"Direct"`. Stored in Redis under `submissions:{pending,approved,rejected}`, never written into the keyword/location cache.
 - **Background warmup**: ~30 VN keyword×location pairs every **2 hours**, checked every 10 minutes. LinkedIn uses `f_TPR=r7200` for incremental 2-hour windows; other scrapers refetch the full window. New jobs merge into existing caches, deduplicated by link.
 
 ### Project structure
@@ -144,11 +145,12 @@ goodjobs/
 │       ├── warmup.py              # Warmup scheduler, per-site enrich pipeline
 │       ├── summarizer.py          # On-demand description summariser
 │       ├── ratelimit.py           # Per-IP rate limiting middleware
+│       ├── submissions.py         # Headhunter job-submission store (pending/approved/rejected)
 │       ├── graphql_schema.py      # GraphQL schema (jobs query)
 │       └── scrapers/              # One module per job board (see tables above)
 ├── frontend/
 │   ├── index.html                 # UI layout and styles
-│   ├── privacy/, terms/, contact/, admin/
+│   ├── privacy/, terms/, contact/, admin/, post-job/
 │   └── src/
 │       ├── main.ts                # SSE client, fetch orchestration
 │       ├── api.ts                 # Stream parser, AI classify/normalize calls

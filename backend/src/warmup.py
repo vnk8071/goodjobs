@@ -20,6 +20,7 @@ from src.cache import (
     embedded_links_add,
     embedded_links_filter,
 )
+from src.submissions import prune_expired_approved
 from src.vector import upsert_jobs, delete_by_ids
 from src.constants import RECENT_DAYS, VECTOR_RETENTION_DAYS
 from src.logger import log_app, log_search_warmup
@@ -767,6 +768,7 @@ async def warmup(executor, scrapers: dict) -> None:
                 await _cleanup_old_jobs()
                 await _cleanup_nonwarmup_stale_keys()
                 await _cleanup_nonwarmup_vectors(executor)
+                await prune_expired_approved()
                 _last_cleanup_ts = time.time()
 
         except Exception as e:

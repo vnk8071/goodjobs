@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Post a Job - Good Jobs</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='16' fill='%232563eb'/><text x='3' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'>G</text><text x='16' y='23' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white' opacity='0.75'>J</text></svg>" />
+    <style>
+      :root {
+        --primary: #3b82f6;
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --muted: #475569;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 2rem 1rem 4rem;
+        line-height: 1.6;
+      }
+      .container { max-width: 640px; margin: 0 auto; }
+      header { margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; }
+      .logo {
+        flex-shrink: 0; width: 48px; height: 48px;
+        background: linear-gradient(135deg, var(--primary), #2563eb);
+        border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+      }
+      .header-text h1 { font-size: 1.8rem; font-weight: 800; color: var(--text); }
+      .card {
+        background: var(--card); border: 1px solid rgba(226, 232, 240, 0.8);
+        border-radius: var(--radius); padding: 2rem 2.5rem;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+      }
+      label { display: block; font-weight: 600; margin: 1.1rem 0 0.35rem; font-size: 0.9rem; }
+      label:first-of-type { margin-top: 0; }
+      input, textarea {
+        width: 100%; padding: 0.6rem 0.75rem; border: 1px solid var(--border);
+        border-radius: 8px; font: inherit; color: var(--text); background: var(--card);
+      }
+      textarea { min-height: 120px; resize: vertical; }
+      .hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+      .honeypot { position: absolute; left: -9999px; top: -9999px; }
+      button {
+        margin-top: 1.5rem; padding: 0.7rem 1.5rem; border: none; border-radius: 8px;
+        background: var(--primary); color: white; font: inherit; font-weight: 700;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
+      #status { margin-top: 1rem; font-size: 0.9rem; }
+      #status.error { color: #dc2626; }
+      #status.success { color: #16a34a; }
+      a { color: var(--primary); }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <a href="/" style="display:contents;">
+          <div class="logo">
+            <svg viewBox="0 0 30 30" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:26px;height:26px;">
+              <text x="8" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle">G</text>
+              <text x="22" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
+            </svg>
+          </div>
+          <div class="header-text"><h1>Good Jobs</h1></div>
+        </a>
+      </header>
+
+      <div class="card">
+        <h2 style="margin-bottom:0.5rem;">Post a Job</h2>
+        <p style="color:var(--muted); margin-bottom:1rem;">
+          Headhunter or hiring directly? Submit a role below — we review every
+          posting before it appears in search.
+        </p>
+
+        <form id="jobForm">
+          <label for="title">Job Title *</label>
+          <input id="title" name="title" required />
+
+          <label for="company">Company *</label>
+          <input id="company" name="company" required />
+
+          <label for="location">Location *</label>
+          <input id="location" name="location" required placeholder="e.g. Ho Chi Minh City, Remote" />
+
+          <label for="description">Description *</label>
+          <textarea id="description" name="description" required></textarea>
+
+          <label for="apply_link">Apply Link</label>
+          <input id="apply_link" name="apply_link" type="url" placeholder="https://..." />
+
+          <label for="contact_email">Contact Email</label>
+          <input id="contact_email" name="contact_email" type="email" />
+          <p class="hint">Provide an apply link or a contact email (at least one).</p>
+
+          <label for="skills">Skills</label>
+          <input id="skills" name="skills" placeholder="python, docker, aws (comma-separated)" />
+
+          <label for="salary">Salary</label>
+          <input id="salary" name="salary" placeholder="e.g. $2,000 - $3,000" />
+
+          <div class="honeypot">
+            <label for="website">Website</label>
+            <input id="website" name="website" tabindex="-1" autocomplete="off" />
+          </div>
+
+          <button type="submit" id="submitBtn">Submit for Review</button>
+        </form>
+        <div id="status"></div>
+      </div>
+
+      <footer style="text-align:center; margin-top:2rem; padding:1rem; color:var(--muted); font-size:0.85rem;">
+        <div style="display:flex; justify-content:center; gap:1.5rem; margin-bottom:1rem;">
+          <a href="/privacy/" style="color:inherit; font-weight:500;">Privacy Policy</a>
+          <a href="/terms/" style="color:inherit; font-weight:500;">Terms of Service</a>
+          <a href="/contact/" style="color:inherit; font-weight:500;">Contact</a>
+        </div>
+        <div>&copy; 2026 Good Jobs</div>
+      </footer>
+    </div>
+
+    <script type="module">
+      const API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+        ? "http://localhost:8000"
+        : (import.meta.env.VITE_API_URL ?? "https://api.goodjobs.io.vn");
+
+      const form = document.getElementById("jobForm");
+      const status = document.getElementById("status");
+      const submitBtn = document.getElementById("submitBtn");
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        status.textContent = "";
+        status.className = "";
+        submitBtn.disabled = true;
+
+        const fd = new FormData(form);
+        const body = {
+          title: fd.get("title") || "",
+          company: fd.get("company") || "",
+          location: fd.get("location") || "",
+          description: fd.get("description") || "",
+          apply_link: fd.get("apply_link") || "",
+          contact_email: fd.get("contact_email") || "",
+          skills: (fd.get("skills") || "").split(",").map(s => s.trim()).filter(Boolean),
+          salary: fd.get("salary") || "",
+          website: fd.get("website") || "",
+        };
+
+        if (!body.apply_link && !body.contact_email) {
+          status.textContent = "Provide an apply link or a contact email.";
+          status.className = "error";
+          submitBtn.disabled = false;
+          return;
+        }
+
+        try {
+          const resp = await fetch(`${API_BASE}/submissions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (!resp.ok) {
+            status.textContent = data.detail || "Something went wrong. Please try again.";
+            status.className = "error";
+            submitBtn.disabled = false;
+            return;
+          }
+          form.hidden = true;
+          status.textContent = "Thanks — we'll review your posting shortly.";
+          status.className = "success";
+        } catch (err) {
+          status.textContent = "Network error. Please try again.";
+          status.className = "error";
+          submitBtn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

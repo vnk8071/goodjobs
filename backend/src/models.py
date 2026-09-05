@@ -38,3 +38,15 @@ class ScrapeRequest(BaseModel):
     raw_input: str = ""   # Free-form CV/skills text; used for vector search when set
     estimated_level: str = ""  # "junior" | "middle" | "senior" | "" — AI-inferred from CV
     intent: str = ""      # "job_title" | "cv_or_skills" | "not_job" — AI-classified on frontend
+
+
+class SubmissionRequest(BaseModel):
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    description: str = ""
+    apply_link: str = ""
+    contact_email: str = ""
+    skills: list[str] = []
+    salary: str = ""
+    website: str = ""  # honeypot — real users never see or fill this field
