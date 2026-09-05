@@ -725,7 +725,7 @@ async def admin_analytics(secret: str = ""):
                 "top_keywords": [],
                 "requests_by_hour": {str(h): 0 for h in range(24)},
                 "requests_by_week": [],
-                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0, "warmup": 0},
+                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0},
                 "recent_searches": [],
             }
 
@@ -786,6 +786,10 @@ async def admin_analytics(secret: str = ""):
         {"date": d, "count": day_counter.get(d, 0)} for d in week_dates
     ]
 
+    # Filter out warmup entries *before* taking the tail — warmup fires in
+    # bursts (~30 keyword×location pairs every 2 hours) that can otherwise
+    # fill the last N raw log lines and crowd out genuine user searches.
+    non_warmup_entries = [e for e in entries if e.get("intent") != "warmup"]
     recent_searches = [
         {
             "ts": e.get("ts", ""),
@@ -794,15 +798,15 @@ async def admin_analytics(secret: str = ""):
             "location": e.get("location", ""),
             "intent": e.get("intent", ""),
         }
-        for e in reversed(entries[-50:])
-        if e.get("intent") != "warmup"
+        for e in reversed(non_warmup_entries[-100:])
     ]
 
+    # Warmup is excluded from the breakdown entirely — it's automated
+    # background traffic, not a real user's search intent.
     intent_breakdown = {
         "job_title": intent_counter.get("job_title", 0),
         "cv_or_skills": intent_counter.get("cv_or_skills", 0),
         "not_job": intent_counter.get("not_job", 0),
-        "warmup": intent_counter.get("warmup", 0),
     }
 
     result = {
