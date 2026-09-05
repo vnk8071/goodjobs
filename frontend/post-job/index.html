@@ -100,18 +100,15 @@
           <input id="contact_email" name="contact_email" type="email" />
           <p class="hint">Provide an apply link or a contact email (at least one).</p>
 
-          <label for="skills">Skills</label>
-          <input id="skills" name="skills" placeholder="python, docker, aws (comma-separated)" />
-
-          <label for="salary">Salary</label>
-          <input id="salary" name="salary" placeholder="e.g. $2,000 - $3,000" />
-
           <div class="honeypot">
             <label for="website">Website</label>
             <input id="website" name="website" tabindex="-1" autocomplete="off" />
           </div>
 
-          <button type="submit" id="submitBtn">Submit for Review</button>
+          <div style="display:flex; gap:0.75rem; align-items:center; margin-top:1.5rem;">
+            <button type="submit" id="submitBtn" style="margin-top:0;">Submit for Review</button>
+            <a href="/" style="margin-top:0; padding:0.7rem 1.5rem; border:1px solid var(--border); border-radius:8px; color:var(--text); text-decoration:none; font-weight:700;">Back to Homepage</a>
+          </div>
         </form>
         <div id="status"></div>
       </div>
@@ -149,8 +146,6 @@
           description: fd.get("description") || "",
           apply_link: fd.get("apply_link") || "",
           contact_email: fd.get("contact_email") || "",
-          skills: (fd.get("skills") || "").split(",").map(s => s.trim()).filter(Boolean),
-          salary: fd.get("salary") || "",
           website: fd.get("website") || "",
         };
 
