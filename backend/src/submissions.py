@@ -9,6 +9,7 @@ see docs/superpowers/specs/2026-09-05-job-submissions-design.md.
 import html
 import json
 import time
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 
@@ -133,13 +134,22 @@ async def reject(sub_id: str) -> bool:
     return ok
 
 
+def _strip_diacritics(text: str) -> str:
+    """Fold Vietnamese diacritics to plain ASCII (Hà Nội -> Ha Noi) so
+    submitted locations match search input regardless of accent usage."""
+    text = text.replace("đ", "d").replace("Đ", "D")
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn"
+    )
+
+
 def _location_matches(job_location: str, requested_location: str) -> bool:
     """Loose free-text location match: substring either direction, and
     "remote" always matches. No VN-city dictionary — submitters type
     whatever city they mean, and volume is low enough that a simple
     heuristic plus manual review is enough for v1."""
-    req = requested_location.strip().lower()
-    loc = job_location.strip().lower()
+    req = _strip_diacritics(requested_location.strip().lower())
+    loc = _strip_diacritics(job_location.strip().lower())
     if not req or not loc:
         return True
     if "remote" in loc:
