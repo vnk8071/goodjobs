@@ -258,6 +258,27 @@
     }
 
     @media (max-width: 640px) {
+      /* Logo+title claims the full row so the fixed-width action buttons
+         (Post a Job / GitHub / theme toggle) wrap to their own row below,
+         instead of squeezing "Good Jobs" into ~90px and forcing it to wrap.
+         !important needed: #homeLink carries an inline flex:1 style, which
+         otherwise always wins over a plain ID rule in the stylesheet. */
+      #homeLink {
+        flex: 1 1 100% !important;
+      }
+
+      /* Icon-only "Post a Job" button on mobile to save header space. */
+      #postJobLink {
+        width: 40px;
+        padding: 0;
+        justify-content: center;
+        gap: 0;
+      }
+
+      #postJobLink .post-job-text {
+        display: none;
+      }
+
       .search-grid {
         grid-template-columns: 1fr;
       }
@@ -2437,7 +2458,7 @@
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
         </svg>
-        Post a Job
+        <span class="post-job-text">Post a Job</span>
       </a>
       <a id="githubLink" class="theme-toggle" href="https://github.com/vnk8071/goodjobs" target="_blank"
         rel="noopener noreferrer" aria-label="View source on GitHub" title="GitHub">
