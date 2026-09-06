@@ -294,6 +294,16 @@ function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
   });
 }
 
+/** Format an ISO date (YYYY-MM-DD) as "Sep 5", adding the year only if it isn't the current one. */
+function formatPostedDate(dateStr?: string): string {
+  if (!dateStr) return "—";
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (isNaN(d.getTime())) return "—";
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
+  return d.toLocaleDateString("en-US", opts);
+}
+
 /** Render skill tags as HTML spans, collapsing extras into a "+N" pill. */
 function renderSkillTags(skills: string[] | undefined, max = 10): string {
   if (!skills || skills.length === 0) return "";
@@ -852,8 +862,6 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     const titleLower = job.title.toLowerCase();
     if (_domainWords.length > 0 && _domainWords.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(titleLower))) tr.classList.add("domain-match");
   }
-  // Keep rows compact: show fewer skills in the table.
-  const skillsHtml = renderSkillTags(job.skills, 6);
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
   // Job listings stream in before their descriptions are fetched (Phase 2 enrichment).
   // Show a shimmer placeholder so streamed-but-not-yet-enriched rows never look blank.
@@ -880,7 +888,7 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td>${esc(job.location)}</td>
     <td class="posted">${esc(job.posted ?? "")}</td>
     <td class="score" title="Vector similarity score">${esc(score)}</td>
-    <td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>
+    <td class="posted-date-cell">${esc(formatPostedDate(job.posted_date))}</td>
     <td class="desc">${descCell}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td class="apply-cell">
