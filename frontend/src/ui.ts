@@ -255,6 +255,12 @@ export function setFromCache(val: boolean): void {
   _fromCache = val;
 }
 
+/** Vector similarity scores only mean something for CV/skills-paste searches —
+ * hide the Score column when searching by a plain job title. */
+export function setScoreColumnVisible(visible: boolean): void {
+  jobsBody.closest("table")?.classList.toggle("hide-score", !visible);
+}
+
 async function _copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -852,8 +858,10 @@ export function replaceJobs(jobs: Job[]): Job[] {
   return jobs;
 }
 
-/** Build a table row element for a single job, wiring up the modal click handler. */
-export function buildRow(job: Job, num: number): HTMLTableRowElement {
+/** Build a table row element for a single job, wiring up the modal click handler.
+ * `seventhColumn` picks what the 7th column shows: "skills" (search results) or
+ * "date" (homepage Recent Jobs / Posted Directly tables). */
+export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date" = "skills"): HTMLTableRowElement {
   const tr = document.createElement("tr");
   if (job.level_match) tr.classList.add("level-match");
   if (!_fromCache) {
@@ -862,6 +870,12 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     const titleLower = job.title.toLowerCase();
     if (_domainWords.length > 0 && _domainWords.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(titleLower))) tr.classList.add("domain-match");
   }
+  const seventhCellHtml = seventhColumn === "date"
+    ? `<td class="posted-date-cell">${esc(formatPostedDate(job.posted_date))}</td>`
+    : (() => {
+        const skillsHtml = renderSkillTags(job.skills, 6);
+        return `<td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>`;
+      })();
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
   // Job listings stream in before their descriptions are fetched (Phase 2 enrichment).
   // Show a shimmer placeholder so streamed-but-not-yet-enriched rows never look blank.
@@ -888,7 +902,7 @@ export function buildRow(job: Job, num: number): HTMLTableRowElement {
     <td>${esc(job.location)}</td>
     <td class="posted">${esc(job.posted ?? "")}</td>
     <td class="score" title="Vector similarity score">${esc(score)}</td>
-    <td class="posted-date-cell">${esc(formatPostedDate(job.posted_date))}</td>
+    ${seventhCellHtml}
     <td class="desc">${descCell}</td>
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td class="apply-cell">

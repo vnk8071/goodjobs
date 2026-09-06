@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, API_BASE } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow } from "./ui";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
@@ -37,7 +37,7 @@ function showRecentJobs(): void {
     if (directRes.ok) {
       const directJobs: Job[] = await directRes.json();
       if (directJobs.length > 0 && directRecentBody && directRecentSection) {
-        directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1)));
+        directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1, "date")));
         directRecentSection.classList.remove("hidden");
       }
     }
@@ -46,7 +46,7 @@ function showRecentJobs(): void {
       const jobs: Job[] = await mixedRes.json();
       const scrapedJobs = jobs.filter((j) => j.source !== "Direct");
       if (scrapedJobs.length > 0) {
-        scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1)));
+        scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1, "date")));
         section.classList.remove("hidden");
       }
     }
@@ -155,6 +155,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   hideSuggestionBanner();
   // Intent box is shown for all search types; only hide on explicit reset.
   setSearchContext(keyword, location);
+  setScoreColumnVisible(fromCvOrSkills);
   // Only replace input when explicitly requested (e.g. clicking an alternative keyword).
   if (replaceInput) {
     keywordEl.value = keyword;

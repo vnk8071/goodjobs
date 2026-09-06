@@ -267,6 +267,13 @@
         flex: 1 1 100% !important;
       }
 
+      /* With homeLink alone on row 1 (full width), the action buttons wrap
+         to row 2 as the only occupants there — right-align them as a group
+         instead of letting justify-content:space-between spread them out. */
+      header {
+        justify-content: flex-end;
+      }
+
       .search-grid {
         grid-template-columns: 1fr;
       }
@@ -296,7 +303,7 @@
       thead th:nth-child(6),
       /* Relevance */
       thead th:nth-child(7),
-      /* Post Date */
+      /* Skills / Post Date */
       thead th:nth-child(8),
       /* Description */
       tbody td:nth-child(3),
@@ -801,7 +808,7 @@
         width: 9rem;
       }
 
-      /* Post Date */
+      /* Skills / Post Date */
       /* Description text is clamped; keep this column narrower to avoid big empty space. */
       table.jobs-table thead th:nth-child(8) {
         width: 13rem;
@@ -830,6 +837,13 @@
       .card {
         padding: 1.25rem 1rem;
       }
+    }
+
+    /* Vector similarity score only means something for CV/skills-paste
+       searches — hidden for plain job-title searches (see setScoreColumnVisible). */
+    .jobs-table.hide-score thead th:nth-child(6),
+    .jobs-table.hide-score tbody td:nth-child(6) {
+      display: none;
     }
 
     thead th {
@@ -1635,6 +1649,17 @@
       vertical-align: middle;
     }
 
+    td.skills-cell {
+      min-width: 160px;
+      max-width: 300px;
+      vertical-align: middle;
+    }
+
+    td.skills-cell>span {
+      display: inline-block;
+      margin: 0.15rem 0.2rem 0.15rem 0;
+    }
+
     .modal-skills {
       display: flex;
       flex-wrap: wrap;
@@ -1645,6 +1670,11 @@
     .modal-skills .skill-tag {
       font-size: 0.8rem;
       padding: 0.2rem 0.6rem;
+    }
+
+    .no-skills {
+      color: var(--muted);
+      font-size: 0.8rem;
     }
 
     .skill-tag-more {
@@ -2615,7 +2645,7 @@
               <th>Location</th>
               <th>Posted</th>
               <th>Score</th>
-              <th>Post Date</th>
+              <th>Skills</th>
               <th>Description</th>
               <th>Source</th>
               <th>Apply</th>
