@@ -456,7 +456,9 @@ def _linkedin_fetch_detail(job_url: str) -> tuple[str, str]:
             s = new_session()
             resp = s.get(api_url, timeout=10)
             if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 15 * (attempt + 1)))
+                # Cap the server-supplied Retry-After: an oversized value would pin
+                # the pooled thread this call runs on well past ENRICH_IDLE_TIMEOUT.
+                retry_after = min(int(resp.headers.get("Retry-After", 15 * (attempt + 1))), 45)
                 print(f"[LinkedIn desc guest API] {job_id} → 429, backing off {retry_after}s (attempt {attempt+1}/3)")
                 _time.sleep(retry_after)
                 continue

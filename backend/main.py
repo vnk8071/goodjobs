@@ -117,8 +117,9 @@ app.add_middleware(
 _executor = ThreadPoolExecutor(max_workers=6)
 # Separate lane for requests-only scrapers so they aren't starved waiting behind
 # slow Chromium scrapers in the shared pool. Near-zero CPU/RAM, so first results
-# (e.g. ViecOi) paint in 1-3s instead of ~14s.
-_light_executor = ThreadPoolExecutor(max_workers=2)
+# (e.g. ViecOi) paint in 1-3s instead of ~14s. Also carries LinkedIn's detail pass,
+# which holds a thread for its per-job cooldowns, hence a few more workers.
+_light_executor = ThreadPoolExecutor(max_workers=4)
 
 # Hard cap on simultaneous headless Chromium across BOTH phases (listing + detail).
 # The server is 1 CPU / 2GiB: more than ~2 Chromium thrashes the single CPU and
@@ -128,9 +129,10 @@ _chromium_sem: asyncio.Semaphore | None = None
 
 # Scrapers whose *listing* pass is requests-based (no Chromium) → safe for the light lane.
 _LIGHT_LISTING = {"viecoi", "linkedin"}
-# Scrapers whose *detail* pass is requests-based. LinkedIn listing is light but its
-# detail pass launches Chromium, so LinkedIn is intentionally absent here.
-_LIGHT_DETAIL = {"viecoi"}
+# Scrapers whose *detail* pass is requests-based. LinkedIn's detail pass hits the
+# jobs-guest API with plain requests; gating it behind the Chromium semaphore let
+# slow Chromium listing scrapes starve it, so no LinkedIn description ever arrived.
+_LIGHT_DETAIL = {"viecoi", "linkedin"}
 
 
 def _get_chromium_sem() -> asyncio.Semaphore:
@@ -338,6 +340,9 @@ def _resolve_country(location: str) -> str:
 
 
 NON_WARMUP_ENRICH_LIMIT = 10
+# Max seconds the post-listing drain waits for a site's next enriched job before
+# abandoning that site's enrichment (covers LinkedIn's 429 back-off of up to ~90s).
+ENRICH_IDLE_TIMEOUT = 120.0
 _active_bg_rescrapes: set[str] = set()
 _active_bg_rescrapes_lock = asyncio.Lock()
 
@@ -1670,15 +1675,16 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     for i, job in enumerate(jobs[:enrich_limit]):
                         cd = cooldown if i > 0 else 0.0
                         try:
+                            # Wait out the per-site rate-limit cooldown BEFORE taking a
+                            # thread, so a sleeping cooldown never pins a pooled worker
+                            # (light lane or Chromium).
+                            if cd:
+                                await asyncio.sleep(cd)
                             if site in _LIGHT_DETAIL:
                                 ok = await loop.run_in_executor(
-                                    _light_executor, detail_fn, job, cd
+                                    _light_executor, detail_fn, job, 0.0
                                 )
                             else:
-                                # Wait out the per-site rate-limit cooldown BEFORE taking a
-                                # Chromium slot, so cooldowns don't block other sites' browsers.
-                                if cd:
-                                    await asyncio.sleep(cd)
                                 # Chromium detail fetch — share the global browser gate
                                 # with listing scrapes so total live Chromium stays <= limit.
                                 async with chromium_sem:
@@ -1704,6 +1710,17 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     await queue.put(None)
                     log_app(f"{site}: finished streaming details")
 
+                def _drain_ready_enriched():
+                    for site_name, queue in enrich_queues.items():
+                        while not queue.empty():
+                            item = queue.get_nowait()
+                            if item is None:
+                                enrich_tasks[site_name] = None
+                            else:
+                                yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
+                            if enrich_tasks[site_name] is None:
+                                break
+
                 while pending:
                     time_left = max(0.1, deadline - loop.time())
                     done, pending = await asyncio.wait(
@@ -1719,6 +1736,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                                 f"stream timeout — cancelling {len(pending)} scraper(s)"
                             )
                             break
+                        for chunk in _drain_ready_enriched():
+                            yield chunk
                         yield ": keepalive\n\n"
                         continue
 
@@ -1748,15 +1767,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             yield f"data: {json.dumps(filtered, ensure_ascii=False)}\n\n"
 
                     # Drain any ready enriched items while waiting for more scrapers
-                    for site_name, queue in enrich_queues.items():
-                        while not queue.empty():
-                            item = queue.get_nowait()
-                            if item is None:
-                                enrich_tasks[site_name] = None
-                            else:
-                                yield f"data: {json.dumps([item], ensure_ascii=False)}\n\n"
-                            if enrich_tasks[site_name] is None:
-                                break
+                    for chunk in _drain_ready_enriched():
+                        yield chunk
 
                 yield "event: done\ndata: {}\n\n"
 
@@ -1766,8 +1778,22 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         continue
                     queue = enrich_queues[site_name]
                     enriched_count = 0
+                    idle_secs = 0.0
                     while True:
-                        item = await queue.get()
+                        try:
+                            item = await asyncio.wait_for(queue.get(), timeout=15.0)
+                        except asyncio.TimeoutError:
+                            idle_secs += 15.0
+                            if idle_secs >= ENRICH_IDLE_TIMEOUT:
+                                task.cancel()
+                                log_app(
+                                    f"{site_name}: no enriched job for {idle_secs:.0f}s — giving up",
+                                    "ERROR",
+                                )
+                                break
+                            yield ": keepalive\n\n"
+                            continue
+                        idle_secs = 0.0
                         if item is None:
                             break
                         enriched_count += 1

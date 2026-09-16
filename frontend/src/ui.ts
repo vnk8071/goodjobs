@@ -393,9 +393,9 @@ function openJobModal(job: Job): void {
   jobModalLocation.textContent = job.location;
   jobModalPosted.textContent   = job.posted || "N/A";
   jobModalSource.innerHTML     = `<span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span>`;
-  const isEnriching =
+  const isEnriching = !_enrichmentDone && (
     (_linkedinEnriching && job.source === "LinkedIn") ||
-    (_topcvEnriching    && job.source === "TopCV");
+    (_topcvEnriching    && job.source === "TopCV"));
   if (!job.skills?.length && isEnriching) {
     jobModalSkills.innerHTML = '<span class="desc-loading">Finding skills…</span>';
   } else {
@@ -489,6 +489,9 @@ const SITES = ["LinkedIn", "ITViec", "TopCV", "VietnamWorks", "TopDev", "Indeed"
 let _timerInterval: ReturnType<typeof setInterval> | null = null;
 let _linkedinEnriching = false;
 let _topcvEnriching    = false;
+// False while a search stream is open. Once it closes, no more descriptions can
+// arrive, so rows still missing one show "—" instead of a never-ending spinner.
+let _enrichmentDone    = true;
 let _openModalLink = "";
 
 const _PROGRESS_MESSAGES = [
@@ -558,6 +561,21 @@ export function updateProgressCount(jobs: Job[]): void {
 /** Set whether LinkedIn Phase 2 description enrichment is in progress. */
 export function setLinkedInEnriching(value: boolean): void {
   _linkedinEnriching = value;
+}
+
+/** Mark whether the search stream has finished, re-rendering rows so placeholders settle. */
+export function setEnrichmentDone(value: boolean): void {
+  _enrichmentDone = value;
+  if (!value) return;
+  setLinkedInEnriching(false);
+  setTopCVEnriching(false);
+  if (_allJobs.length > 0) _applyFilter();
+  if (jobModalDesc.querySelector(".desc-loading")) {
+    jobModalDesc.innerHTML = '<span class="no-skills">—</span>';
+  }
+  if (jobModalSkills.querySelector(".desc-loading")) {
+    jobModalSkills.innerHTML = '<span class="no-skills">—</span>';
+  }
 }
 
 /** Set whether TopCV Phase 2 detail enrichment is in progress. */
@@ -878,10 +896,13 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
       })();
   const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
   // Job listings stream in before their descriptions are fetched (Phase 2 enrichment).
-  // Show a shimmer placeholder so streamed-but-not-yet-enriched rows never look blank.
+  // Show a shimmer placeholder while the stream is open; after it closes, the
+  // description is not coming (e.g. beyond the per-site enrich limit).
   const descCell = descText
     ? esc(descText)
-    : `<span class="desc-loading">Loading description…</span>`;
+    : _enrichmentDone
+      ? '<span class="no-skills">—</span>'
+      : `<span class="desc-loading">Loading description…</span>`;
   const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
   const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
   const levelBadge = job.level_match ? `<span class="level-badge">✓ Match</span>` : "";
