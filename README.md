@@ -16,6 +16,15 @@
 🇻🇳 **Vietnam is the core market** — LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet, TopDev, JobsGo, CareerLink, Glints, ViecOi, Indeed.
 🌍 **Opt-in global mode** covers the US, UK, and Singapore — LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice. Just type the city; the country is inferred automatically ("nyc" → New York → US sources).
 
+## 🗓️ Release Timeline
+
+| Date | Feature |
+| ---- | ------- |
+| 2026-08-30 | **career-ops integration** — [career-ops](https://github.com/career-ops-hq/career-ops) added Good Jobs as a `providers/goodjobs.mjs` source; ongoing collaboration on integration depth (`/recent-jobs`, `/search-semantic`) and a self-hosting guide in [career-ops-hq/career-ops#3521](https://github.com/career-ops-hq/career-ops/discussions/3521) |
+| 2026-08-22 | **Global search** — opt-in coverage for the US, UK, and Singapore (LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice) alongside the Vietnam market |
+| 2026-04-11 | **CV / skill matching** — paste a CV or skill list and AI intent detection maps it to a canonical job keyword, with results scored against it |
+| 2026-03-25 | **Summary description** — background LLM summarization of long job descriptions, surfaced inline in the UI |
+
 ---
 
 ## 🔎 The Job Boards
@@ -65,15 +74,6 @@ Every posting keeps its original link — Good Jobs never republishes, it points
 | 🔁 **Self-warming cache** | ~30 keyword×location pairs re-scraped every 2 hours; new jobs merged by link dedup; jobs pruned after 14 days |
 | 🌐 **Free-text locations** | No dropdowns. "hcmc" → Ho Chi Minh City, typos corrected, country inferred from the city |
 | 🚦 **Fair concurrency** | A semaphore caps concurrent scrapes; user requests jump ahead of background warmups |
-
-## 🗓️ Release Timeline
-
-| Date | Feature |
-| ---- | ------- |
-| 2026-03-25 | **Summary description** — background LLM summarization of long job descriptions, surfaced inline in the UI |
-| 2026-04-11 | **CV / skill matching** — paste a CV or skill list and AI intent detection maps it to a canonical job keyword, with results scored against it |
-| 2026-08-22 | **Global search** — opt-in coverage for the US, UK, and Singapore (LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice) alongside the Vietnam market |
-| 2026-08-30 | **career-ops integration** — [career-ops](https://github.com/career-ops-hq/career-ops) added Good Jobs as a `providers/goodjobs.mjs` source; ongoing collaboration on integration depth (`/recent-jobs`, `/search-semantic`) and a self-hosting guide in [career-ops-hq/career-ops#3521](https://github.com/career-ops-hq/career-ops/discussions/3521) |
 
 ## 🚀 Quick Start
 
