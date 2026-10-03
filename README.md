@@ -11,9 +11,9 @@
   <a href="CONTRIBUTING.md"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen"></a>
 </p>
 
-> **One search box → every job board.** Good Jobs is a self-hosted job search aggregator that scrapes recently posted jobs from **18 sources** and streams results to your browser in real time over SSE — with AI-powered intent detection, skill extraction, vector-based related-job supplements, and a permanent Redis cache warmed every 2 hours.
+> **One search box → every job board.** Good Jobs is a self-hosted job search aggregator that scrapes recently posted jobs from **20 sources** and streams results to your browser in real time over SSE — with AI-powered intent detection, skill extraction, vector-based related-job supplements, and a permanent Redis cache warmed every 2 hours.
 
-🇻🇳 **Vietnam is the core market** — LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet, TopDev, JobsGo, CareerLink, Glints, ViecOi, Indeed.
+🇻🇳 **Vietnam is the core market** — LinkedIn, ITViec, TopCV, VietnamWorks, CareerViet, TopDev, JobsGo, CareerLink, Glints, ViecOi, Indeed, TechJobs, Xóm Jobs.
 🌍 **Opt-in global mode** covers the US, UK, and Singapore — LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice. Just type the city; the country is inferred automatically ("nyc" → New York → US sources).
 
 ## 🗓️ Release Timeline
@@ -31,7 +31,7 @@
 
 ## 🔎 The Job Boards
 
-**18 sources, one query.** Every board below is scraped live on each search and merged into a single deduplicated feed.
+**20 sources, one query.** Every board below is scraped live on each search and merged into a single deduplicated feed.
 
 ### 🇻🇳 Vietnam
 
@@ -48,6 +48,8 @@
 | [Glints](https://glints.com) | Southeast Asia startups | Headless Chromium, full enrichment |
 | [ViecOi](https://viecoi.vn) | Foreign-invested firms in VN | Static HTML, full enrichment |
 | [Indeed VN](https://vn.indeed.com) | Aggregated listings at scale | Static HTML, inline enrichment |
+| [TechJobs](https://techjobs.vn) | IT job aggregator, company career pages | Public website, server-rendered data |
+| [Xóm Jobs](https://jobs.xomdata.com) | Data & AI roles | Public website, static HTML |
 
 ### 🌍 Global (US · UK · SG)
 

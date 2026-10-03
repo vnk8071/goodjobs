@@ -1,11 +1,13 @@
 import re
 import time as _time
 from datetime import date, timedelta
+from urllib.parse import quote_plus
 
 from bs4 import BeautifulSoup
 
 from ..constants import HEADERS, CHROMIUM_ARGS, RECENT_DAYS
 from ..utils import _relative_display, _clean_html, _extract_html, _truncate
+from ..matching import strip_generic_role
 
 _JOBSGO_CITY_SLUGS: dict[str, str] = {
     "ho chi minh": "ho-chi-minh",
@@ -24,11 +26,14 @@ def scrape_jobsgo(keyword: str, location: str = "Ho Chi Minh City", max_results:
     if location.strip().lower() == "remote":
         keyword  = f"remote {keyword}"
         location = "Ho Chi Minh City"
-    keyword_slug = keyword.strip().lower().replace(" ", "-")
     city_slug    = _jobsgo_city_slug(location or "Ho Chi Minh City")
     if city_slug is None:
         return []
-    url = f"https://jobsgo.vn/viec-lam-{keyword_slug}-tai-{city_slug}.html"
+    # JobsGo's exact-phrase search is very narrow ("Backend Engineer" → 1 job), while the
+    # distinctive word alone ("backend" → 10). Search on that word and let the title filter
+    # keep the relevant ones.
+    query = strip_generic_role(keyword)
+    url = f"https://jobsgo.vn/viec-lam-tai-{city_slug}.html?q={quote_plus(query)}"
     return _jobsgo_playwright(url, max_results)
 
 

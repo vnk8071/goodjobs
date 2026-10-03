@@ -13,6 +13,8 @@ export interface Job {
     | "CareerViet"
     | "JobsGo"
     | "CareerLink"
+    | "TechJobs"
+    | "XomData"
     | "Direct";
   posted?: string;
   posted_date?: string;   // ISO date YYYY-MM-DD for sorting

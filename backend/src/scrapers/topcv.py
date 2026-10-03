@@ -238,7 +238,7 @@ def _parse_topcv(
         company_el = card.select_one("a.company, div.company a, span.company-name")
         company = company_el.get_text(strip=True) if company_el else "N/A"
 
-        loc_el = card.select_one("div.address, span.address, label.address")
+        loc_el = card.select_one("a.address, div.address, span.address, label.address, span.city-text")
         location = loc_el.get_text(strip=True) if loc_el else ""
 
         salary_el = card.select_one(
@@ -250,7 +250,9 @@ def _parse_topcv(
             "label.deadline, div.deadline, span[class*='date'], label[class*='date']"
         )
         posted_text = date_el.get_text(strip=True) if date_el else ""
-        days_ago = _topcv_days_ago(posted_text)
+        # Search cards no longer show a posting date. Use the scrape time for those
+        # (as ViecOi does) rather than dropping every card. Unparseable text still drops.
+        days_ago = _topcv_days_ago(posted_text) if posted_text else 0
 
         posted_date = (
             (date.today() - timedelta(days=days_ago)).isoformat()
