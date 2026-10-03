@@ -1,0 +1,4 @@
+[submodule "thirdparty/career-ops"]
+	path = thirdparty/career-ops
+	url = https://github.com/vnk8071/career-ops.git
+	branch = feat/goodjobs-provider

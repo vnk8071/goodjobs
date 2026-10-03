@@ -597,24 +597,29 @@
       <!-- Stat cards -->
       <div class="stats-grid" style="margin-bottom:1.5rem">
         <div class="stat-card">
-          <div class="label">Total Requests</div>
+          <div class="label">User Searches</div>
           <div class="value" id="aStatTotal">—</div>
-          <div class="sub">all time</div>
+          <div class="sub">all time · excludes scrape jobs</div>
         </div>
         <div class="stat-card">
           <div class="label">Today</div>
           <div class="value" id="aStatToday">—</div>
-          <div class="sub">searches</div>
+          <div class="sub" id="aStatTodaySub">user searches</div>
         </div>
         <div class="stat-card">
           <div class="label">Unique IPs</div>
           <div class="value" id="aStatIPs">—</div>
-          <div class="sub">visitors</div>
+          <div class="sub">visitors, all time</div>
         </div>
         <div class="stat-card">
           <div class="label">Top Keyword</div>
           <div class="value" style="font-size:1.1rem;line-height:1.2" id="aStatTopKw">—</div>
-          <div class="sub" id="aStatTopKwSub"></div>
+          <div class="sub" id="aStatTopKwSub">last 7 days</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Missed Scrape Cycles</div>
+          <div class="value" id="aStatMissed">—</div>
+          <div class="sub" id="aStatMissedSub">last 30 days · 10:00 / 17:00 ICT</div>
         </div>
       </div>
 
@@ -638,7 +643,7 @@
       <!-- Week + Intent row -->
       <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.5rem">
         <div class="table-card" style="padding:1.25rem">
-          <div style="font-weight:700;font-size:0.95rem;margin-bottom:1rem">Requests by Week (last 7 days)</div>
+          <div style="font-weight:700;font-size:0.95rem;margin-bottom:1rem">Last 30 days · user searches vs scrape jobs</div>
           <canvas id="weekChart" height="100"></canvas>
         </div>
         <div class="table-card" style="padding:1.25rem">
@@ -649,10 +654,67 @@
         </div>
       </div>
 
+      <!-- Scrape health: one row per day, morning (10:00) and evening (17:00) cycles -->
+      <div class="table-card" style="margin-bottom:1.5rem">
+        <div class="table-card-header">
+          <h2>Scrape Health <span id="scrapeHealthSummary" class="text-muted" style="font-weight:400;font-size:0.85rem"></span></h2>
+        </div>
+        <p style="padding:0 1.25rem;margin:0 0 0.75rem;font-size:0.8rem;color:var(--muted)">
+          Each scheduled cycle should log one entry per warmup keyword×location pair
+          (<span id="expectedCycleSize">—</span> expected). Click a day to see its searches.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>User searches</th>
+                <th>Unique IPs</th>
+                <th>Morning 10:00</th>
+                <th>Evening 17:00</th>
+              </tr>
+            </thead>
+            <tbody id="scrapeHealthBody">
+              <tr><td colspan="5" class="loading">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Day detail -->
+      <div class="table-card" style="margin-bottom:1.5rem">
+        <div class="table-card-header" style="flex-wrap:wrap;gap:0.75rem">
+          <h2>Day Detail</h2>
+          <div style="display:flex;gap:0.5rem;align-items:center">
+            <input id="dayPicker" type="date" class="filter-input" style="width:auto">
+            <button class="refresh-btn" onclick="loadDay()">Show</button>
+          </div>
+        </div>
+        <div id="daySummary" style="padding:0 1.25rem 0.75rem;font-size:0.85rem;color:var(--muted)">
+          Pick a day, or click a row in Scrape Health.
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Keyword</th>
+                <th>Location</th>
+                <th>IP</th>
+                <th>Intent</th>
+              </tr>
+            </thead>
+            <tbody id="dayBody">
+              <tr><td colspan="5" class="loading text-muted">No day selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Recent searches table -->
       <div class="table-card">
         <div class="table-card-header">
-          <h2>Recent Searches</h2>
+          <h2>Recent Searches <span class="text-muted" style="font-weight:400;font-size:0.85rem">user searches only</span></h2>
         </div>
         <div class="table-wrap">
           <table>
@@ -966,30 +1028,32 @@
         });
       } // end typeof Chart guard (hourly)
 
-      // Weekly chart
+      // Last-30-days chart: user searches vs. automated scrape entries, stacked
       if (_weekChart) { _weekChart.destroy(); _weekChart = null; }
       if (typeof Chart !== "undefined") {
-        const weekData = data.requests_by_week || [];
+        const days = data.daily || [];
         const wCtx = document.getElementById("weekChart").getContext("2d");
         _weekChart = new Chart(wCtx, {
           type: "bar",
           data: {
-            labels: weekData.map(d => d.date.substring(5)),  // MM-DD
-            datasets: [{
-              data: weekData.map(d => d.count),
-              backgroundColor: "#3b82f6",
-              borderRadius: 4,
-            }],
+            labels: days.map(d => d.date.substring(5)),  // MM-DD
+            datasets: [
+              { label: "User searches", data: days.map(d => d.user), backgroundColor: "#3b82f6", borderRadius: 3, stack: "s" },
+              { label: "Scrape jobs", data: days.map(d => d.scrape), backgroundColor: "#cbd5e1", borderRadius: 3, stack: "s" },
+            ],
           },
           options: {
-            plugins: { legend: { display: false } },
+            plugins: { legend: { display: true, position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } },
             scales: {
-              x: { grid: { display: false }, ticks: { font: { size: 11 } } },
-              y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } } },
+              x: { stacked: true, grid: { display: false }, ticks: { font: { size: 10 }, autoSkip: true, maxRotation: 0 } },
+              y: { stacked: true, beginAtZero: true, ticks: { precision: 0, font: { size: 11 } } },
             },
           },
         });
       }
+
+      renderStats30(data);
+      renderScrapeHealth(data);
 
       // Intent breakdown doughnut chart
       if (_intentChart) { _intentChart.destroy(); _intentChart = null; }
@@ -1052,8 +1116,8 @@
                 ? `<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">cv / skills</span>`
                 : s.intent === "not_job"
                   ? `<span style="background:#fee2e2;color:#b91c1c;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">not job</span>`
-                  : s.intent === "warmup"
-                  ? `<span style="background:#f3e8ff;color:#7e22ce;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">warmup</span>`
+                  : s.intent === "warmup_job"
+                  ? `<span title="Real visitor, keyword is on the warmup list" style="background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">job title · warmup kw</span>`
                   : `<span style="color:var(--muted);font-size:0.75rem">—</span>`;
             return `<tr>
                   <td class="text-muted mono">${escHtml(time)}</td>
@@ -1063,6 +1127,91 @@
                   <td>${intentBadge}</td>
                 </tr>`;
           }).join("");
+    }
+
+    // ---- Analytics: 30-day stats, scrape health, day detail ----
+
+    let _lastAnalytics = null;
+
+    function statusBadge(status) {
+      const styles = {
+        ok:      ["#dcfce7", "#15803d", "ok"],
+        partial: ["#fef9c3", "#a16207", "partial"],
+        missed:  ["#fee2e2", "#b91c1c", "missed"],
+        pending: ["#e2e8f0", "#475569", "pending"],
+        unknown: ["#e2e8f0", "#475569", "unknown"],
+      };
+      const [bg, fg, label] = styles[status] || styles.unknown;
+      return `<span style="background:${bg};color:${fg};border-radius:4px;padding:2px 7px;font-size:0.75rem;font-weight:600">${label}</span>`;
+    }
+
+    function cycleCell(c) {
+      if (!c) return `<span class="text-muted">—</span>`;
+      return `${statusBadge(c.status)} <span class="text-muted mono" style="font-size:0.78rem">${c.count}/${c.expected}</span>`;
+    }
+
+    function renderStats30(data) {
+      const missed = data.missed_cycles ?? 0;
+      const el = document.getElementById("aStatMissed");
+      el.textContent = missed.toLocaleString();
+      el.style.color = missed > 0 ? "#b91c1c" : "";
+      document.getElementById("aStatTodaySub").textContent =
+        `user searches · ${(data.today_scrape_requests ?? 0).toLocaleString()} scrape jobs`;
+      document.getElementById("expectedCycleSize").textContent = data.expected_cycle_size ?? "—";
+    }
+
+    function renderScrapeHealth(data) {
+      _lastAnalytics = data;
+      const rows = [...(data.daily || [])].reverse();  // newest first
+      const missed = data.missed_cycles ?? 0;
+      document.getElementById("scrapeHealthSummary").textContent =
+        `${missed} missed cycle${missed === 1 ? "" : "s"} in the last ${rows.length} days`;
+      document.getElementById("scrapeHealthBody").innerHTML = rows.length === 0
+        ? `<tr><td colspan="5" class="loading text-muted">No data.</td></tr>`
+        : rows.map(r => `
+            <tr class="clickable-row" style="cursor:pointer" onclick="loadDay('${escAttr(r.date)}')">
+              <td class="mono"><strong>${escHtml(r.date)}</strong></td>
+              <td>${r.user}</td>
+              <td>${r.unique_ips}</td>
+              <td>${cycleCell(r.morning)}</td>
+              <td>${cycleCell(r.evening)}</td>
+            </tr>`).join("");
+    }
+
+    async function loadDay(date) {
+      const picker = document.getElementById("dayPicker");
+      const day = date || picker.value || new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+      picker.value = day;
+      const secret = getSecret();
+      if (!secret) return;
+      document.getElementById("dayBody").innerHTML = `<tr><td colspan="5" class="loading">Loading…</td></tr>`;
+      try {
+        const res = await fetch(`${API_BASE}/admin/analytics/day?date=${encodeURIComponent(day)}&secret=${encodeURIComponent(secret)}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        renderDay(await res.json());
+      } catch (e) {
+        document.getElementById("dayBody").innerHTML =
+          `<tr><td colspan="5" class="error-msg">Failed to load: ${escHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderDay(d) {
+      const c = d.cycles || {};
+      document.getElementById("daySummary").innerHTML = `
+        <strong style="color:var(--text)">${escHtml(d.date)}</strong> ·
+        ${d.user_requests} user searches · ${d.unique_ips} unique IPs ·
+        morning ${cycleCell(c.morning)} · evening ${cycleCell(c.evening)}`;
+      const rows = d.searches || [];
+      document.getElementById("dayBody").innerHTML = rows.length === 0
+        ? `<tr><td colspan="5" class="loading text-muted">No user searches on this day.</td></tr>`
+        : rows.map(s => `
+            <tr>
+              <td class="text-muted mono">${escHtml((s.ts || "").substring(11, 16) || "—")}</td>
+              <td><strong>${escHtml(s.keyword || "—")}</strong></td>
+              <td class="text-muted">${escHtml(s.location || "—")}</td>
+              <td class="mono text-muted">${escHtml(s.ip || "—")}</td>
+              <td class="text-muted" style="font-size:0.8rem">${escHtml(s.intent || "—")}</td>
+            </tr>`).join("");
     }
 
     let _embeddedJobs = [];
@@ -1286,6 +1435,7 @@
     window.scrapeKey = scrapeKey;
     window.warmupAll = warmupAll;
     window.loadAnalytics = loadAnalytics;
+    window.loadDay = loadDay;
     window.loadSubmissions = loadSubmissions;
     window.reviewSubmission = reviewSubmission;
 

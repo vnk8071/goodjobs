@@ -20,6 +20,8 @@
 
 | Date | Feature |
 | ---- | ------- |
+| 2026-10-03 | **MCP server** — `mcp/goodjobs_mcp.py` exposes search, recent jobs, semantic search, keyword classification, city normalization, and cache status as read-only tools for MCP clients such as Claude Desktop and Claude Code |
+| 2026-10-03 | **career-ops submodule** — career-ops (branch `feat/goodjobs-provider`) vendored at `thirdparty/career-ops` with the `goodjobs` provider tests |
 | 2026-08-30 | **career-ops integration** — [career-ops](https://github.com/career-ops-hq/career-ops) added Good Jobs as a `providers/goodjobs.mjs` source; ongoing collaboration on integration depth (`/recent-jobs`, `/search-semantic`) and a self-hosting guide in [career-ops-hq/career-ops#3521](https://github.com/career-ops-hq/career-ops/discussions/3521) |
 | 2026-08-22 | **Global search** — opt-in coverage for the US, UK, and Singapore (LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice) alongside the Vietnam market |
 | 2026-04-11 | **CV / skill matching** — paste a CV or skill list and AI intent detection maps it to a canonical job keyword, with results scored against it |
@@ -165,6 +167,8 @@ goodjobs/
 │       ├── api.ts                 # Stream parser, AI classify/normalize calls
 │       ├── ui.ts                  # Table rendering, modal, skill pills, badges
 │       └── types.ts               # Shared TypeScript interfaces
+├── thirdparty/
+│   └── career-ops/                # Git submodule: career-ops (consumes this API via providers/goodjobs.mjs)
 ├── docker-compose.yml             # Local development
 ├── docker-compose.server.yml      # Production (+ cloudflared tunnel)
 └── .claude/skills/                # Agent skills for common repo tasks
@@ -203,6 +207,63 @@ This repo ships [agent skills](.claude/skills/) so coding agents (Claude Code, o
 - [`debug-scrapers`](.claude/skills/debug-scrapers/SKILL.md) — diagnosing broken selectors, anti-bot blocks, and empty results
 - [`cache-ops`](.claude/skills/cache-ops/SKILL.md) — inspecting, flushing, and reasoning about the Redis cache
 - [`run-and-verify`](.claude/skills/run-and-verify/SKILL.md) — start the stack and verify changes end-to-end
+
+## 🧩 Third-party: career-ops
+
+[career-ops](https://github.com/vnk8071/career-ops/tree/feat/goodjobs-provider) is vendored as a git submodule at `thirdparty/career-ops` (branch `feat/goodjobs-provider`). It consumes Good Jobs as a source via `providers/goodjobs.mjs`, a thin client that calls the public `POST /scrape` endpoint and normalizes the results.
+
+```bash
+# Clone with the submodule
+git clone --recurse-submodules https://github.com/vnk8071/goodjobs.git
+
+# Or, in an existing clone
+git submodule update --init --recursive
+```
+
+Test the provider:
+
+```bash
+cd thirdparty/career-ops
+node --test tests/providers/goodjobs.test.mjs
+```
+
+The unit tests cover URL resolution, request building, normalization, and retry behavior. They do not hit the network. The provider's default backend is `https://api.goodjobs.io.vn`. Because career-ops' SSRF guard blocks loopback addresses, a local `docker compose up` instance cannot be used as a source; point `api:` at a publicly reachable HTTPS deployment instead.
+
+To update the submodule to the latest branch commit:
+
+```bash
+git submodule update --remote thirdparty/career-ops
+```
+
+## 🔌 MCP Server
+
+`mcp/goodjobs_mcp.py` exposes Good Jobs to MCP clients (Claude Code, Claude Desktop, …) as read-only tools over stdio. It calls the public backend by default, so no local stack is needed.
+
+| Tool | Wraps | Purpose |
+| ---- | ----- | ------- |
+| `search_jobs` | `POST /scrape` | Live search by keyword and location; newest first |
+| `recent_jobs` | `GET /recent-jobs` | Latest postings across cached searches, optionally one board |
+| `semantic_search` | `GET /search-semantic` | Match by meaning, e.g. a pasted CV summary |
+| `classify_keyword` | `POST /classify-input` | Turn free text or a CV into a canonical job title |
+| `normalize_city` | `POST /normalize-city` | Fix city typos and abbreviations ("hcmc" → Ho Chi Minh City) |
+| `cache_status` | `GET /cache/status` | Cache freshness and job counts per keyword and location |
+
+Admin and submission routes are deliberately not exposed.
+
+```bash
+cd mcp
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+python -m pytest -q test_goodjobs_mcp.py   # unit tests, no network
+```
+
+Register it with Claude Code:
+
+```bash
+claude mcp add goodjobs -- /absolute/path/to/goodjobs/mcp/.venv/bin/python /absolute/path/to/goodjobs/mcp/goodjobs_mcp.py
+```
+
+Set `GOODJOBS_API_URL` to point at another deployment. Use `http://localhost:8000` for a local `docker compose up`. The first `search_jobs` call on an uncached keyword can take a minute, because it runs a full multi-board scrape.
 
 ## 🤝 Contributing
 
