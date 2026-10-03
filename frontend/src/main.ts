@@ -148,6 +148,15 @@ let _pendingSharedJobLink: string | null = null;
  *  triggered both from the button click and from accepting an AI suggestion.
  *  `rawInput` — original free-form CV/skills text; used for vector search when set.
  *  `estimatedLevel` — AI-inferred experience level from CV ("junior"|"middle"|"senior"). */
+/** Point the "Search on Google" link at a Google web search for the same keyword and city.
+ *  A link only: Google results are opened in the user's browser, never fetched by the backend. */
+function setGoogleSearchLink(keyword: string, location: string): void {
+  const link = document.getElementById("googleSearchLink") as HTMLAnchorElement | null;
+  if (!link) return;
+  const q = new URLSearchParams({ q: `${keyword} ${location}`.trim() });
+  link.href = `https://www.google.com/search?${q.toString()}`;
+}
+
 async function runSearch(keyword: string, location: string | undefined, sharedJobLink: string | null, rawInput = "", replaceInput = false, estimatedLevel = "", intent = ""): Promise<void> {
   const fromCvOrSkills = rawInput.length > 0;
   abortController?.abort();
@@ -156,6 +165,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   hideSuggestionBanner();
   // Intent box is shown for all search types; only hide on explicit reset.
   setSearchContext(keyword, location);
+  setGoogleSearchLink(keyword, location ?? getLocation());
   setScoreColumnVisible(fromCvOrSkills);
   // Only replace input when explicitly requested (e.g. clicking an alternative keyword).
   if (replaceInput) {
