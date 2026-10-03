@@ -32,6 +32,7 @@ from src.cache import (
 )
 from src.constants import MAX_CONCURRENT, ADMIN_SECRET, RECENT_DAYS
 from src.logger import log_search, log_app
+from src.analytics import TZ_ICT, read_search_entries, summarize, day_detail
 from src.utils import timed_scrape
 from src.matching import (
     title_matches,
@@ -682,150 +683,31 @@ async def admin_embed_test(secret: str = "", n: int = 3):
 
 
 @app.get("/admin/analytics")
-async def admin_analytics(secret: str = ""):
-    """Aggregate search.log into request statistics and write analytics.json backup."""
+async def admin_analytics(secret: str = "", days: int = 30):
+    """User-traffic analytics over search.log, plus per-day scrape-cycle health.
+
+    Warmup scrapes are excluded from user counts and reported under `scrape_*`
+    and `daily[].morning/evening`. See src/analytics.py.
+    """
     if ADMIN_SECRET and secret != ADMIN_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    import glob as _glob
-    from collections import Counter
-
+    days = max(1, min(days, 90))
     log_dir = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
     backup_path = os.path.join(log_dir, "analytics.json")
 
-    # Collect all rotated log files: search.log, search.log.1, ..., search.log.5
-    # Filter to only numeric suffixes to avoid crashing on e.g. search.log.gz
-    import re as _re
-    _log_re = _re.compile(r"search\.log(\.\d+)?$")
-    log_files = sorted(
-        [p for p in _glob.glob(os.path.join(log_dir, "search.log*")) if _log_re.search(p)],
-        key=lambda p: (0 if p.endswith("search.log") else int(p.rsplit(".", 1)[-1])),
-    )
-
-    entries: list[dict] = []
-    for path in log_files:
-        try:
-            with open(path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entries.append(json.loads(line))
-                    except Exception:
-                        continue
-        except OSError:
-            continue
-
-    # Fall back to backup if no entries parsed
+    entries = await run_in_threadpool(read_search_entries, log_dir)
     if not entries:
+        # Fall back to the last good snapshot if the logs are missing or empty.
         try:
             with open(backup_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            return {
-                "total_requests": 0,
-                "today_requests": 0,
-                "unique_ips": 0,
-                "top_keywords": [],
-                "requests_by_hour": {str(h): 0 for h in range(24)},
-                "requests_by_week": [],
-                "intent_breakdown": {"job_title": 0, "cv_or_skills": 0, "not_job": 0},
-                "recent_searches": [],
-            }
+            return summarize([], datetime.now(TZ_ICT), expected_pairs=0, days=days)
 
-    _TZ_ICT = timezone(timedelta(hours=7))
-    today_str = datetime.now(_TZ_ICT).strftime("%Y-%m-%d")
+    expected = await _expected_cycle_size()
+    result = summarize(entries, datetime.now(TZ_ICT), expected_pairs=expected, days=days)
 
-    keyword_counter: Counter = Counter()
-    week_keyword_counter: Counter = Counter()
-    hour_counter_today: Counter = Counter()
-    day_counter: Counter = Counter()
-    intent_counter: Counter = Counter()
-    unique_ips: set = set()
-    today_count = 0
-
-    # Build last-7-days date strings for requests_by_week
-    week_dates = [
-        (datetime.now(_TZ_ICT) - timedelta(days=i)).strftime("%Y-%m-%d")
-        for i in range(6, -1, -1)
-    ]
-    week_dates_set = set(week_dates)
-
-    for e in entries:
-        kw = e.get("keyword", "").strip()
-        ip = e.get("ip", "")
-        ts = e.get("ts", "")
-
-        in_week = False
-        if ts:
-            try:
-                dt = datetime.fromisoformat(ts)
-                date_str = dt.strftime("%Y-%m-%d")
-                if date_str == today_str:
-                    hour_counter_today[dt.hour] += 1
-                    today_count += 1
-                if date_str in week_dates_set:
-                    day_counter[date_str] += 1
-                    in_week = True
-            except Exception:
-                pass
-
-        if kw:
-            keyword_counter[kw.lower()] += 1
-            if in_week:
-                week_keyword_counter[kw.lower()] += 1
-        if ip:
-            unique_ips.add(ip)
-        intent = e.get("intent", "")
-        if intent:
-            intent_counter[intent] += 1
-
-    top_keywords = [
-        {"keyword": kw, "count": cnt}
-        for kw, cnt in week_keyword_counter.most_common(10)
-    ]
-
-    requests_by_hour = {str(h): hour_counter_today.get(h, 0) for h in range(24)}
-    requests_by_week = [
-        {"date": d, "count": day_counter.get(d, 0)} for d in week_dates
-    ]
-
-    # Filter out warmup entries *before* taking the tail — warmup fires in
-    # bursts (~30 keyword×location pairs every 2 hours) that can otherwise
-    # fill the last N raw log lines and crowd out genuine user searches.
-    non_warmup_entries = [e for e in entries if e.get("intent") != "warmup"]
-    recent_searches = [
-        {
-            "ts": e.get("ts", ""),
-            "ip": e.get("ip", ""),
-            "keyword": e.get("keyword", ""),
-            "location": e.get("location", ""),
-            "intent": e.get("intent", ""),
-        }
-        for e in reversed(non_warmup_entries[-100:])
-    ]
-
-    # Warmup is excluded from the breakdown entirely — it's automated
-    # background traffic, not a real user's search intent.
-    intent_breakdown = {
-        "job_title": intent_counter.get("job_title", 0),
-        "cv_or_skills": intent_counter.get("cv_or_skills", 0),
-        "not_job": intent_counter.get("not_job", 0),
-    }
-
-    result = {
-        "total_requests": len(entries),
-        "today_requests": today_count,
-        "unique_ips": len(unique_ips),
-        "top_keywords": top_keywords,
-        "requests_by_hour": requests_by_hour,
-        "requests_by_week": requests_by_week,
-        "intent_breakdown": intent_breakdown,
-        "recent_searches": recent_searches,
-    }
-
-    # Write backup
     try:
         with open(backup_path, "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)
@@ -833,6 +715,31 @@ async def admin_analytics(secret: str = ""):
         log_app(f"[analytics] failed to write backup: {e}", "WARNING")
 
     return result
+
+
+@app.get("/admin/analytics/day")
+async def admin_analytics_day(date: str, secret: str = ""):
+    """User searches and scrape-cycle health for a single day (YYYY-MM-DD, ICT)."""
+    if ADMIN_SECRET and secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+
+    log_dir = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
+    entries = await run_in_threadpool(read_search_entries, log_dir)
+    expected = await _expected_cycle_size()
+    return day_detail(entries, day, datetime.now(TZ_ICT), expected)
+
+
+async def _expected_cycle_size() -> int:
+    """Warmup pairs per scrape cycle: keywords × locations. 0 if Redis is unavailable."""
+    try:
+        return len(await get_warmup_keywords()) * len(_WARMUP_LOCATIONS)
+    except Exception as e:
+        log_app(f"[analytics] could not load warmup keywords: {e}", "WARNING")
+        return 0
 
 
 @app.get("/recent-jobs")
