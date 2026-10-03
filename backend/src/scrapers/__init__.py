@@ -16,6 +16,7 @@ from .glints import scrape_glints, scrape_glints_detail_one
 from .viecoi import scrape_viecoi, scrape_viecoi_detail_one
 from .techjobs import scrape_techjobs
 from .xomdata import scrape_xomdata
+from .google import scrape_google
 
 __all__ = [
     "scrape_linkedin",
@@ -46,5 +47,6 @@ __all__ = [
     "scrape_viecoi",
     "scrape_techjobs",
     "scrape_xomdata",
+    "scrape_google",
     "scrape_viecoi_detail_one",
 ]

@@ -267,6 +267,7 @@ _SCRAPERS = {
     "viecoi": scrape_viecoi,
     "techjobs": scrape_techjobs,
     "xomdata": scrape_xomdata,
+    "google": scrape_google,
 }
 
 _GLOBAL_SCRAPERS = {

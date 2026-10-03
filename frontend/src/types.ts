@@ -15,6 +15,7 @@ export interface Job {
     | "CareerLink"
     | "TechJobs"
     | "XomData"
+    | "Google"
     | "Direct"
     | (string & {});  // TechJobs jobs carry their apply domain as source
   posted?: string;

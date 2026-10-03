@@ -232,8 +232,11 @@ def _parse_vietnamworks(soup: BeautifulSoup, max_results: int) -> list[dict]:
         parts = [p.strip() for p in full_text.split("|") if p.strip()]
 
         posted_text = ""
+        # Cards show "Cập nhật hôm nay" or "Đăng 4 ngày trước" (or an explicit dd/mm/yyyy date).
         for part in parts:
-            if "cập nhật" in part.lower() or re.search(r"\d{1,2}/\d{1,2}/\d{4}", part):
+            low = part.lower()
+            if ("cập nhật" in low or re.search(r"\bđăng\b.*(trước|hôm)|hôm nay|hôm qua", low)
+                    or re.search(r"\d{1,2}/\d{1,2}/\d{4}", part)):
                 posted_text = part
                 break
 

@@ -7,6 +7,7 @@ no browser is needed.
 """
 
 import json
+import time
 import unicodedata
 from urllib.parse import urlsplit, urlunsplit
 import re
@@ -77,6 +78,36 @@ def _canonical_apply_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
 
 
+_RETRY_DELAY_S = 2.0
+_MIN_PAGE_CHARS = 50_000
+
+
+def _get_with_retry(url: str, params: dict):
+    """GET once more after a short pause on a 429/5xx or a transport error. None if still failing."""
+    for attempt in range(2):
+        try:
+            resp = requests.get(url, params=params, headers=HEADERS, timeout=_TIMEOUT)
+            # A real listing page is 180 KB+. A short 200 is a throttling/challenge page, so retry it.
+            if resp.status_code == 200 and len(resp.text) >= _MIN_PAGE_CHARS:
+                return resp
+            if resp.status_code == 200:
+                print(f"[techjobs] short response ({len(resp.text)} chars), attempt {attempt + 1}")
+                retryable = True
+                if attempt == 0:
+                    time.sleep(_RETRY_DELAY_S)
+                continue
+            print(f"[techjobs] HTTP {resp.status_code} (attempt {attempt + 1})")
+            retryable = resp.status_code == 429 or resp.status_code >= 500
+        except requests.RequestException as e:
+            print(f"[techjobs] {e} (attempt {attempt + 1})")
+            retryable = True
+        if not retryable:
+            return None
+        if attempt == 0:
+            time.sleep(_RETRY_DELAY_S)
+    return None
+
+
 def _parse_iso(value: str | None) -> float:
     if not value:
         return 0.0
@@ -144,8 +175,8 @@ def scrape_techjobs(keyword: str, location: str = "Ho Chi Minh City", max_result
             params = {"q": query, "sort": "newest", "pageSize": _PAGE_SIZE}
             if page > 1:
                 params["page"] = page
-            resp = requests.get(_BASE, params=params, headers=HEADERS, timeout=_TIMEOUT)
-            if resp.status_code != 200:
+            resp = _get_with_retry(_BASE, params)
+            if resp is None:
                 break
             page_jobs = [
                 j for j in _parse_jobs(_rsc_payload(resp.text))

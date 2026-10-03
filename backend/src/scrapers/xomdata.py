@@ -7,6 +7,7 @@ and leaves title relevance to the caller's title filter.
 """
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -123,6 +124,36 @@ def _label_by_apply_board(jobs: list[dict]) -> None:
             job["link"] = apply_url
 
 
+_RETRY_DELAY_S = 2.0
+_MIN_PAGE_CHARS = 50_000
+
+
+def _get_with_retry(url: str):
+    """GET once more after a short pause on a 429/5xx or a transport error. None if still failing."""
+    for attempt in range(2):
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=_TIMEOUT)
+            # A real listing page is 180 KB+. A short 200 is a throttling/challenge page, so retry it.
+            if resp.status_code == 200 and len(resp.text) >= _MIN_PAGE_CHARS:
+                return resp
+            if resp.status_code == 200:
+                print(f"[xomdata] short response ({len(resp.text)} chars), attempt {attempt + 1}")
+                retryable = True
+                if attempt == 0:
+                    time.sleep(_RETRY_DELAY_S)
+                continue
+            print(f"[xomdata] HTTP {resp.status_code} for {url} (attempt {attempt + 1})")
+            retryable = resp.status_code == 429 or resp.status_code >= 500
+        except requests.RequestException as e:
+            print(f"[xomdata] {e} (attempt {attempt + 1})")
+            retryable = True
+        if not retryable:
+            return None
+        if attempt == 0:
+            time.sleep(_RETRY_DELAY_S)
+    return None
+
+
 def scrape_xomdata(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
     """Read the Xóm Jobs listing and keep jobs in the requested city. Returns [] on any failure.
 
@@ -133,8 +164,8 @@ def scrape_xomdata(keyword: str, location: str = "Ho Chi Minh City", max_results
     if not any(city in key for city in _SUPPORTED_CITIES):
         return []
     try:
-        resp = requests.get(_BASE + "/", headers=HEADERS, timeout=_TIMEOUT)
-        if resp.status_code != 200:
+        resp = _get_with_retry(_BASE + "/")
+        if resp is None:
             return []
         jobs = _parse_cards(resp.text, location or "")
         _label_by_apply_board(jobs)
