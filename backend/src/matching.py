@@ -407,3 +407,24 @@ def posted_relative(posted_ts_val: float) -> str:
 
     years = max(1, delta_days // 365)
     return f"{years} year{'s' if years != 1 else ''} ago"
+
+
+# Sources whose listings are already remote-only (LinkedIn's remote filter, and the
+# remote-only job boards).
+_REMOTE_ONLY_SOURCES = {"LinkedIn", "RemoteOK", "WeWorkRemotely"}
+_REMOTE_MARKERS = re.compile(
+    r"\bremote\b|\bwfh\b|work[\s-]from[\s-]home|từ xa|làm việc tại nhà|làm tại nhà",
+    re.IGNORECASE,
+)
+
+
+def is_remote_job(job: dict) -> bool:
+    """True if a job can be done remotely. "Hybrid" and "onsite" do not count."""
+    if job.get("source") in _REMOTE_ONLY_SOURCES:
+        return True
+    text = " ".join([
+        job.get("title", "") or "",
+        job.get("location", "") or "",
+        (job.get("description", "") or "")[:2000],
+    ])
+    return bool(_REMOTE_MARKERS.search(text))

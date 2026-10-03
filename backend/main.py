@@ -38,6 +38,7 @@ from src.matching import (
     title_matches,
     title_matches_any_anchor,
     title_matches_loose,
+    is_remote_job,
     extract_skills,
     posted_ts,
     posted_relative,
@@ -1221,6 +1222,12 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
 
     # For warmup, keep matching strict to reduce cache noise; for user searches, be looser.
     match_fn = title_matches_any_anchor if is_warmup else title_matches_loose
+    # "Remote" searches show remote jobs only; every other search is unaffected.
+    is_remote_search = req.location.strip().lower() == "remote"
+
+    def _remote_ok(j: dict) -> bool:
+        return not is_remote_search or is_remote_job(j)
+
 
     def _tag_level(j: dict) -> dict:
         """Mark job as level_match if its title contains any of the requested/inferred level words."""
@@ -1239,6 +1246,8 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
             if not is_warmup and not title_matches_loose(
                 j.get("title", ""), match_keyword
             ):
+                continue
+            if not _remote_ok(j):
                 continue
             j["posted_ts"] = posted_ts(j)
             j["posted"] = posted_relative(j["posted_ts"])
@@ -1300,7 +1309,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                     unique_cache = [
                         j
                         for j in unique_cache
-                        if match_fn(j.get("title", ""), match_keyword)
+                        if match_fn(j.get("title", ""), match_keyword) and _remote_ok(j)
                         and j.get("posted_ts", 0) >= age_cutoff_cv
                     ]
                     for j in unique_cache:
@@ -1386,7 +1395,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 unique_jobs = [
                     j
                     for j in unique_jobs
-                    if match_fn(j.get("title", ""), match_keyword)
+                    if match_fn(j.get("title", ""), match_keyword) and _remote_ok(j)
                 ]
                 # Fallback: if no jobs matched, retry with generic role words stripped
                 # so "LLM Specialist" matches cached "LLM Engineer" jobs.
@@ -1396,7 +1405,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         unique_jobs = [
                             j
                             for j in all_cached_jobs_by_link.values()
-                            if match_fn(j.get("title", ""), fallback_kw)
+                            if match_fn(j.get("title", ""), fallback_kw) and _remote_ok(j)
                         ]
                 for j in unique_jobs:
                     _tag_level(j)
@@ -1450,7 +1459,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                 refiltered = [
                     j
                     for j in fuzzy_jobs
-                    if match_fn(j.get("title", ""), match_keyword)
+                    if match_fn(j.get("title", ""), match_keyword) and _remote_ok(j)
                     and j.get("posted_ts", 0) >= age_cutoff_fuzzy
                 ]
                 if not refiltered:
@@ -1459,7 +1468,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                         refiltered = [
                             j
                             for j in fuzzy_jobs
-                            if match_fn(j.get("title", ""), fallback_kw)
+                            if match_fn(j.get("title", ""), fallback_kw) and _remote_ok(j)
                             and j.get("posted_ts", 0) >= age_cutoff_fuzzy
                         ]
                 for j in refiltered:
