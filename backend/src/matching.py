@@ -335,7 +335,17 @@ def title_matches_any_anchor(title: str, keyword: str) -> bool:
     anchors = [w for w in kw_words if w not in _GENERIC_ROLE_WORDS and w not in _LEVEL_WORDS]
     if not anchors:
         return title_matches_loose(title, keyword)
-    return any(_match_index(a, core_words) >= 0 for a in anchors)
+    return any(_anchor_hit(a, core_words) for a in anchors)
+
+
+def _anchor_hit(anchor: str, core_words: list[str]) -> bool:
+    """Exact or synonym/prefix match only. Character-level similarity is skipped on purpose:
+    "marketing" and "manager" overlap enough to pass it and would pull in every manager title."""
+    for variant in _expand(anchor):
+        for tw in core_words:
+            if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
+                return True
+    return False
 
 
 def extract_skills(title: str, description: str) -> list[str]:

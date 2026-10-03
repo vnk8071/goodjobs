@@ -8,6 +8,7 @@ no browser is needed.
 
 import json
 import unicodedata
+from urllib.parse import urlsplit, urlunsplit
 import re
 from datetime import datetime, timezone
 
@@ -59,6 +60,23 @@ def _rsc_payload(html: str) -> str:
     return "".join(parts)
 
 
+def _canonical_apply_url(url: str) -> str:
+    """Return the form other scrapers use, so one posting has one link.
+
+    ITViec serves the same posting at /viec-lam-it/<slug>-<id> (TechJobs) and
+    /it-jobs/<slug>-<id> (ITViec scraper). LinkedIn and ITViec links also carry
+    tracking query strings. Link-based dedup only works when the links match exactly.
+    """
+    parts = urlsplit(url)
+    host = parts.netloc.lower().removeprefix("www.")
+    if host not in ("itviec.com", "linkedin.com"):
+        return url
+    path = parts.path
+    if host == "itviec.com" and path.startswith("/viec-lam-it/"):
+        path = "/it-jobs/" + path[len("/viec-lam-it/"):]
+    return urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
 def _parse_iso(value: str | None) -> float:
     if not value:
         return 0.0
@@ -84,7 +102,7 @@ def _parse_jobs(payload: str) -> list[dict]:
         except ValueError:
             continue
         title = (obj.get("title") or "").strip()
-        link = (obj.get("apply_url") or "").strip()
+        link = _canonical_apply_url((obj.get("apply_url") or "").strip())
         if not title or not link.startswith("http") or link in seen:
             continue
         # Prefer the posting date; fall back to when TechJobs first saw the listing.
