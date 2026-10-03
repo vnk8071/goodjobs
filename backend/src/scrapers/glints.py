@@ -44,6 +44,11 @@ def scrape_glints(keyword: str, location: str = "Ho Chi Minh City", max_results:
         f"?keyword={kw_encoded}&country=VN&{loc_param}"
     )
     jobs = _glints_playwright_list(url, max_results)
+    # The explore page can repeat a card (e.g. featured and regular listings). Keep the first.
+    unique: dict[str, dict] = {}
+    for j in jobs:
+        unique.setdefault(j.get("link", ""), j)
+    jobs = list(unique.values())
     # Filter out jobs whose card location doesn't match the searched city
     loc_key = effective_location.strip().lower()
     allowed_terms = next(

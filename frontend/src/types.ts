@@ -13,7 +13,11 @@ export interface Job {
     | "CareerViet"
     | "JobsGo"
     | "CareerLink"
-    | "Direct";
+    | "TechJobs"
+    | "XomData"
+    | "Google"
+    | "Direct"
+    | (string & {});  // TechJobs jobs carry their apply domain as source
   posted?: string;
   posted_date?: string;   // ISO date YYYY-MM-DD for sorting
   posted_ts?: number;     // Unix timestamp for precise sort (newer = larger)

@@ -24,7 +24,7 @@ from src.submissions import prune_expired_approved
 from src.vector import upsert_jobs, delete_by_ids
 from src.constants import RECENT_DAYS, VECTOR_RETENTION_DAYS
 from src.logger import log_app, log_search_warmup
-from src.matching import title_matches, extract_skills, posted_ts
+from src.matching import title_matches_any_anchor, extract_skills, posted_ts
 
 from src.scrapers import (
     scrape_linkedin_detail_one,
@@ -210,7 +210,7 @@ async def _scrape_keyword(
             result = []
         for j in result:
             if (
-                title_matches(j.get("title", ""), kw)
+                title_matches_any_anchor(j.get("title", ""), kw)
                 and j.get("link") not in seen_links
             ):
                 seen_links.add(j["link"])

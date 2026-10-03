@@ -60,15 +60,16 @@ def _viecoi_requests(url: str, max_results: int, location: str = "") -> list[dic
         resp = requests.get(url, headers=_VIECOI_HEADERS, timeout=15)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
-        cards = soup.select(".vo-jobs-item.item_job")
+        # Current markup is article.public-job-card; the older .vo-jobs-item layout is kept as fallback.
+        cards = soup.select("article.public-job-card") or soup.select(".vo-jobs-item.item_job")
         jobs = []
         now = _time.time()
         for card in cards:
-            title_el = card.select_one(".job-title-name")
-            link_el = card.select_one('a[href*="viecoi.vn/viec-lam/"]')
-            company_el = card.select_one(".a-company")
+            title_el = card.select_one("a.title_container, .job-title-name")
+            link_el = card.select_one('a.title_container, a.public-job-card__overlay-link, a[href*="/viec-lam/"]')
+            company_el = card.select_one('a[href*="/gioi-thieu-cong-ty/"], .a-company')
             logo_el = card.select_one("img[data-src]")
-            location_el = card.select_one("a.added_detail_information")
+            location_el = card.select_one(".location-container, a.added_detail_information")
             skill_els = card.select("a.cp-tag")
 
             title = title_el.get_text(strip=True) if title_el else ""

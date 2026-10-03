@@ -113,3 +113,27 @@ def timed_scrape(site: str, fn: Callable[..., T], kw: str, loc: str, *args, **kw
     elapsed = time.perf_counter() - t0
     log_app(f"{site} scraper done in {elapsed:.1f}s — {len(result) if isinstance(result, (list, tuple)) else 'N/A'} jobs")
     return result
+
+
+# Apply-link domains that keep their own board label, so a job applied on LinkedIn
+# or ITViec shows as that board.
+_BOARD_BY_DOMAIN = {"linkedin.com": "LinkedIn", "itviec.com": "ITViec"}
+
+
+def board_label(apply_url: str, default: str) -> str:
+    """Return the board label for a job's apply link (LinkedIn/ITViec), else default."""
+    return _BOARD_BY_DOMAIN.get(apply_host(apply_url), default)
+
+
+def apply_host(url: str) -> str:
+    """Return the host a link points to, without a leading "www.". Empty if none."""
+    from urllib.parse import urlparse
+
+    host = (urlparse(url or "").hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def apply_label(url: str) -> str:
+    """Short source label for an apply link: its host without a trailing ".com.vn"."""
+    host = apply_host(url)
+    return host[: -len(".com.vn")] if host.endswith(".com.vn") else host

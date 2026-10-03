@@ -318,6 +318,36 @@ def title_matches_loose(title: str, keyword: str) -> bool:
     return overlap >= 0.2
 
 
+def title_matches_any_anchor(title: str, keyword: str) -> bool:
+    """Return True if the title contains any distinctive word from the keyword.
+
+    Distinctive ("anchor") words are the keyword words left after removing generic
+    role nouns and seniority levels. "Backend Engineer" anchors on "backend", so a
+    title such as "Backend Developer (Golang)" matches even without "engineer".
+    Vietnamese titles work through the same title-side normalization as the other
+    matchers. A keyword with no anchor words (e.g. "Engineer") falls back to
+    title_matches_loose.
+    """
+    kw_phrase, kw_words, core_words = _parse_core(title, keyword)
+
+    if kw_phrase in " ".join(core_words):
+        return True
+    anchors = [w for w in kw_words if w not in _GENERIC_ROLE_WORDS and w not in _LEVEL_WORDS]
+    if not anchors:
+        return title_matches_loose(title, keyword)
+    return any(_anchor_hit(a, core_words) for a in anchors)
+
+
+def _anchor_hit(anchor: str, core_words: list[str]) -> bool:
+    """Exact or synonym/prefix match only. Character-level similarity is skipped on purpose:
+    "marketing" and "manager" overlap enough to pass it and would pull in every manager title."""
+    for variant in _expand(anchor):
+        for tw in core_words:
+            if variant == tw or (len(variant) >= 3 and tw.startswith(variant)):
+                return True
+    return False
+
+
 def extract_skills(title: str, description: str) -> list[str]:
     """Return list of canonical skill names found in title or description."""
     text = f"{title} {description}"

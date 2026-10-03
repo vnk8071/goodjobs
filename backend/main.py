@@ -36,6 +36,7 @@ from src.analytics import TZ_ICT, read_search_entries, summarize, day_detail
 from src.utils import timed_scrape
 from src.matching import (
     title_matches,
+    title_matches_any_anchor,
     title_matches_loose,
     extract_skills,
     posted_ts,
@@ -264,6 +265,9 @@ _SCRAPERS = {
     "careerlink": scrape_careerlink,
     "glints": scrape_glints,
     "viecoi": scrape_viecoi,
+    "techjobs": scrape_techjobs,
+    "xomdata": scrape_xomdata,
+    "google": scrape_google,
 }
 
 _GLOBAL_SCRAPERS = {
@@ -1216,7 +1220,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     asyncio.ensure_future(record_search(ip, keyword, req.location))
 
     # For warmup, keep matching strict to reduce cache noise; for user searches, be looser.
-    match_fn = title_matches if is_warmup else title_matches_loose
+    match_fn = title_matches_any_anchor if is_warmup else title_matches_loose
 
     def _tag_level(j: dict) -> dict:
         """Mark job as level_match if its title contains any of the requested/inferred level words."""
@@ -1230,7 +1234,7 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     def _process(jobs: list[dict]) -> list[dict]:
         filtered = []
         for j in jobs:
-            if is_warmup and not title_matches(j.get("title", ""), match_keyword):
+            if is_warmup and not title_matches_any_anchor(j.get("title", ""), match_keyword):
                 continue
             if not is_warmup and not title_matches_loose(
                 j.get("title", ""), match_keyword
