@@ -7,6 +7,7 @@ no browser is needed.
 """
 
 import json
+import unicodedata
 import re
 from datetime import datetime, timezone
 
@@ -14,7 +15,7 @@ import requests
 
 from ..constants import HEADERS, RECENT_DAYS
 from ..matching import strip_generic_role
-from ..utils import _relative_display
+from ..utils import _relative_display, apply_host, apply_label, board_label
 
 _BASE = "https://techjobs.vn/jobs"
 _PAGE_SIZE = 50
@@ -25,24 +26,25 @@ _RSC_CHUNK_RE = re.compile(r'self\.__next_f\.push\(\[1,"((?:\\.|[^"\\])*)"\]\)')
 # Flat job objects: every field is a string, number, null or boolean. Nested objects are skipped.
 _JOB_OBJ_RE = re.compile(r'\{"id":\d+,(?:"[a-z_]+":(?:"(?:\\.|[^"\\])*"|null|-?\d+(?:\.\d+)?|true|false),?)+\}')
 
-_CITY_PARAMS = {
-    "ho chi minh": "Hồ Chí Minh",
-    "hcm": "Hồ Chí Minh",
-    "hồ chí minh": "Hồ Chí Minh",
-    "hanoi": "Hà Nội",
-    "ha noi": "Hà Nội",
-    "hà nội": "Hà Nội",
-    "da nang": "Đà Nẵng",
-    "danang": "Đà Nẵng",
-    "đà nẵng": "Đà Nẵng",
+# Substrings (accent-free, lowercase) that identify a city in a TechJobs location string.
+# TechJobs writes locations both with and without accents ("Hồ Chí Minh", "Ho Chi Minh").
+_CITY_TERMS = {
+    "ho chi minh": ("ho chi minh", "hcm", "tp.hcm", "saigon", "sai gon"),
+    "hanoi": ("ha noi", "hanoi", "hn"),
+    "da nang": ("da nang", "danang"),
 }
 
 
-def _city_param(location: str) -> str | None:
-    key = location.strip().lower()
-    for candidate, label in _CITY_PARAMS.items():
-        if candidate in key:
-            return label
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).lower().replace("đ", "d")
+
+
+def _city_key(location: str) -> str | None:
+    key = _strip_accents(location or "")
+    for city, terms in _CITY_TERMS.items():
+        if any(term in key for term in terms):
+            return city
     return None
 
 
@@ -99,7 +101,7 @@ def _parse_jobs(payload: str) -> list[dict]:
             "posted_ts": posted_ts,
             "link": link,
             "description": "",
-            "source": "TechJobs",
+            "source": board_label(link, apply_label(link) or "TechJobs"),
             "skills": [],
         })
     return jobs
@@ -107,7 +109,7 @@ def _parse_jobs(payload: str) -> list[dict]:
 
 def scrape_techjobs(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
     """Search techjobs.vn for a keyword in one city. Returns [] on any failure."""
-    city = _city_param(location or "")
+    city = _city_key(location or "")
     if city is None:
         return []
     # Search on the distinctive word ("Backend Engineer" → "backend"); the title filter
@@ -121,13 +123,16 @@ def scrape_techjobs(keyword: str, location: str = "Ho Chi Minh City", max_result
     try:
         for page in range(1, _MAX_PAGES + 1):
             # sort=newest puts the last RECENT_DAYS of postings first, so paging stops early.
-            params = {"q": query, "loc": city, "sort": "newest", "pageSize": _PAGE_SIZE}
+            params = {"q": query, "sort": "newest", "pageSize": _PAGE_SIZE}
             if page > 1:
                 params["page"] = page
             resp = requests.get(_BASE, params=params, headers=HEADERS, timeout=_TIMEOUT)
             if resp.status_code != 200:
                 break
-            page_jobs = [j for j in _parse_jobs(_rsc_payload(resp.text)) if j["link"] not in seen_links]
+            page_jobs = [
+                j for j in _parse_jobs(_rsc_payload(resp.text))
+                if j["link"] not in seen_links and _city_key(j["location"]) == city
+            ]
             if not page_jobs:
                 break
             for j in page_jobs:

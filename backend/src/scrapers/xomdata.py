@@ -7,13 +7,14 @@ and leaves title relevance to the caller's title filter.
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import requests
 from bs4 import BeautifulSoup
 
 from ..constants import HEADERS, RECENT_DAYS
-from ..utils import _relative_display
+from ..utils import _relative_display, board_label
 from .topcv import _topcv_location_matches
 
 _BASE = "https://jobs.xomdata.com"
@@ -87,6 +88,41 @@ def _parse_cards(html: str, search_location: str) -> list[dict]:
     return jobs
 
 
+_APPLY_RE = re.compile(r"ứng tuyển|apply", re.IGNORECASE)
+_DETAIL_WORKERS = 8
+
+
+def _apply_url(detail_link: str) -> str:
+    """Return the external apply link on a Xóm Jobs detail page, or "" if none."""
+    try:
+        resp = requests.get(detail_link, headers=HEADERS, timeout=_TIMEOUT)
+        if resp.status_code != 200:
+            return ""
+    except Exception:
+        return ""
+    soup = BeautifulSoup(resp.text, "lxml")
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if href.startswith("http") and "xomdata" not in href and _APPLY_RE.search(a.get_text(" ", strip=True)):
+            return href
+    return ""
+
+
+def _label_by_apply_board(jobs: list[dict]) -> None:
+    """Label a job LinkedIn/ITViec when it is applied there, otherwise keep XomData.
+
+    A relabelled job also takes its apply URL as the link. The board's detail
+    enrichment fetches the link, so the link must be on the board it is labelled as.
+    """
+    with ThreadPoolExecutor(max_workers=_DETAIL_WORKERS) as pool:
+        apply_urls = list(pool.map(lambda j: _apply_url(j["link"]), jobs))
+    for job, apply_url in zip(jobs, apply_urls):
+        label = board_label(apply_url, "XomData")
+        job["source"] = label
+        if label != "XomData":
+            job["link"] = apply_url
+
+
 def scrape_xomdata(keyword: str, location: str = "Ho Chi Minh City", max_results: int = 25) -> list[dict]:
     """Read the Xóm Jobs listing and keep jobs in the requested city. Returns [] on any failure.
 
@@ -101,6 +137,7 @@ def scrape_xomdata(keyword: str, location: str = "Ho Chi Minh City", max_results
         if resp.status_code != 200:
             return []
         jobs = _parse_cards(resp.text, location or "")
+        _label_by_apply_board(jobs)
     except Exception as e:
         print(f"[xomdata] {e}")
         return []
