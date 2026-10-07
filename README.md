@@ -202,6 +202,8 @@ Required repository secrets:
 | `VITE_API_URL` | Backend API URL baked into the frontend build |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare tunnel auth token |
 
+A separately-operated instance runs outside this CI/CD flow, with its own cron watchdog (restarts on DNS breakage, a crashed container, a wedged event loop, or a stalled scrape scheduler via `GET /warmup/heartbeat`). That script is versioned at [`ops/watchdog.sh`](ops/watchdog.sh) for review; deploying a change to it is a manual copy to that host, not part of this repo's automation.
+
 ## 🤖 Agent Skills
 
 This repo ships [agent skills](.claude/skills/) so coding agents (Claude Code, opencode, …) can work on it effectively:
