@@ -446,3 +446,24 @@ async def vector_trim_warmup(cutoff: float) -> int:
     except Exception as e:
         log_app(f"vector_trim_warmup error: {e}", "ERROR")
         return 0
+
+
+_WARMUP_HEARTBEAT_KEY = "warmup:heartbeat"
+
+
+async def warmup_heartbeat_touch() -> None:
+    """Record that the warmup scheduler's event loop is alive right now."""
+    try:
+        await get_redis().set(_WARMUP_HEARTBEAT_KEY, str(time.time()))
+    except Exception as e:
+        log_app(f"warmup_heartbeat_touch error: {e}", "ERROR")
+
+
+async def warmup_heartbeat_get() -> float | None:
+    """Return the unix timestamp of the last warmup heartbeat, or None if never set."""
+    try:
+        raw = await get_redis().get(_WARMUP_HEARTBEAT_KEY)
+        return float(raw) if raw else None
+    except Exception as e:
+        log_app(f"warmup_heartbeat_get error: {e}", "ERROR")
+        return None

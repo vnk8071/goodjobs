@@ -19,6 +19,7 @@ from src.cache import (
     vector_trim_warmup,
     embedded_links_add,
     embedded_links_filter,
+    warmup_heartbeat_touch,
 )
 from src.submissions import prune_expired_approved
 from src.vector import upsert_jobs, delete_by_ids
@@ -683,6 +684,25 @@ async def _run_scrape_cycle(
         log_app(f"[warmup] embed error: {e}", "ERROR")
 
 
+_HEARTBEAT_INTERVAL = 120.0  # seconds
+
+
+async def _heartbeat_loop() -> None:
+    """Record that the warmup event loop is alive, independent of which phase it's in.
+
+    This is the difference between "no scheduled event right now" (normal — a scrape or
+    enrich hour can be hours away) and "the warmup task silently died or deadlocked"
+    (never normal). The 2026-09-10 incident had outbound calls hang for ~19h with the
+    rest of the app still serving requests fine, so /health alone cannot catch this.
+    """
+    while True:
+        try:
+            await warmup_heartbeat_touch()
+        except Exception as e:
+            log_app(f"[warmup] heartbeat error: {e}", "ERROR")
+        await asyncio.sleep(_HEARTBEAT_INTERVAL)
+
+
 async def warmup(executor, scrapers: dict) -> None:
     """Background loop that scrapes all warmup keys at 10:00 and 17:00 ICT.
 
@@ -699,6 +719,8 @@ async def warmup(executor, scrapers: dict) -> None:
     except Exception as e:
         log_app(f"[warmup] Redis not available, skipping warmup: {e}")
         return
+
+    asyncio.create_task(_heartbeat_loop())
 
     loop = asyncio.get_event_loop()
 

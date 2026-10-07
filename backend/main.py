@@ -29,6 +29,7 @@ from src.cache import (
     embedded_links_add,
     cache_get_all_keys,
     cache_get_ts,
+    warmup_heartbeat_get,
 )
 from src.constants import MAX_CONCURRENT, ADMIN_SECRET, RECENT_DAYS
 from src.logger import log_search, log_app
@@ -401,6 +402,29 @@ async def _background_rescrape(
 def health():
     """Health check endpoint."""
     return {"status": "ok", "service": "good jobs"}
+
+
+_WARMUP_STALE_THRESHOLD = 600  # seconds — 5 missed heartbeats (_HEARTBEAT_INTERVAL=120s)
+
+
+@app.get("/warmup/heartbeat")
+async def warmup_heartbeat():
+    """Report whether the warmup scheduler's event loop is still alive.
+
+    /health only proves the HTTP server responds. The warmup loop runs as its own
+    background task and can silently die or deadlock while the rest of the app keeps
+    serving requests fine (the 2026-09-10 incident: outbound calls hung ~19h with zero
+    related errors). This is what a cron/watchdog check should poll instead.
+    """
+    ts = await warmup_heartbeat_get()
+    if ts is None:
+        return {"last_heartbeat_ts": None, "age_seconds": None, "stale": None}
+    age = time.time() - ts
+    return {
+        "last_heartbeat_ts": ts,
+        "age_seconds": round(age, 1),
+        "stale": age > _WARMUP_STALE_THRESHOLD,
+    }
 
 
 async def _cache_status_data() -> dict:
