@@ -3,7 +3,7 @@ import hashlib
 import os
 import random
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 
 from src.cache import (
     cache_get,
@@ -118,17 +118,28 @@ _ENRICH_HOURS = (3, 14)  # description enrich + summarize + embed: 03:00 and 14:
 _ALL_SCHEDULED_HOURS = sorted(set(_SCRAPE_HOURS) | set(_ENRICH_HOURS))
 
 
-def _seconds_until_next_scheduled() -> tuple[float, int]:
-    """Return (seconds_to_wait, hour) for the next scheduled run across all events."""
+def _seconds_until_next_scheduled(last_run_date: dict[int, date] | None = None) -> tuple[float, int]:
+    """Return (seconds_to_wait, hour) for the next scheduled run across all events.
+
+    `last_run_date` tracks the date each scheduled hour last ran. A hour whose time has
+    already passed today but that hasn't run yet is due immediately (0s) rather than
+    pushed to tomorrow — the catch-up path for a slot an earlier overrunning event ate.
+    Without this, an enrich pass that runs long enough to cross the next scrape hour
+    makes that scrape silently vanish for the day instead of just running late.
+    """
     now = datetime.now(_TZ_ICT)
+    last_run_date = last_run_date or {}
     candidates = []
     for hour in _ALL_SCHEDULED_HOURS:
         t = now.replace(hour=hour, minute=0, second=0, microsecond=0)
         if t <= now:
-            t += timedelta(days=1)
+            if last_run_date.get(hour) == now.date():
+                t += timedelta(days=1)
+            else:
+                t = now  # missed today's slot and haven't caught up yet — run now
         candidates.append((t, hour))
     next_t, next_hour = min(candidates, key=lambda x: x[0])
-    return (next_t - now).total_seconds(), next_hour
+    return max((next_t - now).total_seconds(), 0.0), next_hour
 
 
 async def _scrape_keyword(
@@ -748,21 +759,47 @@ async def warmup(executor, scrapers: dict) -> None:
     else:
         log_app("[warmup] startup: all cache entries are fresh, skipping initial scrape")
 
+    # Startup already did a scrape+summarize+embed pass if one was needed, so treat every
+    # scheduled hour already past today as satisfied — otherwise the catch-up path in
+    # _seconds_until_next_scheduled would immediately re-run one of them right after boot.
+    last_run_date: dict[int, date] = {}
+    _startup_now = datetime.now(_TZ_ICT)
+    for hour in _ALL_SCHEDULED_HOURS:
+        if hour <= _startup_now.hour:
+            last_run_date[hour] = _startup_now.date()
+
+    enrich_task: asyncio.Task | None = None
+
+    def _on_enrich_done(task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc:
+            log_app(f"[warmup] background enrich cycle crashed: {exc}", "ERROR")
+
     while True:
         try:
-            secs, next_hour = _seconds_until_next_scheduled()
+            secs, next_hour = _seconds_until_next_scheduled(last_run_date)
             next_run = datetime.now(_TZ_ICT) + timedelta(seconds=secs)
             log_app(
                 f"[warmup] sleeping until {next_run.strftime('%H:%M')} ICT ({secs / 3600:.1f}h)"
             )
             await asyncio.sleep(secs)
+            last_run_date[next_hour] = datetime.now(_TZ_ICT).date()
 
             if next_hour in _SCRAPE_HOURS:
                 await _run_scrape_cycle(
                     executor, scrapers, loop, last_fetched_ts=time.time() - 86400
                 )
+            elif enrich_task is not None and not enrich_task.done():
+                # Cloudflare's batch inference queue, not our code, decides how long this
+                # takes — it has run 8-9h on a backlog day. Never await it here: that
+                # silently ate both daily scrapes for days in the 2026-10 incident. One
+                # overlap guard instead of a second concurrent summarizer run.
+                log_app("[warmup] previous enrich cycle still running — skipping this trigger")
             else:
-                await _enrich_cycle(executor, loop)
+                enrich_task = asyncio.create_task(_enrich_cycle(executor, loop))
+                enrich_task.add_done_callback(_on_enrich_done)
 
             if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:
                 await _cleanup_old_jobs()
