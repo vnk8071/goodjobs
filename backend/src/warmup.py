@@ -636,19 +636,8 @@ async def _enrich_cycle(executor, loop) -> None:
                 await redis.set(key, payload)
 
     log_app(f"[warmup][enrich] done — {total_enriched} jobs enriched")
-
-    log_app("[warmup][enrich] triggering summarization...")
-    try:
-        stats = await run_background_summarization()
-        log_app(f"[warmup][enrich] summarization complete: {stats}")
-    except Exception as e:
-        log_app(f"[warmup][enrich] summarization error: {e}", "ERROR")
-
-    log_app("[warmup][enrich] embedding cached jobs...")
-    try:
-        await _embed_cached_jobs(executor)
-    except Exception as e:
-        log_app(f"[warmup][enrich] embed error: {e}", "ERROR")
+    # Summarizing and embedding is its own always-on background loop (_summarize_and_embed_loop)
+    # — it is never triggered or awaited from here. See that function for why.
 
 
 async def _run_scrape_cycle(
@@ -670,18 +659,9 @@ async def _run_scrape_cycle(
         if i < len(pairs) - 1:
             await asyncio.sleep(random.uniform(15, 30))
 
-    log_app("[warmup] cycle done — triggering background summarization")
-    try:
-        stats = await run_background_summarization()
-        log_app(f"[warmup] background summarization complete: {stats}")
-    except Exception as e:
-        log_app(f"[warmup] background summarization error: {e}", "ERROR")
-
-    log_app("[warmup] embedding cached jobs after summarization")
-    try:
-        await _embed_cached_jobs(executor)
-    except Exception as e:
-        log_app(f"[warmup] embed error: {e}", "ERROR")
+    log_app("[warmup] cycle done")
+    # Summarizing and embedding is its own always-on background loop (_summarize_and_embed_loop)
+    # — it is never triggered or awaited from here. See that function for why.
 
 
 _HEARTBEAT_INTERVAL = 120.0  # seconds
@@ -703,6 +683,36 @@ async def _heartbeat_loop() -> None:
         await asyncio.sleep(_HEARTBEAT_INTERVAL)
 
 
+_SUMMARIZE_INTERVAL = 1800.0  # seconds between passes, once the previous one finishes
+
+
+async def _summarize_and_embed_loop(executor) -> None:
+    """Summarize and embed cached jobs, as its own loop, independent of every scrape
+    and enrich cycle.
+
+    Cloudflare's batch inference queue — not our code — decides how long a pass takes,
+    and it has taken 8-9h on a large backlog. Three different places used to await this
+    inline: the scheduled enrich pass, every scrape cycle's own tail, and the one-time
+    startup catch-up. Each one silently ate whatever schedule slot came after it for as
+    long as the queue was backed up — the 2026-10 incidents. None of them need to wait
+    on this to do their own job, so none of them call it anymore; this loop is the only
+    caller, runs forever, and nothing ever awaits it.
+    """
+    while True:
+        try:
+            log_app("[summarize] triggering summarization...")
+            stats = await run_background_summarization()
+            log_app(f"[summarize] summarization complete: {stats}")
+        except Exception as e:
+            log_app(f"[summarize] summarization error: {e}", "ERROR")
+        try:
+            log_app("[summarize] embedding cached jobs...")
+            await _embed_cached_jobs(executor)
+        except Exception as e:
+            log_app(f"[summarize] embed error: {e}", "ERROR")
+        await asyncio.sleep(_SUMMARIZE_INTERVAL)
+
+
 async def warmup(executor, scrapers: dict) -> None:
     """Background loop that scrapes all warmup keys at 10:00 and 17:00 ICT.
 
@@ -721,6 +731,7 @@ async def warmup(executor, scrapers: dict) -> None:
         return
 
     asyncio.create_task(_heartbeat_loop())
+    asyncio.create_task(_summarize_and_embed_loop(executor))
 
     loop = asyncio.get_event_loop()
 
@@ -768,16 +779,9 @@ async def warmup(executor, scrapers: dict) -> None:
             if i < len(needs_scrape) - 1:
                 await asyncio.sleep(random.uniform(15, 30))
 
-        log_app("[warmup] startup scrape done — summarizing and embedding")
-        try:
-            stats = await run_background_summarization()
-            log_app(f"[warmup] startup summarization complete: {stats}")
-        except Exception as e:
-            log_app(f"[warmup] startup summarization error: {e}", "ERROR")
-        try:
-            await _embed_cached_jobs(executor)
-        except Exception as e:
-            log_app(f"[warmup] startup embed error: {e}", "ERROR")
+        log_app("[warmup] startup scrape done")
+        # Summarizing and embedding is its own always-on background loop
+        # (_summarize_and_embed_loop) — it is never triggered or awaited from here.
     else:
         log_app("[warmup] startup: all cache entries are fresh, skipping initial scrape")
 
