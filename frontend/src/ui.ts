@@ -356,7 +356,7 @@ function companyLogoHtml(company: string, source: string, logo?: string): string
   const fallback = `Object.assign(document.createElement('span'),{className:'company-avatar',style:'background:${bg};color:${fg}',textContent:'${initial}'})`;
 
   if (logo) {
-    return `<img class="company-logo" src="${esc(logo)}" alt="${esc(company)}" onerror="this.replaceWith(${fallback})">`;
+    return `<img class="company-logo" src="${esc(logo)}" alt="${esc(company)}" width="20" height="20" loading="lazy" decoding="async" onerror="this.replaceWith(${fallback})">`;
   }
 
   // Direct submissions rarely have a company logo of their own (often
@@ -364,12 +364,12 @@ function companyLogoHtml(company: string, source: string, logo?: string): string
   // instead of a random letter-avatar or a Clearbit lookup that would just
   // guess at an unrelated domain.
   if (source.toLowerCase() === "direct") {
-    return `<img class="company-logo" src="/favicon.svg" alt="GoodJobs" onerror="this.replaceWith(${fallback})">`;
+    return `<img class="company-logo" src="/favicon.svg" alt="GoodJobs" width="20" height="20" loading="lazy" decoding="async" onerror="this.replaceWith(${fallback})">`;
   }
 
   const domain = _SOURCE_DOMAINS[source.toLowerCase()];
   if (domain) {
-    return `<img class="company-logo" src="https://logo.clearbit.com/${domain}" alt="${esc(source)}" onerror="this.replaceWith(${fallback})">`;
+    return `<img class="company-logo" src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64" alt="${esc(source)}" width="20" height="20" loading="lazy" decoding="async" onerror="this.replaceWith(${fallback})">`;
   }
 
   return `<span class="company-avatar" style="background:${bg};color:${fg}">${initial}</span>`;
