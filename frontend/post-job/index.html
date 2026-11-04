@@ -63,7 +63,7 @@
         border-radius: 12px; display: flex; align-items: center; justify-content: center;
         box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
       }
-      .header-text h1 { font-size: 1.8rem; font-weight: 800; color: var(--text); }
+      .header-text h1, .header-text .brand-title { font-size: 1.8rem; font-weight: 800; color: var(--text); }
       .card {
         background: var(--card); border: 1px solid rgba(226, 232, 240, 0.8);
         border-radius: var(--radius); padding: 2rem 2.5rem;
@@ -88,6 +88,7 @@
       #status.error { color: #dc2626; }
       #status.success { color: #16a34a; }
       a { color: var(--primary); }
+          .card h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.75rem; }
     </style>
   </head>
   <body>
@@ -100,18 +101,27 @@
               <text x="22" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
             </svg>
           </div>
-          <div class="header-text"><h1>Good Jobs</h1></div>
+          <div class="header-text"><p class="brand-title">Good Jobs</p></div>
         </a>
       </header>
 
     <main>
 
       <div class="card">
-        <h2 style="margin-bottom:0.5rem;">Post a Job</h2>
+        <h1 style="margin-bottom:0.5rem;">Post a Job on Good Jobs</h1>
         <p style="color:var(--muted); margin-bottom:1rem;">
           Headhunter or hiring directly? Submit a role below — we review every
           posting before it appears in search.
         </p>
+
+        <h2>Why post on Good Jobs?</h2>
+        <p>Good Jobs reaches candidates who are already comparing roles across Vietnam and remote markets. A posting is reviewed by a human before it appears in search, which keeps duplicate, misleading and expired listings out of the feed.</p>
+
+        <h2>What happens after you submit</h2>
+        <p>We check that the role is real, that the apply link or contact email works, and that the description matches the title and location. Approved roles are merged into search results as source "Direct"; rejected submissions are not published. We may edit formatting or remove contact details that look like spam.</p>
+
+        <h2>What to include</h2>
+        <p>A clear job title, the company name, the location (or "Remote"), a description with responsibilities and requirements, and either an apply link or a contact email. Roles aimed at candidates in Vietnam or at remote candidates are the best fit.</p>
 
         <form id="jobForm">
           <label for="title">Job Title *</label>

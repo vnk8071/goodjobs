@@ -63,7 +63,7 @@
         border-radius: 12px; display: flex; align-items: center; justify-content: center;
         box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
       }
-      .header-text h1 { font-size: 1.8rem; font-weight: 800; color: var(--text); }
+      .header-text h1, .header-text .brand-title { font-size: 1.8rem; font-weight: 800; color: var(--text); }
       .card {
         background: var(--card); border: 1px solid rgba(226, 232, 240, 0.8);
         border-radius: var(--radius); padding: 2rem 2.5rem;
@@ -74,6 +74,7 @@
       ul { padding-left: 1.5rem; }
       a { color: var(--primary); text-decoration: none; }
       a:hover { text-decoration: underline; }
+          .card h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.75rem; }
     </style>
   </head>
   <body>
@@ -86,14 +87,14 @@
               <text x="22" y="21" font-family="sans-serif" font-size="14" font-weight="800" fill="white" text-anchor="middle" opacity="0.75">J</text>
             </svg>
           </div>
-          <div class="header-text"><h1>Good Jobs</h1></div>
+          <div class="header-text"><p class="brand-title">Good Jobs</p></div>
         </a>
       </header>
 
     <main>
 
       <div class="card">
-        <h2>Privacy Policy</h2>
+        <h1>Privacy Policy</h1>
         <p>Last updated: April 10, 2026</p>
 
         <p>At Good Jobs (goodjobs.io.vn), the privacy of our visitors is extremely important to us. This Privacy Policy document outlines the types of personal information that is received and collected by Good Jobs and how it is used.</p>
