@@ -8,6 +8,9 @@
   <meta name="description"
     content="Browse jobs in Vietnam and remote roles by category and location. Good Jobs aggregates recent listings from LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, RemoteOK and more." />
   <link rel="canonical" href="https://goodjobs.io.vn/jobs/">
+  <link rel="alternate" hreflang="en" href="https://goodjobs.io.vn/jobs/">
+  <link rel="alternate" hreflang="vi" href="https://goodjobs.io.vn/vi/viec-lam/">
+  <link rel="alternate" hreflang="x-default" href="https://goodjobs.io.vn/jobs/">
   <meta name="robots" content="index,follow,max-image-preview:large">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://goodjobs.io.vn/jobs/">
@@ -25,6 +28,7 @@
   <meta name="twitter:description" content="Browse jobs in Vietnam and remote roles by category and location, aggregated from 21 sources.">
   <meta name="twitter:image" content="https://goodjobs.io.vn/og-image.jpg">
   <meta name="theme-color" content="#2563eb">
+    <script src="/consent.js" defer></script>
   <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -61,12 +65,12 @@
           "@id": "https://goodjobs.io.vn/jobs/#categories",
           "name": "Job categories",
           "itemListElement": [
-            { "@type": "ListItem", "position": 1, "name": "IT & Software", "url": "https://goodjobs.io.vn/?kw=Software%20Engineer&loc=Ho%20Chi%20Minh%20City" },
-            { "@type": "ListItem", "position": 2, "name": "Data & AI", "url": "https://goodjobs.io.vn/?kw=Data%20Scientist&loc=Ho%20Chi%20Minh%20City" },
-            { "@type": "ListItem", "position": 3, "name": "Product & Design", "url": "https://goodjobs.io.vn/?kw=Product%20Manager&loc=Ho%20Chi%20Minh%20City" },
-            { "@type": "ListItem", "position": 4, "name": "Marketing", "url": "https://goodjobs.io.vn/?kw=Marketing%20Executive&loc=Ho%20Chi%20Minh%20City" },
-            { "@type": "ListItem", "position": 5, "name": "Finance & Banking", "url": "https://goodjobs.io.vn/?kw=Financial%20Analyst&loc=Ho%20Chi%20Minh%20City" },
-            { "@type": "ListItem", "position": 6, "name": "Remote", "url": "https://goodjobs.io.vn/?kw=Software%20Engineer&loc=Remote" }
+            { "@type": "ListItem", "position": 1, "name": "IT & Software", "url": "https://goodjobs.io.vn/jobs/it-software/" },
+            { "@type": "ListItem", "position": 2, "name": "Data & AI", "url": "https://goodjobs.io.vn/jobs/data-ai/" },
+            { "@type": "ListItem", "position": 3, "name": "Product & Design", "url": "https://goodjobs.io.vn/jobs/product-design/" },
+            { "@type": "ListItem", "position": 4, "name": "Marketing", "url": "https://goodjobs.io.vn/jobs/marketing/" },
+            { "@type": "ListItem", "position": 5, "name": "Finance & Banking", "url": "https://goodjobs.io.vn/jobs/finance-banking/" },
+            { "@type": "ListItem", "position": 6, "name": "Remote", "url": "https://goodjobs.io.vn/jobs/remote/" }
           ]
         }
       ]
@@ -122,6 +126,7 @@
         <div><b>Good Jobs</b><span>Search once. Apply smarter.</span></div>
       </a>
       <div class="header-actions">
+        <a class="ghost" href="/vi/">Tiếng Việt</a>
         <a class="ghost" href="/">Search jobs</a>
         <a class="solid" href="/post-job/">Post a Job</a>
       </div>
@@ -132,28 +137,29 @@
         <p class="eyebrow">Job directory</p>
         <h1>Jobs in Vietnam &amp; remote roles, in one place</h1>
         <p class="lead">Good Jobs aggregates recent listings from 21 job boards — LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, TopDev, JobsGo, RemoteOK, Indeed and more — so you can search once and compare roles across Vietnam, Singapore and remote-first companies.</p>
-        <p class="lead">Pick a category or location below to start a live search, or use the <a href="/">search box on the homepage</a> with a job title, skills list or CV.</p>
+        <p class="lead"><strong>Tiếng Việt:</strong> <a href="/viec-lam-ho-chi-minh/">Tìm việc làm ở Hồ Chí Minh</a> — trang tổng hợp dành cho ứng viên Việt Nam.</p>
+        <p class="lead">Browse the latest snapshot by category or location below, or use the <a href="/">search box on the homepage</a> with a job title, skills list or CV for live results.</p>
       </section>
 
       <h2>Browse jobs by category</h2>
       <div class="grid">
-        <a class="card" href="/?kw=Software%20Engineer&amp;loc=Ho%20Chi%20Minh%20City"><b>IT &amp; Software</b><span>Backend, frontend, fullstack, mobile and QA roles</span></a>
-        <a class="card" href="/?kw=Data%20Scientist&amp;loc=Ho%20Chi%20Minh%20City"><b>Data &amp; AI</b><span>Data scientists, analysts, ML and AI engineers</span></a>
-        <a class="card" href="/?kw=Product%20Manager&amp;loc=Ho%20Chi%20Minh%20City"><b>Product &amp; Design</b><span>Product managers, UI/UX and product designers</span></a>
-        <a class="card" href="/?kw=Marketing%20Executive&amp;loc=Ho%20Chi%20Minh%20City"><b>Marketing</b><span>Growth, content, performance and brand marketing</span></a>
-        <a class="card" href="/?kw=Financial%20Analyst&amp;loc=Ho%20Chi%20Minh%20City"><b>Finance &amp; Banking</b><span>Analysis, risk, accounting and banking roles</span></a>
-        <a class="card" href="/?kw=Operations&amp;loc=Ho%20Chi%20Minh%20City"><b>Operations &amp; Sales</b><span>Business operations, sales and customer success</span></a>
+        <a class="card" href="/jobs/it-software/"><b>IT &amp; Software</b><span>Backend, frontend, fullstack, mobile and QA roles</span></a>
+        <a class="card" href="/jobs/data-ai/"><b>Data &amp; AI</b><span>Data scientists, analysts, ML and AI engineers</span></a>
+        <a class="card" href="/jobs/product-design/"><b>Product &amp; Design</b><span>Product managers, UI/UX and product designers</span></a>
+        <a class="card" href="/jobs/marketing/"><b>Marketing</b><span>Growth, content, performance and brand marketing</span></a>
+        <a class="card" href="/jobs/finance-banking/"><b>Finance &amp; Banking</b><span>Analysis, risk, accounting and banking roles</span></a>
+        <a class="card" href="/jobs/operations-sales/"><b>Operations &amp; Sales</b><span>Business operations, sales and customer success</span></a>
       </div>
 
       <h2>Browse jobs by location</h2>
       <div class="chips">
-        <a href="/?kw=Software%20Engineer&amp;loc=Ho%20Chi%20Minh%20City">Ho Chi Minh City</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=Hanoi">Hanoi</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=Da%20Nang">Da Nang</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=Remote">Remote</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=Singapore">Singapore</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=London">London</a>
-        <a href="/?kw=Software%20Engineer&amp;loc=New%20York">New York</a>
+        <a href="/jobs/it-software/">Ho Chi Minh City</a>
+        <a href="/jobs/ha-noi/">Hanoi</a>
+        <a href="/jobs/da-nang/">Da Nang</a>
+        <a href="/jobs/remote/">Remote</a>
+        <a href="/jobs/singapore/">Singapore</a>
+        <a href="/jobs/london/">London</a>
+        <a href="/jobs/new-york/">New York</a>
       </div>
 
       <h2>How Good Jobs works</h2>

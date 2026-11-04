@@ -21,6 +21,19 @@ Target: <https://goodjobs.io.vn/> · Repo: <https://github.com/vnk8071/goodjobs>
 
 Lighthouse Best Practices is capped by Google AdSense third-party cookies and the ad iframe; that is a consent/revenue decision, not a markup defect. Console errors from the old Clearbit logo lookup were fixed.
 
+## Vietnamese version (English remains default)
+
+The site now has a Vietnamese SEO section while `/` stays the English default:
+
+- `/vi/` — Vietnamese homepage targeting "tìm việc làm tại Việt Nam" / "website tìm việc".
+- `/vi/viec-lam/` — Vietnamese jobs directory with category and location links.
+- `/viec-lam-ho-chi-minh/` — exact-match landing page for "tìm việc làm ở Hồ Chí Minh", with up to 24 live job cards.
+- `/jobs/` and `/vi/viec-lam/`, `/jobs/ho-chi-minh-city/` and `/viec-lam-ho-chi-minh/` are paired with `hreflang` (`en`, `vi`, `x-default` → English).
+- English pages get a visible `VI` switch; Vietnamese pages get `English`.
+- The consent banner is localised; GTM and AdSense only load after consent.
+
+**Indexing status (checked 2026-11-04):** Google already knows the domain (`site:goodjobs.io.vn` returns the homepage, terms and contact), so this is a ranking problem, not an indexing block. The old `/blog/` URLs visible in Google's index now return 404; either restore that content or let Google drop them. Request indexing for `/vi/` and `/viec-lam-ho-chi-minh/` in Search Console after deploy.
+
 ## What was implemented
 
 ### Technical
@@ -52,8 +65,8 @@ Lighthouse Best Practices is capped by Google AdSense third-party cookies and th
 
 ## Remaining recommendations
 
-1. **Submit the sitemap** in Google Search Console and Bing Webmaster Tools; add the verification meta tag or DNS record. This cannot be done from the repo.
-2. **Programmatic, server-rendered job pages** are the biggest remaining opportunity. The homepage feed is JS/SSE only; job listings and category/location queries are not crawlable HTML. A backend route such as `/jobs/{category}/{city}/` with server-rendered recent jobs, canonical URLs and `JobPosting`/`ItemList` schema would let Google index long-tail queries. Treat job data as time-sensitive and add `datePosted`/`validThrough` only from the original listing.
+1. **Submit the sitemap** in Google Search Console and Bing Webmaster Tools; request indexing for `/vi/` and `/viec-lam-ho-chi-minh/`. This cannot be done from the repo. A broad query like "website tìm việc ở hồ chí minh" is dominated by established boards with thousands of pages and backlinks; a new page needs time plus internal/external links to rank.
+2. **Server-rendered job pages** are now generated at build time: 300 job pages, 6 category pages, 7 location pages, 6 `JobPosting`/`ItemList` pages, and the Vietnamese section. A scheduled daily rebuild (`0 2 * * *`) refreshes them from `/recent-jobs`. The remaining gap is Vietnamese category/location pages (the current VI directory links to English category pages) and keeping job pages alive beyond the 24-hour `/recent-jobs` window.
 3. **Best Practices / consent:** AdSense sets third-party cookies before consent. If consent is required in your markets, add a CMP and gate the ad script; that should lift Best Practices toward 100 without changing the content.
 4. **Speed Index** varies 3.9–4.5 s because of GTM/AdSense; consider loading ads after the first interaction or below the fold. LCP is already 1.3–1.6 s.
 5. **Search Console monitoring:** track index coverage for `/jobs/`, queries around "jobs in Vietnam", "IT jobs Ho Chi Minh City", "remote jobs Vietnam"; compare with the pages that are actually indexed.
