@@ -74,6 +74,7 @@ const CATEGORY_TERMS: Record<CategoryId, string[]> = {
   it: [
     "it",
     "information technology",
+    "technology",
     "software",
     "software engineer",
     "programmer",
@@ -152,6 +153,7 @@ const CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "phát triển web",
   ],
   data: [
+    "data",
     "data engineer",
     "data analyst",
     "data scientist",
@@ -173,6 +175,7 @@ const CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "dữ liệu lớn",
   ],
   product: [
+    "product",
     "product manager",
     "product owner",
     "product lead",
@@ -187,6 +190,10 @@ const CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "giám đốc sản phẩm",
   ],
   business: [
+    "business",
+    "business planning",
+    "business operations",
+    "business management",
     "business analyst",
     "business analysis",
     "business development",
@@ -195,8 +202,10 @@ const CATEGORY_TERMS: Record<CategoryId, string[]> = {
     "phân tích nghiệp vụ",
     "phát triển kinh doanh",
     "tư vấn kinh doanh",
+    "kinh doanh",
   ],
   design: [
+    "design",
     "ui/ux",
     "ui ux",
     "ui",
@@ -324,35 +333,34 @@ const CATEGORY_PATTERNS: Record<CategoryId, RegExp> = Object.fromEntries(
 /**
  * Return every category a job belongs to.
  *
- * Title and skills are checked first because they carry the strongest signal.
- * Descriptions are only used when title/skills produced no match, which avoids
- * tagging every engineering job as "marketing" just because the company blurb
- * mentions marketing.
+ * Title is checked first because it carries the strongest signal. Skills are
+ * only consulted when the title has no category, and the description is only
+ * used as a last resort. This prevents noisy scraped skills (or a company
+ * blurb that mentions marketing) from mis-tagging an unrelated role.
  */
 export function getJobCategories(job: Job): Set<CategoryId> {
-  const found = new Set<CategoryId>();
-  const title = normalizeText(job.title ?? "");
-  const skills = normalizeText(
-    Array.isArray(job.skills) ? job.skills.join(" ") : String(job.skills ?? ""),
+  const titleMatches = matchCategories(job.title ?? "");
+  if (titleMatches.size > 0) return titleMatches;
+
+  const skillText = Array.isArray(job.skills)
+    ? job.skills.join(" ")
+    : String(job.skills ?? "");
+  const skillMatches = matchCategories(skillText);
+  if (skillMatches.size > 0) return skillMatches;
+
+  return matchCategories(
+    [job.summary_description, job.description].filter(Boolean).join(" "),
   );
+}
 
+/** Match every category whose pattern appears in `text`. */
+function matchCategories(text: string): Set<CategoryId> {
+  const found = new Set<CategoryId>();
+  const normalized = normalizeText(text);
+  if (!normalized) return found;
   for (const id of CATEGORY_IDS) {
-    if (CATEGORY_PATTERNS[id].test(title) || CATEGORY_PATTERNS[id].test(skills)) {
-      found.add(id);
-    }
+    if (CATEGORY_PATTERNS[id].test(normalized)) found.add(id);
   }
-
-  if (found.size === 0) {
-    const description = normalizeText(
-      [job.summary_description, job.description].filter(Boolean).join(" "),
-    );
-    if (description) {
-      for (const id of CATEGORY_IDS) {
-        if (CATEGORY_PATTERNS[id].test(description)) found.add(id);
-      }
-    }
-  }
-
   return found;
 }
 
