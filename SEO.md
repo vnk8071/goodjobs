@@ -26,9 +26,10 @@ Lighthouse Best Practices is capped by Google AdSense third-party cookies and th
 The site now has a Vietnamese SEO section while `/` stays the English default:
 
 - `/vi/` — Vietnamese homepage targeting "tìm việc làm tại Việt Nam" / "website tìm việc".
-- `/vi/viec-lam/` — Vietnamese jobs directory with category and location links.
-- `/jobs/` and `/vi/viec-lam/` are paired with `hreflang` (`en`, `vi`, `x-default` → English). The former `/viec-lam-ho-chi-minh/` exact-match landing page was removed on 2026-11-05 (duplicated `/jobs/ho-chi-minh-city/` for the same query; the `/vi/` section now links directly to the English location page).
+- `/vi/viec-lam/` — Vietnamese jobs directory; category/location chips deep-link into the homepage's live search (`/?kw=...&loc=...`) instead of static sub-pages.
+- `/vi/` and `/vi/viec-lam/` are paired with `hreflang` (`en`, `vi`, `x-default` → `/`).
 - English pages get a visible `VI` switch; Vietnamese pages get `English`.
+- **2026-11-05:** removed the entire `/jobs/` directory — the static jobs directory page, its per-category and per-location sub-pages, the per-job detail pages, and the `/viec-lam-ho-chi-minh/` Vietnamese landing page. English stays on a single root page (`/`); the Vietnamese pages now link out to live search or the original job posting instead of an internal static page.
 - The consent banner is localised; GTM and AdSense only load after consent.
 
 **Indexing status (checked 2026-11-04):** Google already knows the domain (`site:goodjobs.io.vn` returns the homepage, terms and contact), so this is a ranking problem, not an indexing block. The old `/blog/` URLs visible in Google's index now return 404; either restore that content or let Google drop them. Request indexing for `/vi/` in Search Console after deploy.
@@ -37,7 +38,7 @@ The site now has a Vietnamese SEO section while `/` stays the English default:
 
 ### Technical
 - `robots.txt` now declares `Sitemap: https://goodjobs.io.vn/sitemap.xml` and disallows `/admin/`. Cloudflare's managed AI-crawler policy is still prepended by the edge; the origin file is appended.
-- `sitemap.xml` with home, `/jobs/`, `/post-job/`, `/contact/`, `/privacy/`, `/terms/` (admin excluded).
+- `sitemap.xml` with home, `/post-job/`, `/contact/`, `/privacy/`, `/terms/`, `/vi/`, `/vi/viec-lam/` (admin excluded).
 - `llms.txt` with a one-paragraph summary, page index, source list and contact.
 - Self-canonicals and `meta robots` on every page; `/admin/` is `noindex,nofollow`.
 - `og-image.jpg` (1200×630) and a complete Open Graph/Twitter card set (`og:image:width/height/alt`).
@@ -46,13 +47,12 @@ The site now has a Vietnamese SEO section while `/` stays the English default:
 ### On-page
 - Unique, descriptive titles and 120–155-character descriptions on all public pages.
 - One page-level H1 per page. The four legal/utility pages previously used the site name as their H1; the header is now non-heading text and the page title is the H1.
-- Added a static **`/jobs/`** directory page: category and location links, how-it-works, sources, remote-work guidance and job-search tips (~500 words), linked from the homepage footer.
 - Expanded thin pages: `/contact/` now explains support topics and response times; `/post-job/` explains the review process, what to include and why post.
 - Consistent contact email (`khoivn@goodjobs.io.vn`).
 
 ### Structured data
 - Home: `Organization`, `WebSite` with `SearchAction` (`?kw={search_term_string}`), `WebPage`.
-- `/jobs/`: `CollectionPage`, `BreadcrumbList`, `ItemList` of categories.
+- `/vi/`, `/vi/viec-lam/`: `CollectionPage`, `BreadcrumbList`, `ItemList` of recent jobs.
 - `/contact/`: `ContactPage`.
 - Other pages: `WebPage` + `BreadcrumbList`; all graph nodes share the same `Organization`/`WebSite` IDs.
 
@@ -60,15 +60,15 @@ The site now has a Vietnamese SEO section while `/` stays the English default:
 - Added a `<main>` landmark on every page.
 - Removed `aria-label`s that did not contain the visible link text (`Post a Job`, homepage link).
 - Darkened the muted label/table-header grey (#999 → #5f6368) and the primary blue (#3b82f6 → #2563eb), and removed footer text opacity — contrast is now 100.
-- Fixed the `/jobs/` page at 390 px and 1440 px: no horizontal scroll.
+- Fixed the Vietnamese pages at 390 px and 1440 px: no horizontal scroll.
 
 ## Remaining recommendations
 
 1. **Submit the sitemap** in Google Search Console and Bing Webmaster Tools; request indexing for `/vi/`. This cannot be done from the repo. A broad query like "website tìm việc ở hồ chí minh" is dominated by established boards with thousands of pages and backlinks; a new page needs time plus internal/external links to rank.
-2. **Server-rendered job pages** are now generated at build time: 300 job pages, 6 category pages, 7 location pages, 6 `JobPosting`/`ItemList` pages, and the Vietnamese section. A scheduled daily rebuild (`0 2 * * *`) refreshes them from `/recent-jobs`. The remaining gap is Vietnamese category/location pages (the current VI directory links to English category pages) and keeping job pages alive beyond the 24-hour `/recent-jobs` window.
+2. **The Vietnamese section** (`/vi/`, `/vi/viec-lam/`) is generated at build time from a live job snapshot. A scheduled daily rebuild (`0 2 * * *`) refreshes it from `/recent-jobs`. Category/location browsing on these pages deep-links into the homepage's live search rather than static sub-pages, so there is no "stale snapshot" page to keep alive.
 3. **Best Practices / consent:** AdSense sets third-party cookies before consent. If consent is required in your markets, add a CMP and gate the ad script; that should lift Best Practices toward 100 without changing the content.
 4. **Speed Index** varies 3.9–4.5 s because of GTM/AdSense; consider loading ads after the first interaction or below the fold. LCP is already 1.3–1.6 s.
-5. **Search Console monitoring:** track index coverage for `/jobs/`, queries around "jobs in Vietnam", "IT jobs Ho Chi Minh City", "remote jobs Vietnam"; compare with the pages that are actually indexed.
+5. **Search Console monitoring:** track index coverage for `/`, `/vi/`, `/vi/viec-lam/`, queries around "jobs in Vietnam", "tìm việc làm ở Hồ Chí Minh", "remote jobs Vietnam"; compare with the pages that are actually indexed.
 
 ## Verification
 
