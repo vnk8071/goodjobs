@@ -877,9 +877,28 @@ async def recent_jobs_stream(compact: bool = True):
 
         try:
             redis = get_redis()
+            keys: list[str] = []
             async for key in redis.scan_iter("jobs:*"):
-                if not is_vn_cache_key(key):
-                    continue
+                if is_vn_cache_key(key):
+                    keys.append(key)
+
+            # Most recently fetched cache first, so the freshest scraped jobs
+            # appear in the first batches. `jobs-ts:` keys are tiny and avoid
+            # deserialising every payload just to sort them.
+            ordered_keys = keys
+            if keys:
+                pipe = redis.pipeline()
+                for key in keys:
+                    pipe.get(f"jobs-ts:{key[len('jobs:'):]}")
+                ts_values = await pipe.execute()
+                key_ts = [
+                    (float(ts) if ts else 0.0, key)
+                    for key, ts in zip(keys, ts_values)
+                ]
+                key_ts.sort(key=lambda item: item[0], reverse=True)
+                ordered_keys = [key for _, key in key_ts]
+
+            for key in ordered_keys:
                 raw = await redis.get(key)
                 if not raw:
                     continue
@@ -888,8 +907,10 @@ async def recent_jobs_stream(compact: bool = True):
                 except Exception:
                     continue
 
+                jobs = data.get("jobs", [])
+                jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
                 batch: list[dict] = []
-                for job in data.get("jobs", []):
+                for job in jobs:
                     link = job.get("link", "")
                     if not link or link in seen_links:
                         continue

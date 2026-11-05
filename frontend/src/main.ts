@@ -93,22 +93,10 @@ let homeCategory: CategoryFilter = "all";
 let homeLocation: LocationFilter = "all";
 let homeVisible = true;
 let homePage = 1;
-let homePageSize = 20;
+let homePageSize = Number(recentPageSizeEl?.value) || 10;
 
 function homeJobs(): Job[] {
   return [...homeDirectJobs, ...homeScrapedJobs];
-}
-
-const byDate = (a: Job, b: Job): number => (b.posted_ts ?? 0) - (a.posted_ts ?? 0);
-
-let homeRenderScheduled = false;
-function scheduleHomeRender(): void {
-  if (homeRenderScheduled) return;
-  homeRenderScheduled = true;
-  requestAnimationFrame(() => {
-    homeRenderScheduled = false;
-    renderHomeJobs();
-  });
 }
 
 /** Refresh the category/location dropdown labels and keep the active values. */
@@ -193,29 +181,45 @@ function renderHomeJobs(): void {
   }
 
   if (recentPager) {
-    const showPager = scrapedJobs.length > homePageSize;
-    recentPager.classList.toggle("hidden", !showPager);
-    if (showPager) {
-      if (recentPageInfoEl) {
-        recentPageInfoEl.textContent = t("pager.pageInfo", { page: homePage, pages: totalPages });
-      }
-      if (recentPagerShowing) {
-        recentPagerShowing.textContent = t("pager.showing", {
-          from: start + 1,
-          to: Math.min(start + homePageSize, scrapedJobs.length),
-          total: scrapedJobs.length,
-        });
-      }
-      if (recentPrevBtn) recentPrevBtn.disabled = homePage <= 1;
-      if (recentNextBtn) recentNextBtn.disabled = homePage >= totalPages;
-    }
+    updateHomePager(scrapedJobs, totalPages, start);
   }
 
   updateHomeFilters();
 }
 
+/** Update only the pager text/state (used while the stream appends jobs). */
+function updateHomePager(scrapedJobs: Job[], totalPages: number, start: number): void {
+  if (!recentPager) return;
+  const showPager = scrapedJobs.length > homePageSize;
+  recentPager.classList.toggle("hidden", !showPager);
+  if (!showPager) return;
+  if (recentPageInfoEl) {
+    recentPageInfoEl.textContent = t("pager.pageInfo", { page: homePage, pages: totalPages });
+  }
+  if (recentPagerShowing) {
+    recentPagerShowing.textContent = t("pager.showing", {
+      from: start + 1,
+      to: Math.min(start + homePageSize, scrapedJobs.length),
+      total: scrapedJobs.length,
+    });
+  }
+  if (recentPrevBtn) recentPrevBtn.disabled = homePage <= 1;
+  if (recentNextBtn) recentNextBtn.disabled = homePage >= totalPages;
+}
+
+/** While streaming, only refresh the pager — the visible rows stay stable. */
+function refreshHomePager(): void {
+  if (!homeVisible) return;
+  const scrapedJobs = homeScrapedJobs.filter(
+    (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
+  );
+  const totalPages = Math.max(1, Math.ceil(scrapedJobs.length / homePageSize));
+  const start = (homePage - 1) * homePageSize;
+  updateHomePager(scrapedJobs, totalPages, start);
+}
+
 recentPageSizeEl?.addEventListener("change", () => {
-  homePageSize = Number(recentPageSizeEl.value) || 20;
+  homePageSize = Number(recentPageSizeEl.value) || 10;
   homePage = 1;
   renderHomeJobs();
 });
@@ -258,17 +262,13 @@ function showRecentJobs(): void {
   if (homeJobs().length > 0) renderHomeJobs();
 }
 
-// Stream all cached jobs onto the homepage. Jobs are rendered in batches as
-// the SSE feed arrives, so the first rows appear immediately instead of
-// waiting for the whole cache scan to finish.
+// Stream all cached jobs onto the homepage. Jobs are appended in the order
+// the backend sends them (most recently fetched cache first), so the visible
+// rows stay stable while the rest of the feed loads in the background.
 (async () => {
   if (!recentJobsBody || !recentJobsSection) return;
 
-  if (homeVisible) {
-    recentJobsBody.innerHTML = `<tr><td colspan="10" class="empty">${t("recent.loading")}</td></tr>`;
-    recentJobsSection.classList.remove("hidden");
-  }
-
+  let firstRender = false;
   try {
     await streamRecentJobs(
       (batch) => {
@@ -276,13 +276,16 @@ function showRecentJobs(): void {
           if (job.source === "Direct") homeDirectJobs.push(job);
           else homeScrapedJobs.push(job);
         }
-        homeDirectJobs.sort(byDate);
-        homeScrapedJobs.sort(byDate);
-        scheduleHomeRender();
+        if (!firstRender && homeScrapedJobs.length >= homePageSize) {
+          firstRender = true;
+          renderHomeJobs();
+        } else if (firstRender) {
+          // Keep the visible rows stable; only the pager total grows.
+          refreshHomePager();
+        }
       },
       () => {
-        homeDirectJobs.sort(byDate);
-        homeScrapedJobs.sort(byDate);
+        firstRender = true;
         renderHomeJobs();
       },
     );
