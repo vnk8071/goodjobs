@@ -21,6 +21,7 @@ from src.cache import (
     embedded_links_filter,
     warmup_heartbeat_touch,
 )
+from src.concurrency import get_chromium_sem, LIGHT_LISTING_SITES, LIGHT_DETAIL_SITES
 from src.submissions import prune_expired_approved
 from src.vector import upsert_jobs, delete_by_ids
 from src.constants import RECENT_DAYS, VECTOR_RETENTION_DAYS
@@ -207,10 +208,21 @@ async def _scrape_keyword(
 
     for i, (site, fn) in enumerate(scrapers.items()):
         try:
-            result = await asyncio.wait_for(
-                loop.run_in_executor(executor, _timed, site, fn, kw, loc),
-                timeout=45.0,
-            )
+            if site in LIGHT_LISTING_SITES:
+                result = await asyncio.wait_for(
+                    loop.run_in_executor(executor, _timed, site, fn, kw, loc),
+                    timeout=45.0,
+                )
+            else:
+                # Chromium listing scrape — share the same global browser gate as
+                # the user-facing /scrape endpoint so warmup can't pile up more
+                # live Chromium processes than the host handles on top of
+                # whatever real traffic is already running.
+                async with get_chromium_sem():
+                    result = await asyncio.wait_for(
+                        loop.run_in_executor(executor, _timed, site, fn, kw, loc),
+                        timeout=45.0,
+                    )
             site_succeeded.add(site)
         except asyncio.TimeoutError:
             log_app(f"[warmup][{kw}][{loc}][{site}] scrape timeout")
@@ -336,14 +348,24 @@ async def _scrape_keyword(
         )
         if is_linkedin:
             await asyncio.sleep(1.0)
+        is_light = display.lower() in LIGHT_DETAIL_SITES
         enriched = 0
         for i, job in enumerate(batch):
             cooldown = 1.0 if i > 0 else 0.0
             try:
-                ok = await asyncio.wait_for(
-                    loop.run_in_executor(executor, detail_fn, job, cooldown),
-                    timeout=60.0,
-                )
+                if is_light:
+                    ok = await asyncio.wait_for(
+                        loop.run_in_executor(executor, detail_fn, job, cooldown),
+                        timeout=60.0,
+                    )
+                else:
+                    # Chromium detail fetch — share the global browser gate with
+                    # listing scrapes so total live Chromium stays <= the limit.
+                    async with get_chromium_sem():
+                        ok = await asyncio.wait_for(
+                            loop.run_in_executor(executor, detail_fn, job, cooldown),
+                            timeout=60.0,
+                        )
                 if is_linkedin and not ok:
                     break
                 enriched += 1
@@ -613,11 +635,23 @@ async def _enrich_cycle(executor, loop) -> None:
                 if not fn:
                     continue
                 cooldown = 1.5 if i > 0 else 0.0
+                is_light = job.get("source", "").lower() in LIGHT_DETAIL_SITES
                 try:
-                    await asyncio.wait_for(
-                        loop.run_in_executor(executor, fn, job, cooldown),
-                        timeout=60.0,
-                    )
+                    if is_light:
+                        await asyncio.wait_for(
+                            loop.run_in_executor(executor, fn, job, cooldown),
+                            timeout=60.0,
+                        )
+                    else:
+                        # Chromium detail fetch — share the global browser gate so
+                        # this always-overlappable pass can't pile Chromium on top
+                        # of whatever the scheduled scrape cycle or live user
+                        # traffic is already running.
+                        async with get_chromium_sem():
+                            await asyncio.wait_for(
+                                loop.run_in_executor(executor, fn, job, cooldown),
+                                timeout=60.0,
+                            )
                     if job.get("description", "").strip():
                         job["skills"] = extract_skills(
                             job.get("title", ""), job["description"]
@@ -814,6 +848,20 @@ async def warmup(executor, scrapers: dict) -> None:
             last_run_date[next_hour] = datetime.now(_TZ_ICT).date()
 
             if next_hour in _SCRAPE_HOURS:
+                if enrich_task is not None and not enrich_task.done():
+                    # An enrich cycle overrunning into a scrape hour used to run
+                    # concurrently with it, both competing for the same executor
+                    # and Chromium slots — the 17:00 scrape then often finished
+                    # too late to count inside its analytics window. Wait it out
+                    # instead so the scrape gets the full host to itself.
+                    log_app(
+                        "[warmup] enrich cycle still running at scrape time — "
+                        "waiting for it to finish before scraping"
+                    )
+                    try:
+                        await enrich_task
+                    except Exception:
+                        pass  # already logged by _on_enrich_done
                 await _run_scrape_cycle(
                     executor, scrapers, loop, last_fetched_ts=time.time() - 86400
                 )

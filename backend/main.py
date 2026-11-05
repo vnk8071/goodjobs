@@ -32,6 +32,11 @@ from src.cache import (
     warmup_heartbeat_get,
 )
 from src.constants import MAX_CONCURRENT, ADMIN_SECRET, RECENT_DAYS
+from src.concurrency import (
+    get_chromium_sem as _get_chromium_sem,
+    LIGHT_LISTING_SITES as _LIGHT_LISTING,
+    LIGHT_DETAIL_SITES as _LIGHT_DETAIL,
+)
 from src.logger import log_search, log_app
 from src.analytics import TZ_ICT, read_search_entries, summarize, day_detail
 from src.utils import timed_scrape
@@ -124,27 +129,8 @@ _executor = ThreadPoolExecutor(max_workers=6)
 # (e.g. ViecOi) paint in 1-3s instead of ~14s. Also carries LinkedIn's detail pass,
 # which holds a thread for its per-job cooldowns, hence a few more workers.
 _light_executor = ThreadPoolExecutor(max_workers=4)
-
-# Hard cap on simultaneous headless Chromium across BOTH phases (listing + detail).
-# The server is 1 CPU / 2GiB: more than ~2 Chromium thrashes the single CPU and
-# pushes RAM toward the 2GiB ceiling (the cause of mid-stream OOM restarts).
-_CHROMIUM_LIMIT = int(os.getenv("CHROMIUM_LIMIT", "3"))
-_chromium_sem: asyncio.Semaphore | None = None
-
-# Scrapers whose *listing* pass is requests-based (no Chromium) → safe for the light lane.
-_LIGHT_LISTING = {"viecoi", "linkedin"}
-# Scrapers whose *detail* pass is requests-based. LinkedIn's detail pass hits the
-# jobs-guest API with plain requests; gating it behind the Chromium semaphore let
-# slow Chromium listing scrapes starve it, so no LinkedIn description ever arrived.
-_LIGHT_DETAIL = {"viecoi", "linkedin"}
-
-
-def _get_chromium_sem() -> asyncio.Semaphore:
-    """Return the global Chromium concurrency gate, creating it on first call."""
-    global _chromium_sem
-    if _chromium_sem is None:
-        _chromium_sem = asyncio.Semaphore(_CHROMIUM_LIMIT)
-    return _chromium_sem
+# Chromium concurrency gate and the light-lane site sets now live in
+# src/concurrency.py, shared with warmup.py — see that module for why.
 
 
 _MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT_SCRAPES", str(MAX_CONCURRENT)))
