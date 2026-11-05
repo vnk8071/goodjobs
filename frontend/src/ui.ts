@@ -1,5 +1,6 @@
 import type { Job } from "./types";
 import { t, getLang } from "./i18n";
+import { fetchJobDetail } from "./api";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
@@ -448,15 +449,9 @@ function openJobModal(job: Job): void {
     // Modal can show more skills than the table.
     jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
   }
-  const isMobile = window.innerWidth <= 640;
-  const summaryText = job.summary_description || (isMobile ? truncate(job.description ?? "", 300) : "");
-  if (summaryText) {
-    jobModalSummary.textContent = summaryText;
-    jobModalSummary.classList.remove("hidden");
-  } else {
-    jobModalSummary.textContent = "";
-    jobModalSummary.classList.add("hidden");
-  }
+  // Summaries are disabled in the backend; never show an AI summary box.
+  jobModalSummary.textContent = "";
+  jobModalSummary.classList.add("hidden");
 
   const modalApplyBtn = document.getElementById("jobModalApplyBtn") as HTMLAnchorElement | null;
   if (modalApplyBtn && job.link) {
@@ -479,6 +474,20 @@ function openJobModal(job: Job): void {
     jobModalBody.scrollTop = 0;
     jobModalDesc.innerHTML = descHtml;
   });
+
+  // Homepage stream rows carry only a short description snippet. Fetch the
+  // full cached job when the modal opens so the description is complete.
+  const modalLink = job.link;
+  if (job._compact && modalLink) {
+    void fetchJobDetail(modalLink).then((full) => {
+      if (!full || _openModalLink !== modalLink) return;
+      job.description = full.description || job.description;
+      job.skills = full.skills ?? job.skills;
+      jobModalDesc.innerHTML = job.description || "";
+      jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
+      jobModalCompany.innerHTML = `<div class="company-cell">${companyLogoHtml(full.company, full.source, full.logo)}<span>${esc(full.company)}</span></div>`;
+    });
+  }
 }
 
 /** Close the job detail modal and restore body scroll. */
@@ -893,12 +902,6 @@ export function appendJobs(existing: Job[], incoming: Job[]): Job[] {
       }
       // Modal can show more skills than the table.
       jobModalSkills.innerHTML = renderSkillTags(openJob.skills, 30);
-      const isMobile = window.innerWidth <= 640;
-      const refreshSummary = openJob.summary_description || (isMobile ? truncate(openJob.description ?? "", 300) : "");
-      if (refreshSummary) {
-        jobModalSummary.textContent = refreshSummary;
-        jobModalSummary.classList.remove("hidden");
-      }
     }
   }
 
@@ -943,7 +946,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
         const skillsHtml = renderSkillTags(job.skills, 6);
         return `<td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>`;
       })();
-  const descText = job.summary_description ? job.summary_description : truncate(job.description ?? "", 200);
+  const descText = truncate(job.description ?? "", 200);
   // Job listings stream in before their descriptions are fetched (Phase 2 enrichment).
   // Show a shimmer placeholder while the stream is open; after it closes, the
   // description is not coming (e.g. beyond the per-site enrich limit).

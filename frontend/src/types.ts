@@ -27,6 +27,7 @@ export interface Job {
   logo?: string;
   _vector_score?: number;
   _from_vector?: boolean;
+  _compact?: boolean;     // true for homepage stream rows; full details are fetched on modal open
   level_match?: boolean;   // true when title contains the requested level word (e.g. "junior")
 }
 

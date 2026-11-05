@@ -8,6 +8,30 @@ import type { Job } from "./types";
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
 
+// Subtle scroll reveal for static sections (reference: template fade-up).
+(() => {
+  const elements = document.querySelectorAll<HTMLElement>("[data-reveal]");
+  if (elements.length === 0) return;
+  if (
+    !("IntersectionObserver" in window) ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    elements.forEach((element) => element.classList.add("is-revealed"));
+    return;
+  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add("is-revealed");
+        observer.unobserve(entry.target);
+      }
+    },
+    { threshold: 0.08, rootMargin: "0px 0px -40px 0px" },
+  );
+  elements.forEach((element) => observer.observe(element));
+})();
+
 // EN/VI toggle — same single page, no separate /vi/ URL.
 initLang();
 applyStaticTranslations();
@@ -23,6 +47,7 @@ langToggleBtn?.addEventListener("click", () => {
   syncLangToggleLabel();
   refreshUILanguage();
   refreshChatLanguage();
+  syncSuggestionsToggle();
   if (homeJobs().length > 0 && recentJobsSection && !recentJobsSection.classList.contains("hidden")) {
     renderHomeJobs();
   }
@@ -101,6 +126,38 @@ function homeJobs(): Job[] {
 
 const byDate = (a: Job, b: Job): number => (b.posted_ts ?? 0) - (a.posted_ts ?? 0);
 
+/**
+ * One job per source in rotation, newest-first within each source.
+ * Prevents a single board (e.g. Glints) from filling the first page.
+ */
+function interleaveBySource(jobs: Job[]): Job[] {
+  const bySource = new Map<string, Job[]>();
+  for (const job of jobs) {
+    const source = job.source || "Other";
+    const bucket = bySource.get(source);
+    if (bucket) bucket.push(job);
+    else bySource.set(source, [job]);
+  }
+
+  const buckets = [...bySource.values()]
+    .map((bucket) => bucket.sort(byDate))
+    .sort((a, b) => (b[0]?.posted_ts ?? 0) - (a[0]?.posted_ts ?? 0));
+
+  const indices = new Array(buckets.length).fill(0);
+  const result: Job[] = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (let i = 0; i < buckets.length; i++) {
+      const job = buckets[i][indices[i]++];
+      if (!job) continue;
+      result.push(job);
+      added = true;
+    }
+  }
+  return result;
+}
+
 /** Refresh the category/location dropdown labels and keep the active values. */
 function updateHomeFilters(): void {
   if (!homeCategoryBar || !homeCategorySelect || !homeLocationSelect) return;
@@ -148,9 +205,11 @@ function renderHomeJobs(): void {
   const directJobs = homeDirectJobs.filter(
     (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
   ).sort(byDate);
-  const scrapedJobs = homeScrapedJobs.filter(
-    (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
-  ).sort(byDate);
+  const scrapedJobs = interleaveBySource(
+    homeScrapedJobs.filter(
+      (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
+    ),
+  );
 
   directRecentBody.innerHTML = "";
   if (directJobs.length > 0) {
@@ -271,6 +330,8 @@ function showRecentJobs(): void {
   if (!recentJobsBody || !recentJobsSection) return;
 
   let firstRender = false;
+  let knownSourceCount = 0;
+  const sourceCount = () => new Set(homeScrapedJobs.map((job) => job.source)).size;
   try {
     await streamRecentJobs(
       (batch) => {
@@ -280,9 +341,14 @@ function showRecentJobs(): void {
         }
         if (!firstRender && homeScrapedJobs.length >= homePageSize) {
           firstRender = true;
+          knownSourceCount = sourceCount();
+          renderHomeJobs();
+        } else if (firstRender && sourceCount() > knownSourceCount) {
+          // Re-interleave when a new source arrives so one board can't
+          // dominate the first page. This happens only a handful of times.
+          knownSourceCount = sourceCount();
           renderHomeJobs();
         } else if (firstRender) {
-          // Keep the visible rows stable; only the pager total grows.
           refreshHomePager();
         }
       },
@@ -345,6 +411,22 @@ suggestionChips.forEach((chip) => {
   });
 });
 
+const suggestionList = document.getElementById("suggestionList") as HTMLElement | null;
+const suggestionsToggle = document.getElementById("suggestionsToggle") as HTMLButtonElement | null;
+
+function syncSuggestionsToggle(): void {
+  const expanded = suggestionList?.classList.contains("suggestions--expanded") ?? false;
+  suggestionsToggle?.classList.toggle("is-expanded", expanded);
+  suggestionsToggle?.setAttribute("aria-expanded", String(expanded));
+  suggestionsToggle?.setAttribute("aria-label", t(expanded ? "search.showFewer" : "search.showMore"));
+}
+
+suggestionsToggle?.addEventListener("click", () => {
+  suggestionList?.classList.toggle("suggestions--expanded");
+  syncSuggestionsToggle();
+});
+syncSuggestionsToggle();
+
 keywordEl.addEventListener("input", () => {
   // Highlight matching suggestion chip.
   const val = keywordEl.value.trim().toLowerCase();
@@ -375,7 +457,7 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
       const data = await res.json() as { jobs_this_week: number };
       if (data.jobs_this_week > 0) {
         const display = data.jobs_this_week.toLocaleString("en-US");
-        weeklyStatsEl.innerHTML = `<strong>${display}</strong> ${t("stats.jobsSuffix")}`;
+        weeklyStatsEl.innerHTML = `<strong>${display}</strong><span>${t("stats.jobsSuffix")}</span>`;
         weeklyStatsEl.classList.remove("hidden");
       }
     }

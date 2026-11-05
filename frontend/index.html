@@ -198,6 +198,8 @@
     /* Brand hero banner (recreates the goodjobs.io.vn wordmark image).
        Light theme = warm off-white/black; dark theme = black/white. */
     .brand-hero {
+      position: relative;
+      isolation: isolate;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -215,9 +217,60 @@
         color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
-    html[data-theme="dark"] .brand-hero {
-      background: var(--bg);
-      color: var(--text);
+    /* Dotted grid + soft blue glow, inspired by the reference template. */
+    .brand-hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 22px 22px;
+      opacity: 0.55;
+      mask-image: radial-gradient(ellipse at center, #000 28%, transparent 76%);
+      -webkit-mask-image: radial-gradient(ellipse at center, #000 28%, transparent 76%);
+      pointer-events: none;
+    }
+
+    .brand-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: radial-gradient(ellipse 55% 62% at 50% 34%,
+          rgba(37, 99, 235, 0.16), transparent 70%);
+      pointer-events: none;
+    }
+
+    html[data-theme="dark"] .brand-hero::before {
+      opacity: 0.32;
+    }
+
+    html[data-theme="dark"] .brand-hero::after {
+      background: radial-gradient(ellipse 55% 62% at 50% 34%,
+          rgba(59, 130, 246, 0.22), transparent 70%);
+    }
+
+    .brand-hero__badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.34rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    .brand-hero__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
     }
 
     .brand-hero__wordmark {
@@ -230,6 +283,14 @@
       color: inherit;
     }
 
+    .brand-hero__accent {
+      color: var(--primary);
+    }
+
+    html[data-theme="dark"] .brand-hero__accent {
+      color: #60a5fa;
+    }
+
     .brand-hero__tagline {
       margin: 0;
       max-width: 62ch;
@@ -240,6 +301,69 @@
 
     html[data-theme="dark"] .brand-hero__tagline {
       color: #d4d4d4;
+    }
+
+    /* Source logo marquee (reference: brand marquee, adapted to job boards). */
+    .brand-hero__sources {
+      width: min(100%, 920px);
+      overflow: hidden;
+      margin-top: 0.35rem;
+      mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    }
+
+    .brand-hero__marquee {
+      display: flex;
+      width: max-content;
+      animation: brandMarquee 34s linear infinite;
+    }
+
+    .brand-hero__sources:hover .brand-hero__marquee {
+      animation-play-state: paused;
+    }
+
+    .brand-hero__group {
+      display: flex;
+      gap: 0.6rem;
+      padding-right: 0.6rem;
+    }
+
+    .source-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.32rem 0.62rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 0.7rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .source-pill img {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+      border-radius: 3px;
+      background: #ffffff;
+    }
+
+    @keyframes brandMarquee {
+      from {
+        transform: translateX(0);
+      }
+
+      to {
+        transform: translateX(-50%);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .brand-hero__marquee {
+        animation: none;
+      }
     }
 
     @media (max-width: 640px) {
@@ -257,6 +381,15 @@
       .brand-hero__tagline {
         font-size: 0.86rem;
         line-height: 1.55;
+      }
+
+      .brand-hero__sources {
+        margin-top: 0.15rem;
+      }
+
+      .source-pill {
+        font-size: 0.66rem;
+        padding: 0.28rem 0.55rem;
       }
     }
 
@@ -291,31 +424,235 @@
     }
 
     .card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      gap: 2rem;
+      align-items: center;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: 16px;
       padding: 2rem 2.25rem;
       margin-bottom: 1.75rem;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 14px 44px -26px rgba(15, 23, 42, 0.22);
+      transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .card:hover {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-      border-color: rgba(59, 130, 246, 0.2);
+      box-shadow: 0 20px 54px -26px rgba(15, 23, 42, 0.3);
+      border-color: rgba(59, 130, 246, 0.24);
+      transform: translateY(-1px);
     }
 
-    /* Search form */
-    .search-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr auto;
-      gap: 1rem;
-      align-items: end;
+    /* Search card: two-column intro + form, with a full-width ticker below */
+    .search-intro {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.75rem;
+      min-width: 0;
     }
 
-    .search-grid .suggestions {
-      grid-column: 1 / -1;
+    .search-intro__badges {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .search-intro__badge {
+      padding: 0.3rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .search-intro__badge--dark {
+      background: #0b0b0c;
+      color: #ffffff;
+    }
+
+    html[data-theme="dark"] .search-intro__badge--dark {
+      background: #ffffff;
+      color: #0b0b0c;
+    }
+
+    .search-intro__badge--accent {
+      background: var(--primary-light);
+      color: var(--primary-hover);
+    }
+
+    html[data-theme="dark"] .search-intro__badge--accent {
+      background: rgba(59, 130, 246, 0.16);
+      color: #93c5fd;
+    }
+
+    .search-intro__title {
+      margin: 0;
+      font-size: clamp(1.65rem, 2.4vw, 2.25rem);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+      color: var(--text);
+    }
+
+    .search-intro__desc {
+      margin: 0;
+      max-width: 40ch;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.6;
+    }
+
+    /* Big job-count metric (reference: measurable-impact numbers) */
+    .search-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.1rem;
+      margin-top: 0.35rem;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      box-shadow: none;
+      color: var(--muted);
+      font-size: 0.78rem;
+      white-space: normal;
+    }
+
+    .search-metric:hover {
+      transform: none;
+    }
+
+    .search-metric strong {
+      color: var(--text);
+      font-size: clamp(2.4rem, 4vw, 3.3rem);
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.05em;
+    }
+
+    .search-metric span {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 500;
+    }
+
+    .search-panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .search-panel__row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      gap: 0.6rem;
+    }
+
+    .search-panel__row .keyword-field {
+      flex: 1.1;
+      min-width: 0;
+    }
+
+    .search-panel__row .location-field {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-panel__row .button-field {
+      flex-shrink: 0;
+    }
+
+    .suggestions-wrap {
+      margin-top: 0.85rem;
+    }
+
+    .search-panel .suggestions {
       margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .search-panel .suggestions:not(.suggestions--expanded) {
+      flex-wrap: nowrap;
+      overflow: hidden;
+      mask-image: linear-gradient(90deg, #000 88%, transparent);
+      -webkit-mask-image: linear-gradient(90deg, #000 88%, transparent);
+    }
+
+    .search-panel .suggestions--expanded {
+      flex-wrap: wrap;
+      overflow: visible;
+      mask-image: none;
+      -webkit-mask-image: none;
+    }
+
+    .suggestions-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 34px;
+      margin-top: 0.55rem;
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .suggestions-toggle:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .suggestions-toggle svg {
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .suggestions-toggle.is-expanded svg {
+      transform: rotate(180deg);
+    }
+
+    /* Compact feature ticker, full width below both columns */
+    .search-ticker {
+      grid-column: 1 / -1;
+      margin-top: 0.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    @media (max-width: 767px) {
+      .card {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1.35rem;
+        padding: 1.35rem 1rem;
+      }
+
+      .search-intro__title {
+        font-size: 1.6rem;
+      }
+
+      .search-panel__row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .search-panel__row .button-field .btn {
+        width: 100%;
+      }
+
+      .search-ticker {
+        margin-top: 0;
+      }
     }
 
     @media (max-width: 640px) {
@@ -582,7 +919,7 @@
     }
 
     /* Keyword box is a textarea; keep it aligned with other controls by default. */
-    .search-grid #keyword {
+    .search-panel #keyword {
       height: 48px;
     }
 
@@ -702,12 +1039,13 @@
     .btn-primary {
       background: var(--primary);
       color: #fff;
+      box-shadow: 0 8px 22px -8px rgba(37, 99, 235, 0.55);
     }
 
     .btn-primary:hover:not(:disabled) {
       background: var(--primary-hover);
       transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
+      box-shadow: 0 12px 28px -8px rgba(37, 99, 235, 0.65);
     }
 
     .btn-primary:active:not(:disabled) {
@@ -1383,6 +1721,27 @@
       display: flex;
       justify-content: flex-end;
       margin-top: 1rem;
+    }
+
+    /* Scroll reveal (subtle fade-up, inspired by the reference template) */
+    [data-reveal] {
+      opacity: 0;
+      transform: translateY(14px);
+      transition: opacity 0.65s cubic-bezier(0.2, 0.7, 0.2, 1),
+        transform 0.65s cubic-bezier(0.2, 0.7, 0.2, 1);
+    }
+
+    [data-reveal].is-revealed {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      [data-reveal] {
+        opacity: 1;
+        transform: none;
+        transition: none;
+      }
     }
 
     /* Utility */
@@ -2354,71 +2713,48 @@
     .feature-slideshow {
       display: flex;
       flex-direction: column;
-      gap: 0.85rem;
+      gap: 0;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.75rem;
-      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
+      border-radius: 16px;
+      padding: 0.85rem 1.25rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 10px 34px -26px rgba(15, 23, 42, 0.22);
       overflow: hidden;
     }
 
-    /* Make the intro block feel like a hero on desktop.
-       Goal: occupy most of the first viewport so the publisher/about block
-       stays below the fold without hiding it. */
+    /* Compact ticker on desktop too — no large intro block. */
     @media (min-width: 768px) {
       .feature-slideshow {
         min-height: unset;
-        padding: 1.9rem 2.25rem;
-        gap: 1rem;
-        margin-bottom: 2.25rem;
+        padding: 0.95rem 1.35rem;
+        gap: 0;
+        margin-bottom: 1.5rem;
         justify-content: flex-start;
       }
 
-      .slideshow-intro h2 {
-        font-size: clamp(1.35rem, 1.15rem + 1vw, 2rem);
-        margin-bottom: 0.6rem;
-        letter-spacing: -0.015em;
-      }
-
-      .slideshow-intro-head {
-        flex-wrap: nowrap;
-        align-items: flex-start;
-      }
-
-      .slideshow-intro-head h2 {
-        margin-bottom: 0;
-      }
-
-      .slideshow-intro p {
-        font-size: 1rem;
-        line-height: 1.75;
-        max-width: 70ch;
-      }
-
       .slideshow-row {
-        margin-top: 0.9rem;
-        padding-top: 1.1rem;
-        gap: 1rem;
+        margin-top: 0;
+        padding-top: 0;
+        gap: 0.9rem;
       }
 
       .slideshow-icon svg {
-        width: 24px;
-        height: 24px;
+        width: 20px;
+        height: 20px;
       }
 
       .slideshow-slide strong {
-        font-size: 1.05rem;
+        font-size: 0.9rem;
       }
 
       .slideshow-slide span {
-        font-size: 0.95rem;
+        font-size: 0.82rem;
       }
 
       .slideshow-dot {
-        width: 7px;
-        height: 7px;
+        width: 6px;
+        height: 6px;
       }
     }
 
@@ -2462,6 +2798,17 @@
       justify-self: right;
     }
 
+    @media (max-width: 640px) {
+      .slideshow-intro-head {
+        grid-template-columns: 1fr;
+        row-gap: 0.5rem;
+      }
+
+      .slideshow-intro-head .weekly-stats {
+        justify-self: start;
+      }
+    }
+
     .slideshow-intro p {
       font-size: 0.85rem;
       color: var(--muted);
@@ -2472,8 +2819,6 @@
       display: flex;
       align-items: center;
       gap: 0.75rem;
-      border-top: 1px solid var(--border);
-      padding-top: 0.75rem;
     }
 
     .slideshow-icon {
@@ -2689,6 +3034,171 @@
       align-items: center;
       width: 100%;
     }
+    /* ─── Site footer ──────────────────────────────────────── */
+    .site-footer {
+      margin-top: 3rem;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .site-footer__inner {
+      display: grid;
+      grid-template-columns: 1.5fr repeat(4, 1fr);
+      gap: 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 2rem;
+    }
+
+    .site-footer__brand-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      color: var(--text);
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+
+    .site-footer__brand-link img {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+    }
+
+    .site-footer__tagline {
+      max-width: 34ch;
+      margin: 0.9rem 0 1.1rem;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.6;
+    }
+
+    .site-footer__social {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .site-footer__social a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--muted);
+      transition: color 0.15s, border-color 0.15s, transform 0.15s;
+    }
+
+    .site-footer__social a:hover {
+      color: var(--primary);
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .site-footer__col h3 {
+      margin: 0 0 0.85rem;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .site-footer__col a {
+      display: block;
+      padding: 0.28rem 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .site-footer__col a:hover {
+      color: var(--primary);
+    }
+
+    .site-footer__bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1rem 1.5rem 1.25rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .site-footer__legal {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.25rem;
+    }
+
+    .site-footer__legal a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .site-footer__legal a:hover {
+      color: var(--primary);
+    }
+
+    .site-footer__copyright {
+      text-align: right;
+    }
+
+    .site-footer__disclaimer {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 1.5rem 1.5rem;
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.5;
+    }
+
+    .site-footer .gj-cookie-settings {
+      margin: 0.5rem 0 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 1024px) {
+      .site-footer__inner {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .site-footer__brand {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .site-footer__inner {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 1.75rem 1rem 1.25rem;
+      }
+
+      .site-footer__bottom {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 1rem 1rem 1.25rem;
+      }
+
+      .site-footer__copyright {
+        text-align: left;
+      }
+
+      .site-footer__disclaimer {
+        padding: 0 1rem 1.25rem;
+      }
+    }
+
     /* ─── AI chat window ───────────────────────────────────── */
     .chat-launcher {
       position: fixed;
@@ -3178,31 +3688,114 @@
     <main>
 
     <!-- Brand hero banner -->
-    <section class="brand-hero" aria-label="Good Jobs">
-      <p class="brand-hero__wordmark">goodjobs.io.vn</p>
+    <section class="brand-hero" aria-label="Good Jobs" data-reveal>
+      <span class="brand-hero__badge">
+        <span class="brand-hero__dot" aria-hidden="true"></span>
+        <span data-i18n="hero.badge">21 sources · one query</span>
+      </span>
+      <p class="brand-hero__wordmark">good<span class="brand-hero__accent">jobs</span>.io.vn</p>
       <p class="brand-hero__tagline" data-i18n="brand.tagline">
         A self-hosted job aggregator across 21 sources: one query, real-time results and recommendations that understand the role.
       </p>
+      <div class="brand-hero__sources" aria-hidden="true">
+        <div class="brand-hero__marquee">
+          <div class="brand-hero__group">
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=linkedin.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>LinkedIn</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=itviec.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>ITviec</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=topcv.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>TopCV</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=vietnamworks.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>VietnamWorks</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=topdev.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>TopDev</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=indeed.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>Indeed</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=careerviet.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>CareerViet</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=jobsgo.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>JobsGo</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=careerlink.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>CareerLink</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=glints.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>Glints</span></span>
+          </div>
+          <div class="brand-hero__group" aria-hidden="true">
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=linkedin.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>LinkedIn</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=itviec.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>ITviec</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=topcv.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>TopCV</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=vietnamworks.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>VietnamWorks</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=topdev.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>TopDev</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=indeed.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>Indeed</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=careerviet.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>CareerViet</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=jobsgo.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>JobsGo</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=careerlink.vn&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>CareerLink</span></span>
+            <span class="source-pill"><img src="https://www.google.com/s2/favicons?domain=glints.com&sz=64" alt="" width="16" height="16" loading="lazy" decoding="async"><span>Glints</span></span>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <!-- Homepage intro + feature slideshow — merged, visible before any search -->
-    <div id="featureSlideshow" class="feature-slideshow">
-      <div class="slideshow-intro">
-        <div class="slideshow-intro-head">
-          <h2 data-i18n="hero.title">Job Search for Vietnam and Beyond</h2>
-          <span id="weeklyStats" class="weekly-stats hidden"></span>
+    <!-- Search + feature ticker (reference: template two-column search block) -->
+    <div class="card search-card" data-reveal>
+      <div class="search-intro">
+        <div class="search-intro__badges">
+          <span class="search-intro__badge search-intro__badge--dark" data-i18n="searchIntro.badgeNew">New</span>
+          <span class="search-intro__badge search-intro__badge--accent" data-i18n="searchIntro.badgeSources">21 sources</span>
         </div>
-        <p data-i18n="hero.desc">Good Jobs aggregates the latest listings from top Vietnam and global job boards into a single page,
-          refreshed daily so you never miss an opportunity.</p>
+        <h2 class="search-intro__title" data-i18n="searchIntro.title">Find your next role.</h2>
+        <p class="search-intro__desc" data-i18n="searchIntro.desc">One search across LinkedIn, ITviec, TopCV, VietnamWorks, Glints and more — refreshed daily.</p>
+        <div id="weeklyStats" class="weekly-stats search-metric">
+          <strong>—</strong><span data-i18n="stats.jobsSuffix">jobs · 14 days</span>
+        </div>
       </div>
-      <div class="slideshow-row">
-        <div class="slideshow-icon" id="slideshowIcon">
+
+      <div class="search-panel">
+        <div class="search-panel__row">
+          <div class="field keyword-field">
+            <label for="keyword" data-i18n="search.labelKeyword">Job Title / Skills / CV</label>
+            <textarea id="keyword" rows="1" data-i18n-placeholder="search.placeholderKeyword" placeholder="Enter a job title, skills, or paste your CV…" autocomplete="off"
+              spellcheck="false"></textarea>
+          </div>
+          <div class="field location-field">
+            <label for="locationInput" data-i18n="search.labelLocation">Location</label>
+            <input id="locationInput" type="text" data-i18n-placeholder="search.placeholderLocation" placeholder="Enter a city name, or &quot;Remote&quot; (e.g. Ho Chi Minh City, London, Remote)" autocomplete="off" />
+          </div>
+          <div class="field button-field">
+            <button id="fetchBtn" class="btn btn-primary">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <span data-i18n="search.button">Search Jobs</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="suggestions-wrap">
+          <div class="suggestions" id="suggestionList">
+            <span class="suggestion-chip" data-kw="AI Engineer">AI Engineer</span>
+            <span class="suggestion-chip" data-kw="Product Manager">Product Manager</span>
+            <span class="suggestion-chip" data-kw="Business Analyst">Business Analyst</span>
+            <span class="suggestion-chip" data-kw="Marketing Executive">Marketing Executive</span>
+            <span class="suggestion-chip" data-kw="Talent Acquisition">Talent Acquisition</span>
+            <span class="suggestion-chip" data-kw="Backend Engineer">Backend Engineer</span>
+            <span class="suggestion-chip" data-kw="Fullstack Engineer">Fullstack Engineer</span>
+            <span class="suggestion-chip" data-kw="Data Engineer">Data Engineer</span>
+            <span class="suggestion-chip" data-kw="DevOps Engineer">DevOps Engineer</span>
+            <span class="suggestion-chip" data-kw="Mobile Developer">Mobile Developer</span>
+            <span class="suggestion-chip" data-kw="QA Engineer">QA Engineer</span>
+          </div>
+          <button type="button" class="suggestions-toggle" id="suggestionsToggle" aria-expanded="false"
+            aria-controls="suggestionList" aria-label="Show more suggestions">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="featureSlideshow" class="search-ticker">
+        <div class="slideshow-row">
+          <div class="slideshow-icon" id="slideshowIcon">
           <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
         </div>
-        <div class="slideshow-slides">
+          <div class="slideshow-slides">
           <div class="slideshow-slide active">
             <strong data-i18n="slide1.title">Multi-Source Search</strong>
             <span data-i18n="slide1.desc">Results from LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo, and CareerViet at
@@ -3249,7 +3842,7 @@
             <span data-i18n="slide11.desc">Paste your CV or list your skills — AI analyzes it and finds the best-matching jobs. For example: "2 years of experience with React, Node.js, PostgreSQL. Worked at a fintech startup, familiar with CI/CD and Docker…"</span>
           </div>
         </div>
-        <div class="slideshow-dots" id="slideshowDots">
+          <div class="slideshow-dots" id="slideshowDots">
           <div class="slideshow-dot active" data-idx="0"></div>
           <div class="slideshow-dot" data-idx="1"></div>
           <div class="slideshow-dot" data-idx="2"></div>
@@ -3262,46 +3855,6 @@
           <div class="slideshow-dot" data-idx="9"></div>
           <div class="slideshow-dot" data-idx="10"></div>
         </div>
-      </div><!-- end slideshow-row -->
-    </div>
-
-    <!-- Search Card -->
-    <div class="card">
-      <div class="search-grid">
-        <div class="field keyword-field">
-          <label for="keyword" data-i18n="search.labelKeyword">Job Title / Skills / CV</label>
-          <textarea id="keyword" rows="1" data-i18n-placeholder="search.placeholderKeyword" placeholder="Enter a job title, skills, or paste your CV…" autocomplete="off"
-            spellcheck="false"></textarea>
-        </div>
-
-        <div class="field location-field">
-          <label for="locationInput" data-i18n="search.labelLocation">Location</label>
-          <input id="locationInput" type="text" data-i18n-placeholder="search.placeholderLocation" placeholder="Enter a city name, or &quot;Remote&quot; (e.g. Ho Chi Minh City, London, Remote)" autocomplete="off" />
-        </div>
-
-        <div class="field button-field">
-          <label>&nbsp;</label>
-          <button id="fetchBtn" class="btn btn-primary">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-            <span data-i18n="search.button">Search Jobs</span>
-          </button>
-        </div>
-
-        <div class="suggestions">
-          <span class="suggestion-chip" data-kw="AI Engineer">AI Engineer</span>
-          <span class="suggestion-chip" data-kw="Product Manager">Product Manager</span>
-          <span class="suggestion-chip" data-kw="Business Analyst">Business Analyst</span>
-          <span class="suggestion-chip" data-kw="Marketing Executive">Marketing Executive</span>
-          <span class="suggestion-chip" data-kw="Talent Acquisition">Talent Acquisition</span>
-          <span class="suggestion-chip" data-kw="Backend Engineer">Backend Engineer</span>
-          <span class="suggestion-chip" data-kw="Fullstack Engineer">Fullstack Engineer</span>
-          <span class="suggestion-chip" data-kw="Data Engineer">Data Engineer</span>
-          <span class="suggestion-chip" data-kw="DevOps Engineer">DevOps Engineer</span>
-          <span class="suggestion-chip" data-kw="Mobile Developer">Mobile Developer</span>
-          <span class="suggestion-chip" data-kw="QA Engineer">QA Engineer</span>
         </div>
       </div>
     </div>
@@ -3438,7 +3991,7 @@
     </section>
 
     <!-- About section -->
-    <section id="aboutSection" class="about-section about-section--publisher">
+    <section id="aboutSection" class="about-section about-section--publisher" data-reveal>
       <div class="about-content">
         <h2 data-i18n="about.title">Good Jobs — Smart Job Aggregation</h2>
         <p data-i18n="about.desc">
@@ -3507,29 +4060,72 @@
 
   </main>
 
-    <footer
-    style="text-align:center;margin-top:3rem;padding:2rem 1rem;border-top:1px solid var(--border);color:var(--muted);font-size:0.85rem;">
-    <div style="display:flex; justify-content:center; gap:1.5rem; margin-bottom:1rem;">
-      <a href="/privacy/" style="color:inherit; text-decoration:none; font-weight:500;" data-i18n="footer.privacy">Privacy Policy</a>
-      <a href="/terms/" style="color:inherit; text-decoration:none; font-weight:500;" data-i18n="footer.terms">Terms of Service</a>
-      <a href="/post-job/" style="color:inherit; text-decoration:none; font-weight:500;" data-i18n="footer.postJob">Post a Job</a>
-      <a href="/contact/" style="color:inherit; text-decoration:none; font-weight:500;" data-i18n="footer.contactEmail">Contact · khoivn@goodjobs.io.vn</a>
-      <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener"
-        style="color:inherit; text-decoration:none; font-weight:500; display:inline-flex; align-items:center; gap:0.3rem;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"
-          aria-hidden="true">
-          <path
-            d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-        </svg>
-        LinkedIn
-      </a>
-    </div>
-    <div data-i18n="footer.copyright">&copy; 2026 Good Jobs | Automated job search system | Data refreshed daily</div>
-    <div style="margin-top:0.5rem; font-size:0.75rem; " data-i18n="footer.disclaimer">
-      Good Jobs is an independent search tool. We aggregate publicly available job listings to help job seekers
-      find opportunities more efficiently.
-    </div>
-  </footer>
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <div class="site-footer__brand">
+          <a class="site-footer__brand-link" href="/">
+            <img src="/favicon.svg" alt="Good Jobs" width="38" height="38" loading="lazy" decoding="async">
+            <span>Good Jobs</span>
+          </a>
+          <p class="site-footer__tagline" data-i18n="footer.tagline">
+            Search recent jobs across Vietnam and global job boards, refreshed daily.
+          </p>
+          <div class="site-footer__social">
+            <a href="https://github.com/vnk8071/goodjobs" target="_blank" rel="noopener" aria-label="GitHub" data-i18n-aria-label="footer.githubAria">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.09 3.29 9.4 7.86 10.93.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.75 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 2.9-.39c.98 0 1.97.13 2.9.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.4-5.26 5.68.42.36.78 1.07.78 2.17 0 1.56-.02 2.82-.02 3.2 0 .31.21.67.8.56C20.71 21.39 24 17.08 24 12c0-6.27-5.23-11.5-12-11.5Z"/></svg>
+            </a>
+            <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener" aria-label="LinkedIn" data-i18n-aria-label="footer.linkedinAria">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            </a>
+            <a href="mailto:khoivn@goodjobs.io.vn" aria-label="Email" data-i18n-aria-label="footer.emailAria">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <div class="site-footer__col">
+          <h3 data-i18n="footer.explore">Explore</h3>
+          <a href="/" data-i18n="footer.home">Home</a>
+          <a href="/#recentJobsSection" data-i18n="footer.recentJobs">Recent Jobs</a>
+          <a href="/post-job/" data-i18n="footer.postJob">Post a Job</a>
+          <a href="/contact/" data-i18n="footer.contact">Contact</a>
+        </div>
+
+        <div class="site-footer__col">
+          <h3 data-i18n="footer.categories">Categories</h3>
+          <a href="/?kw=AI%20Engineer" data-i18n="footer.aiJobs">AI Jobs</a>
+          <a href="/?kw=Software%20Engineer" data-i18n="footer.itJobs">IT Jobs</a>
+          <a href="/?kw=Marketing%20Executive" data-i18n="footer.marketingJobs">Marketing Jobs</a>
+          <a href="/?kw=Talent%20Acquisition" data-i18n="footer.hrJobs">HR Jobs</a>
+        </div>
+
+        <div class="site-footer__col">
+          <h3 data-i18n="footer.company">Company</h3>
+          <a href="/#aboutSection" data-i18n="footer.about">About</a>
+          <a href="/privacy/" data-i18n="footer.privacy">Privacy Policy</a>
+          <a href="/terms/" data-i18n="footer.terms">Terms of Service</a>
+          <a href="/contact/" data-i18n="footer.contactEmail">Contact · khoivn@goodjobs.io.vn</a>
+        </div>
+
+        <div class="site-footer__col">
+          <h3 data-i18n="footer.resources">Resources</h3>
+          <a href="https://github.com/vnk8071/goodjobs" target="_blank" rel="noopener" data-i18n="footer.github">GitHub</a>
+          <a href="https://www.linkedin.com/company/good-jobs-vietnam/" target="_blank" rel="noopener" data-i18n="footer.linkedin">LinkedIn</a>
+          <a href="mailto:khoivn@goodjobs.io.vn" data-i18n="footer.email">Email</a>
+        </div>
+      </div>
+
+      <div class="site-footer__bottom">
+        <div class="site-footer__legal">
+          <a href="/privacy/" data-i18n="footer.privacy">Privacy Policy</a>
+          <a href="/terms/" data-i18n="footer.terms">Terms of Service</a>
+        </div>
+        <div class="site-footer__copyright" data-i18n="footer.copyright">&copy; 2026 Good Jobs | Automated job search system | Data refreshed daily</div>
+      </div>
+      <div class="site-footer__disclaimer" data-i18n="footer.disclaimer">
+        Good Jobs is an independent search tool. We aggregate publicly available job listings to help job seekers find opportunities more efficiently.
+      </div>
+    </footer>
 
   <script>
     // Theme toggle setup

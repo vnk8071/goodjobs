@@ -760,7 +760,7 @@ async def _expected_cycle_size() -> int:
 
 _COMPACT_JOB_FIELDS = (
     "title", "company", "location", "link", "source", "posted",
-    "posted_ts", "posted_date", "skills", "logo", "summary_description",
+    "posted_ts", "posted_date", "skills", "logo",
 )
 
 
@@ -770,17 +770,19 @@ def _compact_recent_job(job: dict) -> dict:
     The homepage shows all cached jobs and only renders a short description
     snippet, so shipping full HTML descriptions for thousands of rows is
     wasteful. Keep the fields the table/filter/modal need and replace the
-    description with a plain-text snippet.
+    description with a plain-text snippet. The full description is fetched
+    on demand when the job modal opens.
     """
     compact = {
         key: job[key]
         for key in _COMPACT_JOB_FIELDS
         if job.get(key) not in (None, "", [])
     }
-    snippet = job.get("summary_description") or _strip_html(job.get("description") or "")
+    snippet = _strip_html(job.get("description") or "")
     snippet = " ".join(snippet.split())[:500]
     if snippet:
         compact["description"] = snippet
+    compact["_compact"] = True
     return compact
 
 
@@ -966,6 +968,45 @@ async def recent_jobs_stream(compact: bool = True):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@app.get("/job")
+async def job_detail(link: str):
+    """Return the full cached job for a link (used by the homepage modal).
+
+    The homepage stream ships short description snippets for every job; this
+    endpoint loads the full description only when the user opens a job.
+    """
+    link = link.strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="link is required")
+
+    try:
+        redis = get_redis()
+        async for key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(key):
+                continue
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            for job in data.get("jobs", []):
+                if job.get("link") == link:
+                    return job
+    except Exception as e:
+        log_app(f"[job] cache lookup error: {e}", "ERROR")
+
+    try:
+        for job in await list_approved_as_jobs():
+            if job.get("link") == link:
+                return job
+    except Exception as e:
+        log_app(f"[job] direct lookup error: {e}", "ERROR")
+
+    raise HTTPException(status_code=404, detail="Job not found")
 
 
 @app.get("/stats")

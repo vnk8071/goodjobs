@@ -130,13 +130,25 @@ export interface NormalizeCityResult {
   reasoning: string;
 }
 
+export async function fetchJobDetail(
+  link: string,
+  signal?: AbortSignal,
+): Promise<Job | null> {
+  try {
+    const resp = await fetch(`${API_BASE}/job?link=${encodeURIComponent(link)}`, { signal });
+    if (!resp.ok) return null;
+    return (await resp.json()) as Job;
+  } catch {
+    return null;
+  }
+}
+
 export async function askJobs(
   message: string,
   history: ChatHistoryMessage[],
   lang: string,
   signal?: AbortSignal,
-): Promise<ChatResponse> {
-  const resp = await fetch(`${API_BASE}/chat`, {
+): Promise<ChatResponse> {  const resp = await fetch(`${API_BASE}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, history, lang }),
