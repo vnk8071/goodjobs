@@ -1,4 +1,4 @@
-import type { Job, ScrapeRequest, QuerySuggestion } from "./types";
+import type { Job, ScrapeRequest, QuerySuggestion, ChatHistoryMessage, ChatResponse } from "./types";
 
 const _LINKEDIN_BASE =
   "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search";
@@ -128,6 +128,27 @@ export async function classifyInput(
 export interface NormalizeCityResult {
   city: string;
   reasoning: string;
+}
+
+export async function askJobs(
+  message: string,
+  history: ChatHistoryMessage[],
+  lang: string,
+  signal?: AbortSignal,
+): Promise<ChatResponse> {
+  const resp = await fetch(`${API_BASE}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, history, lang }),
+    signal,
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    const error = new Error(err.detail ?? "Chat request failed") as Error & { status?: number };
+    error.status = resp.status;
+    throw error;
+  }
+  return (await resp.json()) as ChatResponse;
 }
 
 export async function normalizeCity(

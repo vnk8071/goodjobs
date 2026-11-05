@@ -39,7 +39,7 @@ from src.concurrency import (
 )
 from src.logger import log_search, log_app
 from src.analytics import TZ_ICT, read_search_entries, summarize, day_detail
-from src.utils import timed_scrape
+from src.utils import timed_scrape, _strip_html
 from src.matching import (
     title_matches,
     title_matches_any_anchor,
@@ -55,8 +55,9 @@ from src.matching import (
     _LEVEL_WORDS,
     LEVEL_SYNONYMS,
 )
-from src.models import Job, ScrapeRequest, SubmissionRequest
+from src.models import Job, ScrapeRequest, SubmissionRequest, ChatRequest
 from src.intent import suggest_query, record_search, classify_and_extract, normalize_city
+from src.chat import answer_job_question, check_chat_rate_limit
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
 from src.submissions import (
     create_submission,
@@ -757,12 +758,41 @@ async def _expected_cycle_size() -> int:
         return 0
 
 
+_COMPACT_JOB_FIELDS = (
+    "title", "company", "location", "link", "source", "posted",
+    "posted_ts", "posted_date", "skills", "logo", "summary_description",
+)
+
+
+def _compact_recent_job(job: dict) -> dict:
+    """Return a lightweight job for the homepage list.
+
+    The homepage shows all cached jobs and only renders a short description
+    snippet, so shipping full HTML descriptions for thousands of rows is
+    wasteful. Keep the fields the table/filter/modal need and replace the
+    description with a plain-text snippet.
+    """
+    compact = {
+        key: job[key]
+        for key in _COMPACT_JOB_FIELDS
+        if job.get(key) not in (None, "", [])
+    }
+    snippet = job.get("summary_description") or _strip_html(job.get("description") or "")
+    snippet = " ".join(snippet.split())[:500]
+    if snippet:
+        compact["description"] = snippet
+    return compact
+
+
 @app.get("/recent-jobs")
-async def recent_jobs(n: int = 20, source: str = ""):
+async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
     """Return the N most recently posted unique jobs across all cached keyword×location pairs.
 
     If `source` is given, return only jobs from that source (exact top-N, no
     round-robin dilution) instead of the round-robin mix across all sources.
+
+    If `compact` is true, return lightweight rows (short plain-text
+    description, no full HTML) for the homepage's "all cached jobs" list.
     """
     seen_links: set[str] = set()
     all_jobs: list[dict] = []
@@ -823,7 +853,8 @@ async def recent_jobs(n: int = 20, source: str = ""):
 
     if source:
         matched = [j for j in all_jobs if (j.get("source") or "").lower() == source.lower()]
-        return matched[:n]
+        result = matched[:n]
+        return [_compact_recent_job(j) for j in result] if compact else result
 
     # Round-robin by source so no single source dominates the feed
     per_source: dict[str, list[dict]] = {}
@@ -838,7 +869,7 @@ async def recent_jobs(n: int = 20, source: str = ""):
             if bucket and len(result) < n:
                 result.append(bucket.pop(0))
 
-    return result
+    return [_compact_recent_job(j) for j in result] if compact else result
 
 
 @app.get("/stats")
@@ -1164,6 +1195,31 @@ async def search_semantic(q: str, top_k: int = 20):
     loop = asyncio.get_event_loop()
     results = await loop.run_in_executor(_executor, vector_search, q.strip(), top_k)
     return {"query": q.strip(), "count": len(results), "results": results}
+
+
+@app.post("/chat")
+async def chat(req: ChatRequest, request: Request):
+    """Ask the Good Jobs AI assistant about jobs in the cache."""
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    if not check_chat_rate_limit(ip):
+        raise HTTPException(
+            status_code=429,
+            detail="You're asking too fast. Please wait a minute and try again.",
+        )
+
+    return await answer_job_question(
+        message,
+        [item.model_dump() for item in req.history],
+        req.lang,
+    )
 
 
 @app.post("/scrape-stream")

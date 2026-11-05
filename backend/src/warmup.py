@@ -718,27 +718,30 @@ async def _heartbeat_loop() -> None:
 
 
 _SUMMARIZE_INTERVAL = 1800.0  # seconds between passes, once the previous one finishes
+_ENABLE_SUMMARIZER = os.getenv("ENABLE_SUMMARIZER", "false").strip().lower() in {
+    "1", "true", "yes", "on",
+}
 
 
 async def _summarize_and_embed_loop(executor) -> None:
-    """Summarize and embed cached jobs, as its own loop, independent of every scrape
-    and enrich cycle.
+    """Embed cached jobs, and optionally summarize them.
 
-    Cloudflare's batch inference queue — not our code — decides how long a pass takes,
-    and it has taken 8-9h on a large backlog. Three different places used to await this
-    inline: the scheduled enrich pass, every scrape cycle's own tail, and the one-time
-    startup catch-up. Each one silently ate whatever schedule slot came after it for as
-    long as the queue was backed up — the 2026-10 incidents. None of them need to wait
-    on this to do their own job, so none of them call it anymore; this loop is the only
-    caller, runs forever, and nothing ever awaits it.
+    Summarization is disabled by default (`ENABLE_SUMMARIZER=false`) because the
+    AI summary pass is expensive and no longer required by the homepage. The
+    embedding pass still runs so semantic search keeps working.
+
+    This loop is independent of every scrape and enrich cycle: Cloudflare's batch
+    inference queue decides how long a pass takes, and awaiting it inline used to
+    stall scheduled scrapes. Nothing ever awaits this loop.
     """
     while True:
-        try:
-            log_app("[summarize] triggering summarization...")
-            stats = await run_background_summarization()
-            log_app(f"[summarize] summarization complete: {stats}")
-        except Exception as e:
-            log_app(f"[summarize] summarization error: {e}", "ERROR")
+        if _ENABLE_SUMMARIZER:
+            try:
+                log_app("[summarize] triggering summarization...")
+                stats = await run_background_summarization()
+                log_app(f"[summarize] summarization complete: {stats}")
+            except Exception as e:
+                log_app(f"[summarize] summarization error: {e}", "ERROR")
         try:
             log_app("[summarize] embedding cached jobs...")
             await _embed_cached_jobs(executor)
@@ -766,6 +769,8 @@ async def warmup(executor, scrapers: dict) -> None:
 
     asyncio.create_task(_heartbeat_loop())
     asyncio.create_task(_summarize_and_embed_loop(executor))
+    if not _ENABLE_SUMMARIZER:
+        log_app("[summarize] job summarizer disabled (ENABLE_SUMMARIZER=false)")
 
     loop = asyncio.get_event_loop()
 

@@ -40,6 +40,17 @@ class ScrapeRequest(BaseModel):
     intent: str = ""      # "job_title" | "cv_or_skills" | "not_job" — AI-classified on frontend
 
 
+class ChatMessage(BaseModel):
+    role: str = "user"   # "user" | "assistant"
+    content: str = ""
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []
+    lang: str = "en"     # "en" | "vi"
+
+
 class SubmissionRequest(BaseModel):
     title: str = ""
     company: str = ""

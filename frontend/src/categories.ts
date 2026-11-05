@@ -27,17 +27,6 @@ export const CATEGORY_IDS = [
 export type CategoryId = (typeof CATEGORY_IDS)[number];
 export type CategoryFilter = "all" | CategoryId;
 
-export const CATEGORY_LABELS: Record<CategoryId, string> = {
-  ai: "AI",
-  it: "IT",
-  data: "Data",
-  product: "Product",
-  business: "Business",
-  design: "Design",
-  marketing: "Marketing",
-  hr: "HR",
-};
-
 const CATEGORY_TERMS: Record<CategoryId, string[]> = {
   ai: [
     "ai",

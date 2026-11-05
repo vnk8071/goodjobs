@@ -42,3 +42,25 @@ export interface QuerySuggestion {
   suggested_cache_keyword: string | null;
   reasoning: string;
 }
+
+export interface ChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatJob {
+  title: string;
+  company: string;
+  location: string;
+  source: string;
+  link: string;
+  posted: string;
+  skills: string[];
+  score: number;
+}
+
+export interface ChatResponse {
+  answer: string;
+  jobs: ChatJob[];
+  count: number;
+}

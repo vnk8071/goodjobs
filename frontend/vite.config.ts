@@ -10,6 +10,10 @@ export default defineConfig({
       "/scrape-stream": "http://localhost:8000",
       "/stats": "http://localhost:8000",
       "/recent-jobs": "http://localhost:8000",
+      "/suggest-query": "http://localhost:8000",
+      "/classify-input": "http://localhost:8000",
+      "/normalize-city": "http://localhost:8000",
+      "/chat": "http://localhost:8000",
     },
   },
   build: {

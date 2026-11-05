@@ -1,7 +1,8 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, API_BASE } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
-import { CATEGORY_LABELS, getJobCategories, jobMatchesCategory, type CategoryFilter } from "./categories";
+import { initChat, refreshChatLanguage } from "./chat";
+import { getJobCategories, jobMatchesCategory, type CategoryFilter } from "./categories";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
@@ -10,6 +11,7 @@ initApplyToast();
 // EN/VI toggle — same single page, no separate /vi/ URL.
 initLang();
 applyStaticTranslations();
+initChat();
 const langToggleBtn = document.getElementById("langToggle") as HTMLButtonElement | null;
 function syncLangToggleLabel(): void {
   if (langToggleBtn) langToggleBtn.textContent = getLang() === "en" ? "VI" : "EN";
@@ -20,6 +22,7 @@ langToggleBtn?.addEventListener("click", () => {
   applyStaticTranslations();
   syncLangToggleLabel();
   refreshUILanguage();
+  refreshChatLanguage();
   if (homeJobs().length > 0 && recentJobsSection && !recentJobsSection.classList.contains("hidden")) {
     renderHomeJobs();
   }
@@ -65,7 +68,7 @@ function updateHomeCategoryBar(): void {
   homeCategoryChips.forEach((chip) => {
     const category = (chip.dataset.category ?? "all") as CategoryFilter;
     const count = counts[category] ?? 0;
-    const label = category === "all" ? t("category.all") : CATEGORY_LABELS[category];
+    const label = category === "all" ? t("category.all") : t(`category.${category}`);
 
     chip.replaceChildren(document.createTextNode(`${label} `));
     const countEl = document.createElement("span");
@@ -90,7 +93,9 @@ function renderHomeJobs(): void {
 
   directRecentBody.innerHTML = "";
   if (directJobs.length > 0) {
-    directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1, "date")));
+    const frag = document.createDocumentFragment();
+    directJobs.forEach((job, i) => frag.appendChild(buildRow(job, i + 1, "date")));
+    directRecentBody.appendChild(frag);
     directRecentSection?.classList.remove("hidden");
   } else {
     directRecentSection?.classList.add("hidden");
@@ -98,7 +103,9 @@ function renderHomeJobs(): void {
 
   recentJobsBody.innerHTML = "";
   if (scrapedJobs.length > 0) {
-    scrapedJobs.forEach((job, i) => recentJobsBody.appendChild(buildRow(job, i + 1, "date")));
+    const frag = document.createDocumentFragment();
+    scrapedJobs.forEach((job, i) => frag.appendChild(buildRow(job, i + 1, "date")));
+    recentJobsBody.appendChild(frag);
     recentJobsSection?.classList.remove("hidden");
   } else if (homeCategory !== "all" && homeJobs().length > 0) {
     const row = document.createElement("tr");
@@ -133,24 +140,19 @@ function showRecentJobs(): void {
   if (homeJobs().length > 0) renderHomeJobs();
 }
 
-// Load and render recent jobs on the homepage: up to 20 direct jobs + recent scraped jobs
+// Load and render all cached jobs on the homepage. `compact=1` keeps the
+// payload small (short plain-text descriptions) while still returning every
+// job in the cache — no more hardcoded 20-job cap.
 (async () => {
   if (!recentJobsBody || !recentJobsSection) return;
   try {
-    const [directRes, mixedRes] = await Promise.all([
-      fetch(`${API_BASE}/recent-jobs?n=20&source=Direct`),
-      fetch(`${API_BASE}/recent-jobs?n=20`),
-    ]);
+    const res = await fetch(`${API_BASE}/recent-jobs?n=100000&compact=1`);
+    if (!res.ok) return;
 
-    if (directRes.ok) {
-      homeDirectJobs = await directRes.json() as Job[];
-    }
-
-    if (mixedRes.ok) {
-      const jobs = await mixedRes.json() as Job[];
-      homeScrapedJobs = jobs.filter((j) => j.source !== "Direct");
-    }
-
+    const jobs = await res.json() as Job[];
+    const byDate = (a: Job, b: Job) => (b.posted_ts ?? 0) - (a.posted_ts ?? 0);
+    homeDirectJobs = jobs.filter((job) => job.source === "Direct").sort(byDate);
+    homeScrapedJobs = jobs.filter((job) => job.source !== "Direct").sort(byDate);
     renderHomeJobs();
   } catch {
     // silently ignore — recent jobs is non-critical

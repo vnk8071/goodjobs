@@ -358,6 +358,16 @@ const _SOURCE_DOMAINS: Record<string, string> = {
   "careerviet":   "careerviet.vn",
   "jobsgo":       "jobsgo.vn",
   "careerlink":   "careerlink.vn",
+  "glints":       "glints.com",
+  "viecoi":       "viecoi.vn",
+  "techjobs":     "techjobs.vn",
+  "xomdata":      "xomdata.com",
+  "dice":         "dice.com",
+  "usajobs":      "usajobs.gov",
+  "glassdoor":    "glassdoor.com",
+  "remoteok":     "remoteok.com",
+  "weworkremotely": "weworkremotely.com",
+  "google":       "google.com",
 };
 
 /** Render a company logo img or letter-avatar span, with Clearbit and scraped-logo fallbacks. */
@@ -396,6 +406,31 @@ function sourceLabel(source: string): string {
   return _SOURCE_LABEL[source] ?? source;
 }
 
+/** Render the job board's own favicon/logo instead of a text badge.
+ *  Falls back to the text badge if the image cannot be loaded. */
+function sourceLogoHtml(source: string): string {
+  const key = source.toLowerCase();
+  const label = sourceLabel(source);
+  const domain = _SOURCE_DOMAINS[key] ?? (source.includes(".") ? source : "");
+
+  if (key === "direct" || key === "goodjobs") {
+    return `<span class="source-logo-wrap" data-source-label="${esc(label)}" title="${esc(label)}">
+      <img class="source-logo" src="/favicon.svg" alt="${esc(label)}" width="18" height="18" loading="lazy" decoding="async"
+        onerror="this.style.display='none';this.parentElement.classList.add('source-logo-wrap--failed')">
+    </span>`;
+  }
+
+  if (domain) {
+    const favicon = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+    return `<span class="source-logo-wrap" data-source-label="${esc(label)}" title="${esc(label)}">
+      <img class="source-logo" src="${favicon}" alt="${esc(label)}" width="18" height="18" loading="lazy" decoding="async"
+        onerror="this.style.display='none';this.parentElement.classList.add('source-logo-wrap--failed')">
+    </span>`;
+  }
+
+  return `<span class="badge badge-${esc(key)}">${esc(label)}</span>`;
+}
+
 /** Open the job detail modal, populating all fields from the given job. */
 function openJobModal(job: Job): void {
   _openModalLink               = job.link;
@@ -403,7 +438,7 @@ function openJobModal(job: Job): void {
   jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div>`;
   jobModalLocation.textContent = job.location;
   jobModalPosted.textContent   = job.posted || "N/A";
-  jobModalSource.innerHTML     = `<span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span>`;
+  jobModalSource.innerHTML     = `${sourceLogoHtml(job.source)}<span class="modal-source-name">${esc(sourceLabel(job.source))}</span>`;
   const isEnriching = !_enrichmentDone && (
     (_linkedinEnriching && job.source === "LinkedIn") ||
     (_topcvEnriching    && job.source === "TopCV"));
@@ -939,7 +974,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
     <td class="score" title="Vector similarity score">${esc(score)}</td>
     ${seventhCellHtml}
     <td class="desc">${descCell}</td>
-    <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
+    <td class="source-cell">${sourceLogoHtml(job.source)}</td>
     <td class="apply-cell">
       ${job.link
         ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? t("apply.titleUnmark") : t("apply.titleApply")}" onclick="event.stopPropagation()">${applied ? t("apply.applied") : t("apply.cta")}</button>`
