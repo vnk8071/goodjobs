@@ -1,6 +1,7 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, API_BASE } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
+import { CATEGORY_LABELS, getJobCategories, jobMatchesCategory, type CategoryFilter } from "./categories";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
@@ -19,31 +20,122 @@ langToggleBtn?.addEventListener("click", () => {
   applyStaticTranslations();
   syncLangToggleLabel();
   refreshUILanguage();
+  if (homeJobs().length > 0 && recentJobsSection && !recentJobsSection.classList.contains("hidden")) {
+    renderHomeJobs();
+  }
 });
 
 const recentJobsSection  = document.getElementById("recentJobsSection")  as HTMLElement | null;
+const recentJobsBody     = document.getElementById("recentJobsBody")     as HTMLTableSectionElement | null;
 // Direct submissions (source "Direct") get their own featured table on the
 // default homepage feed too, shown above the scraped "Recent Jobs" table.
 const directRecentSection = document.getElementById("directRecentSection") as HTMLElement | null;
 const directRecentBody    = document.getElementById("directRecentBody")    as HTMLTableSectionElement | null;
 
+const homeCategoryBar   = document.getElementById("homeCategoryBar") as HTMLElement | null;
+const homeCategoryChips = document.querySelectorAll<HTMLButtonElement>("#homeCategoryBar .category-chip");
+
+let homeDirectJobs: Job[] = [];
+let homeScrapedJobs: Job[] = [];
+let homeCategory: CategoryFilter = "all";
+let homeVisible = true;
+
+function homeJobs(): Job[] {
+  return [...homeDirectJobs, ...homeScrapedJobs];
+}
+
+/** Refresh chip labels, counts, and active state from the loaded homepage jobs. */
+function updateHomeCategoryBar(): void {
+  if (!homeCategoryBar) return;
+  const jobs = homeJobs();
+  if (jobs.length === 0) {
+    homeCategoryBar.classList.add("hidden");
+    return;
+  }
+  homeCategoryBar.classList.remove("hidden");
+
+  const counts: Record<CategoryFilter, number> = {
+    all: jobs.length, ai: 0, it: 0, data: 0, product: 0,
+    business: 0, design: 0, marketing: 0, hr: 0,
+  };
+  for (const job of jobs) {
+    for (const id of getJobCategories(job)) counts[id]++;
+  }
+
+  homeCategoryChips.forEach((chip) => {
+    const category = (chip.dataset.category ?? "all") as CategoryFilter;
+    const count = counts[category] ?? 0;
+    const label = category === "all" ? t("category.all") : CATEGORY_LABELS[category];
+
+    chip.replaceChildren(document.createTextNode(`${label} `));
+    const countEl = document.createElement("span");
+    countEl.className = "category-count";
+    countEl.textContent = String(count);
+    chip.appendChild(countEl);
+
+    const active = homeCategory === category;
+    chip.classList.toggle("active", active);
+    chip.setAttribute("aria-pressed", String(active));
+    chip.disabled = category !== "all" && count === 0;
+  });
+}
+
+/** Render the homepage "Posted Directly" and "Recent Jobs" tables for the active category. */
+function renderHomeJobs(): void {
+  if (!homeVisible) return;
+  if (!recentJobsBody || !directRecentBody) return;
+
+  const directJobs = homeDirectJobs.filter((job) => jobMatchesCategory(job, homeCategory));
+  const scrapedJobs = homeScrapedJobs.filter((job) => jobMatchesCategory(job, homeCategory));
+
+  directRecentBody.innerHTML = "";
+  if (directJobs.length > 0) {
+    directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1, "date")));
+    directRecentSection?.classList.remove("hidden");
+  } else {
+    directRecentSection?.classList.add("hidden");
+  }
+
+  recentJobsBody.innerHTML = "";
+  if (scrapedJobs.length > 0) {
+    scrapedJobs.forEach((job, i) => recentJobsBody.appendChild(buildRow(job, i + 1, "date")));
+    recentJobsSection?.classList.remove("hidden");
+  } else if (homeCategory !== "all" && homeJobs().length > 0) {
+    const row = document.createElement("tr");
+    row.innerHTML = `<td colspan="10" class="empty">${t("category.empty")}</td>`;
+    recentJobsBody.appendChild(row);
+    recentJobsSection?.classList.remove("hidden");
+  } else {
+    recentJobsSection?.classList.add("hidden");
+  }
+
+  updateHomeCategoryBar();
+}
+
+homeCategoryChips.forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const category = (chip.dataset.category ?? "all") as CategoryFilter;
+    // Clicking the active category toggles back to "All".
+    homeCategory = homeCategory === category ? "all" : category;
+    renderHomeJobs();
+  });
+});
+
 function hideRecentJobs(): void {
+  homeVisible = false;
   recentJobsSection?.classList.add("hidden");
   directRecentSection?.classList.add("hidden");
+  homeCategoryBar?.classList.add("hidden");
 }
 function showRecentJobs(): void {
-  recentJobsSection?.classList.remove("hidden");
-  // Only re-show the direct table if it actually has rows from the initial load.
-  if (directRecentBody && directRecentBody.children.length > 0) {
-    directRecentSection?.classList.remove("hidden");
-  }
+  homeVisible = true;
+  // Re-render so the category filter and row numbering are applied again.
+  if (homeJobs().length > 0) renderHomeJobs();
 }
 
 // Load and render recent jobs on the homepage: up to 20 direct jobs + recent scraped jobs
 (async () => {
-  const tbody = document.getElementById("recentJobsBody") as HTMLTableSectionElement | null;
-  const section = recentJobsSection;
-  if (!tbody || !section) return;
+  if (!recentJobsBody || !recentJobsSection) return;
   try {
     const [directRes, mixedRes] = await Promise.all([
       fetch(`${API_BASE}/recent-jobs?n=20&source=Direct`),
@@ -51,21 +143,15 @@ function showRecentJobs(): void {
     ]);
 
     if (directRes.ok) {
-      const directJobs: Job[] = await directRes.json();
-      if (directJobs.length > 0 && directRecentBody && directRecentSection) {
-        directJobs.forEach((job, i) => directRecentBody.appendChild(buildRow(job, i + 1, "date")));
-        directRecentSection.classList.remove("hidden");
-      }
+      homeDirectJobs = await directRes.json() as Job[];
     }
 
     if (mixedRes.ok) {
-      const jobs: Job[] = await mixedRes.json();
-      const scrapedJobs = jobs.filter((j) => j.source !== "Direct");
-      if (scrapedJobs.length > 0) {
-        scrapedJobs.forEach((job, i) => tbody.appendChild(buildRow(job, i + 1, "date")));
-        section.classList.remove("hidden");
-      }
+      const jobs = await mixedRes.json() as Job[];
+      homeScrapedJobs = jobs.filter((j) => j.source !== "Direct");
     }
+
+    renderHomeJobs();
   } catch {
     // silently ignore — recent jobs is non-critical
   }
@@ -456,6 +542,7 @@ window.addEventListener("popstate", (event) => {
     setEnrichmentDone(true);
     hideIntentBox();
     (window as any)._slideshowShow?.();
+    showRecentJobs();
     currentJobs = [];
     fetchBtn.disabled = false;
     keywordEl.value = "";

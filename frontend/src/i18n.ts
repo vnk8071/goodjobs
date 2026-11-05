@@ -27,6 +27,12 @@ export const STRINGS: Record<Lang, Dict> = {
 
     "hero.title": "Job Search for Vietnam and Beyond",
     "hero.desc": "Good Jobs aggregates the latest listings from top Vietnam and global job boards into a single page, refreshed daily so you never miss an opportunity.",
+    "brand.tagline": "A self-hosted job aggregator across 21 sources: one query, real-time results and recommendations that understand the role.",
+
+    "category.label": "Browse by category",
+    "category.all": "All",
+    "category.aria": "Filter jobs by category",
+    "category.empty": "No jobs in this category right now.",
 
     "slide1.title": "Multi-Source Search",
     "slide1.desc": "Results from LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo, and CareerViet at once.",
@@ -143,6 +149,12 @@ export const STRINGS: Record<Lang, Dict> = {
 
     "hero.title": "Tìm Việc Tại Việt Nam Và Nhiều Nơi Khác",
     "hero.desc": "Good Jobs tổng hợp tin tuyển dụng mới nhất từ các trang việc làm lớn tại Việt Nam và quốc tế vào một trang duy nhất, cập nhật hàng ngày để bạn không bỏ lỡ cơ hội nào.",
+    "brand.tagline": "Công cụ tổng hợp việc làm tự vận hành từ 21 nguồn: một lần tìm, kết quả thời gian thực và gợi ý hiểu đúng vai trò.",
+
+    "category.label": "Lọc theo ngành",
+    "category.all": "Tất cả",
+    "category.aria": "Lọc việc làm theo ngành",
+    "category.empty": "Hiện chưa có việc làm trong ngành này.",
 
     "slide1.title": "Tìm Kiếm Đa Nguồn",
     "slide1.desc": "Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet trong một lần tìm.",

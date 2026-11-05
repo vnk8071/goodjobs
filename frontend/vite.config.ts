@@ -9,6 +9,7 @@ export default defineConfig({
       "/scrape": "http://localhost:8000",
       "/scrape-stream": "http://localhost:8000",
       "/stats": "http://localhost:8000",
+      "/recent-jobs": "http://localhost:8000",
     },
   },
   build: {

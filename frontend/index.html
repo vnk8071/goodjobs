@@ -195,6 +195,73 @@
       line-height: 1.5;
     }
 
+    /* Brand hero banner (recreates the goodjobs.io.vn wordmark image).
+       Light theme = warm off-white/black; dark theme = black/white. */
+    .brand-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(0.9rem, 1.8vw, 1.4rem);
+      text-align: center;
+      padding: clamp(2.25rem, 5.5vw, 4.25rem) clamp(1.25rem, 4vw, 3rem);
+      margin-bottom: 1.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: #f7f7f5;
+      color: #0b0b0c;
+      overflow: hidden;
+      transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    html[data-theme="dark"] .brand-hero {
+      background: #0b0b0c;
+      color: #ffffff;
+      border-color: #262626;
+    }
+
+    .brand-hero__wordmark {
+      margin: 0;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      font-size: clamp(2.35rem, 10vw, 9.5rem);
+      font-weight: 800;
+      line-height: 0.92;
+      letter-spacing: -0.055em;
+      color: inherit;
+    }
+
+    .brand-hero__tagline {
+      margin: 0;
+      max-width: 62ch;
+      font-size: clamp(0.88rem, 1.35vw, 1.15rem);
+      line-height: 1.6;
+      color: #52525b;
+    }
+
+    html[data-theme="dark"] .brand-hero__tagline {
+      color: #d4d4d4;
+    }
+
+    @media (max-width: 640px) {
+      .brand-hero {
+        padding: 1.9rem 1rem;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+      }
+
+      .brand-hero__wordmark {
+        font-size: clamp(2.1rem, 12.5vw, 3.5rem);
+        letter-spacing: -0.06em;
+      }
+
+      .brand-hero__tagline {
+        font-size: 0.86rem;
+        line-height: 1.55;
+      }
+    }
+
     /* Weekly stats badge */
     .weekly-stats {
       display: inline-flex;
@@ -1902,6 +1969,92 @@
       color: var(--text);
     }
 
+    /* Homepage category filter */
+    .category-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .category-label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .category-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.34rem 0.78rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.8rem;
+      font-weight: 600;
+      line-height: 1.2;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s,
+        transform 0.1s;
+    }
+
+    .category-chip:hover:not(:disabled) {
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    .category-chip.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .category-chip:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .category-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.4em;
+      padding: 0 0.35em;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.08);
+      font-size: 0.72em;
+      font-weight: 700;
+      line-height: 1.55;
+    }
+
+    html[data-theme="dark"] .category-count {
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .category-chip.active .category-count {
+      background: rgba(255, 255, 255, 0.24);
+    }
+
+    @media (max-width: 640px) {
+      .category-bar {
+        gap: 0.4rem;
+      }
+
+      .category-label {
+        width: 100%;
+      }
+
+      .category-chip {
+        padding: 0.3rem 0.65rem;
+        font-size: 0.76rem;
+      }
+    }
+
     /* About / publisher content section */
     .about-section {
       background: var(--card);
@@ -2485,6 +2638,14 @@
 
     <main>
 
+    <!-- Brand hero banner -->
+    <section class="brand-hero" aria-label="Good Jobs">
+      <p class="brand-hero__wordmark">goodjobs.io.vn</p>
+      <p class="brand-hero__tagline" data-i18n="brand.tagline">
+        A self-hosted job aggregator across 21 sources: one query, real-time results and recommendations that understand the role.
+      </p>
+    </section>
+
     <!-- Homepage intro + feature slideshow — merged, visible before any search -->
     <div id="featureSlideshow" class="feature-slideshow">
       <div class="slideshow-intro">
@@ -2657,6 +2818,21 @@
 
       <div class="actions">
       </div>
+    </div>
+
+    <!-- Homepage category filter -->
+    <div id="homeCategoryBar" class="category-bar hidden" role="group"
+      aria-label="Filter jobs by category" data-i18n-aria-label="category.aria">
+      <span class="category-label" data-i18n="category.label">Browse by category</span>
+      <button type="button" class="category-chip active" data-category="all" aria-pressed="true">All</button>
+      <button type="button" class="category-chip" data-category="ai" aria-pressed="false">AI</button>
+      <button type="button" class="category-chip" data-category="it" aria-pressed="false">IT</button>
+      <button type="button" class="category-chip" data-category="data" aria-pressed="false">Data</button>
+      <button type="button" class="category-chip" data-category="product" aria-pressed="false">Product</button>
+      <button type="button" class="category-chip" data-category="business" aria-pressed="false">Business</button>
+      <button type="button" class="category-chip" data-category="design" aria-pressed="false">Design</button>
+      <button type="button" class="category-chip" data-category="marketing" aria-pressed="false">Marketing</button>
+      <button type="button" class="category-chip" data-category="hr" aria-pressed="false">HR</button>
     </div>
 
     <!-- Direct submissions (GoodJobs source) on the default homepage feed -->
