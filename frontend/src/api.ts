@@ -151,6 +151,75 @@ export async function askJobs(
   return (await resp.json()) as ChatResponse;
 }
 
+/**
+ * Stream the homepage "all cached jobs" feed via SSE.
+ * Calls `onBatch` as each cache key's jobs arrive, then `onDone` once.
+ */
+export async function streamRecentJobs(
+  onBatch: (jobs: Job[]) => void,
+  onDone: () => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`${API_BASE}/recent-jobs-stream?compact=1`, { signal });
+  if (!resp.ok) {
+    throw new Error(`recent-jobs-stream failed: ${resp.status}`);
+  }
+
+  let doneFired = false;
+  const fireDone = () => {
+    if (doneFired) return;
+    doneFired = true;
+    onDone();
+  };
+
+  const contentType = resp.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const jobs = (await resp.json()) as Job[];
+    if (jobs.length > 0) onBatch(jobs);
+    fireDone();
+    return;
+  }
+  if (!resp.body) {
+    fireDone();
+    return;
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let eventType = "message";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventType = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith("data:")) continue;
+      const raw = line.slice(5).trim();
+      if (!raw) continue;
+      try {
+        const payload = JSON.parse(raw) as { jobs?: Job[]; count?: number };
+        if (eventType === "batch" && Array.isArray(payload.jobs)) {
+          onBatch(payload.jobs);
+        } else if (eventType === "done") {
+          fireDone();
+        }
+      } catch {
+        // ignore malformed events
+      }
+      eventType = "message";
+    }
+  }
+  fireDone();
+}
+
 export async function normalizeCity(
   rawCity: string,
   signal?: AbortSignal,

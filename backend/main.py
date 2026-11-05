@@ -810,8 +810,6 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
                     link = job.get("link", "")
                     if not link or link in seen_links:
                         continue
-                    if not (job.get("description") or job.get("summary_description")):
-                        continue
                     seen_links.add(link)
                     all_jobs.append(job)
             except Exception:
@@ -835,21 +833,13 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
 
     all_jobs.sort(key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
 
-    # Keep only jobs posted today; normalize their posted field
-    import re as _re
-    _within_day = _re.compile(r"\b(\d+)\s*(minute|minutes|hour|hours|giờ|phút)\b", _re.IGNORECASE)
-    cutoff = time.time() - 86400
-    today_jobs: list[dict] = []
+    # Keep the same RECENT_DAYS window as /stats so the homepage "All" count
+    # and the weekly stats badge agree.
+    cutoff = time.time() - RECENT_DAYS * 86400
+    all_jobs = [j for j in all_jobs if (j.get("posted_ts") or 0.0) >= cutoff]
     for job in all_jobs:
-        posted_text = (job.get("posted") or "").lower()
-        within_day_ts = (job.get("posted_ts") or 0.0) >= cutoff
-        within_day_text = bool(_within_day.search(posted_text)) or any(
-            w in posted_text for w in ("today", "hôm nay", "just now", "vừa xong")
-        )
-        if within_day_ts or within_day_text or not job.get("posted"):
-            job["posted"] = "Today"
-            today_jobs.append(job)
-    all_jobs = today_jobs
+        if not job.get("posted"):
+            job["posted"] = posted_relative(job.get("posted_ts", 0.0))
 
     if source:
         matched = [j for j in all_jobs if (j.get("source") or "").lower() == source.lower()]
@@ -870,6 +860,84 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
                 result.append(bucket.pop(0))
 
     return [_compact_recent_job(j) for j in result] if compact else result
+
+
+@app.get("/recent-jobs-stream")
+async def recent_jobs_stream(compact: bool = True):
+    """Stream all cached jobs in SSE batches so the homepage can render
+    progressively instead of waiting for the whole JSON payload.
+
+    Uses the same RECENT_DAYS window as /stats and /recent-jobs so the
+    homepage "All" count and the stats badge agree.
+    """
+    async def event_generator():
+        seen_links: set[str] = set()
+        total = 0
+        cutoff = time.time() - RECENT_DAYS * 86400
+
+        try:
+            redis = get_redis()
+            async for key in redis.scan_iter("jobs:*"):
+                if not is_vn_cache_key(key):
+                    continue
+                raw = await redis.get(key)
+                if not raw:
+                    continue
+                try:
+                    data = json.loads(raw)
+                except Exception:
+                    continue
+
+                batch: list[dict] = []
+                for job in data.get("jobs", []):
+                    link = job.get("link", "")
+                    if not link or link in seen_links:
+                        continue
+                    if (job.get("posted_ts") or 0.0) < cutoff:
+                        continue
+                    seen_links.add(link)
+                    batch.append(job)
+
+                if batch:
+                    total += len(batch)
+                    payload = (
+                        [_compact_recent_job(j) for j in batch] if compact else batch
+                    )
+                    yield f"event: batch\ndata: {json.dumps({'jobs': payload}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            log_app(f"[recent-jobs-stream] cache scan error: {e}", "ERROR")
+
+        # Direct GoodJobs submissions are not in the keyword cache.
+        try:
+            direct: list[dict] = []
+            for job in await list_approved_as_jobs():
+                link = job.get("link", "")
+                if not link or link in seen_links:
+                    continue
+                job["posted_ts"] = posted_ts(job)
+                if job["posted_ts"] < cutoff:
+                    continue
+                seen_links.add(link)
+                direct.append(job)
+            if direct:
+                total += len(direct)
+                payload = (
+                    [_compact_recent_job(j) for j in direct] if compact else direct
+                )
+                yield f"event: batch\ndata: {json.dumps({'jobs': payload}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            log_app(f"[recent-jobs-stream] direct jobs error: {e}", "ERROR")
+
+        yield f"event: done\ndata: {json.dumps({'count': total})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/stats")
@@ -898,6 +966,19 @@ async def stats():
                 continue
     except Exception as e:
         log_app(f"[stats] error: {e}", "ERROR")
+
+    # Match /recent-jobs: direct GoodJobs submissions are not in the keyword
+    # cache, so count them separately.
+    try:
+        for job in await list_approved_as_jobs():
+            link = job.get("link", "")
+            ts = job.get("posted_ts") or posted_ts(job)
+            if ts >= cutoff and link and link not in seen_links:
+                seen_links.add(link)
+                count += 1
+    except Exception as e:
+        log_app(f"[stats] direct jobs error: {e}", "ERROR")
+
     return {"jobs_this_week": count}
 
 

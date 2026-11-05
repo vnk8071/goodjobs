@@ -1994,6 +1994,95 @@
       color: var(--text);
     }
 
+    /* Pagination for the homepage "Recent Jobs" list */
+    .recent-pager {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .recent-pager__size {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      white-space: nowrap;
+    }
+
+    .recent-pager__size select {
+      padding: 0.3rem 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      font: inherit;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .recent-pager__showing {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .recent-pager__nav {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .recent-pager__info {
+      min-width: 7.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .pager-btn {
+      padding: 0.35rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+    }
+
+    .pager-btn:hover:not(:disabled) {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .pager-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    @media (max-width: 640px) {
+      .recent-pager {
+        align-items: stretch;
+      }
+
+      .recent-pager__size,
+      .recent-pager__nav {
+        justify-content: space-between;
+      }
+
+      .recent-pager__showing {
+        width: 100%;
+        text-align: center;
+      }
+    }
+
     /* Direct-submission (source "Direct") sections — a lighter "featured" treatment,
        distinguishing curated direct postings from scraped listings without a
        separate component system (mirrors .recent-jobs-section's structure). */
@@ -2019,89 +2108,56 @@
       color: var(--text);
     }
 
-    /* Homepage category filter */
-    .category-bar {
+    /* Homepage filters (category + location dropdowns) */
+    .home-filter-bar {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 0.5rem;
+      gap: 0.75rem 1.25rem;
       margin-bottom: 1rem;
     }
 
-    .category-label {
+    .home-filter {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      color: var(--muted);
       font-size: 0.8rem;
       font-weight: 500;
-      color: var(--muted);
       white-space: nowrap;
     }
 
-    .category-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.34rem 0.78rem;
+    .home-filter select {
+      padding: 0.4rem 0.7rem;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 8px;
       background: var(--card);
       color: var(--text);
       font-family: inherit;
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 600;
-      line-height: 1.2;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, color 0.15s,
-        transform 0.1s;
+      max-width: 18rem;
     }
 
-    .category-chip:hover:not(:disabled) {
+    .home-filter select:focus {
       border-color: var(--primary);
-      transform: translateY(-1px);
-    }
-
-    .category-chip.active {
-      background: var(--primary);
-      border-color: var(--primary);
-      color: #ffffff;
-    }
-
-    .category-chip:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-
-    .category-count {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 1.4em;
-      padding: 0 0.35em;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.08);
-      font-size: 0.72em;
-      font-weight: 700;
-      line-height: 1.55;
-    }
-
-    html[data-theme="dark"] .category-count {
-      background: rgba(255, 255, 255, 0.14);
-    }
-
-    .category-chip.active .category-count {
-      background: rgba(255, 255, 255, 0.24);
+      outline: none;
     }
 
     @media (max-width: 640px) {
-      .category-bar {
-        gap: 0.4rem;
+      .home-filter-bar {
+        gap: 0.55rem;
       }
 
-      .category-label {
+      .home-filter {
         width: 100%;
+        justify-content: space-between;
       }
 
-      .category-chip {
-        padding: 0.3rem 0.65rem;
-        font-size: 0.76rem;
+      .home-filter select {
+        flex: 1;
+        max-width: 70%;
       }
     }
 
@@ -2813,6 +2869,45 @@
       border-bottom-right-radius: 4px;
     }
 
+    .chat-msg--assistant .chat-bubble {
+      white-space: normal;
+    }
+
+    .chat-text p {
+      margin: 0 0 0.45rem;
+    }
+
+    .chat-text p:last-child {
+      margin-bottom: 0;
+    }
+
+    .chat-text ul,
+    .chat-text ol {
+      margin: 0.25rem 0 0.5rem 1.1rem;
+      padding: 0;
+    }
+
+    .chat-text li {
+      margin: 0.15rem 0;
+    }
+
+    .chat-text a {
+      color: var(--primary);
+      text-decoration: underline;
+      word-break: break-word;
+    }
+
+    .chat-text strong {
+      font-weight: 700;
+    }
+
+    .chat-text code {
+      padding: 0.05rem 0.3rem;
+      border-radius: 4px;
+      background: var(--primary-light);
+      font-size: 0.82em;
+    }
+
     .chat-bubble--error {
       background: var(--error-bg) !important;
       color: var(--error-text) !important;
@@ -3264,19 +3359,17 @@
       </div>
     </div>
 
-    <!-- Homepage category filter -->
-    <div id="homeCategoryBar" class="category-bar hidden" role="group"
-      aria-label="Filter jobs by category" data-i18n-aria-label="category.aria">
-      <span class="category-label" data-i18n="category.label">Browse by category</span>
-      <button type="button" class="category-chip active" data-category="all" aria-pressed="true">All</button>
-      <button type="button" class="category-chip" data-category="ai" aria-pressed="false">AI</button>
-      <button type="button" class="category-chip" data-category="it" aria-pressed="false">IT</button>
-      <button type="button" class="category-chip" data-category="data" aria-pressed="false">Data</button>
-      <button type="button" class="category-chip" data-category="product" aria-pressed="false">Product</button>
-      <button type="button" class="category-chip" data-category="business" aria-pressed="false">Business</button>
-      <button type="button" class="category-chip" data-category="design" aria-pressed="false">Design</button>
-      <button type="button" class="category-chip" data-category="marketing" aria-pressed="false">Marketing</button>
-      <button type="button" class="category-chip" data-category="hr" aria-pressed="false">HR</button>
+    <!-- Homepage filters -->
+    <div id="homeCategoryBar" class="home-filter-bar hidden" role="group"
+      aria-label="Filter jobs" data-i18n-aria-label="homeFilter.aria">
+      <label class="home-filter" for="homeCategorySelect">
+        <span data-i18n="category.label">Browse by category</span>
+        <select id="homeCategorySelect"></select>
+      </label>
+      <label class="home-filter" for="homeLocationSelect">
+        <span data-i18n="location.label">Location</span>
+        <select id="homeLocationSelect"></select>
+      </label>
     </div>
 
     <!-- Direct submissions (GoodJobs source) on the default homepage feed -->
@@ -3324,6 +3417,22 @@
           </thead>
           <tbody id="recentJobsBody"></tbody>
         </table>
+      </div>
+      <div id="recentPager" class="recent-pager hidden">
+        <div class="recent-pager__size">
+          <label for="recentPageSize" data-i18n="pager.perPage">Jobs per page</label>
+          <select id="recentPageSize">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <div class="recent-pager__showing" id="recentPagerShowing"></div>
+        <div class="recent-pager__nav">
+          <button id="recentPrev" type="button" class="pager-btn" data-i18n="pager.prev">Prev</button>
+          <span id="recentPageInfo" class="recent-pager__info"></span>
+          <button id="recentNext" type="button" class="pager-btn" data-i18n="pager.next">Next</button>
+        </div>
       </div>
     </section>
 

@@ -85,6 +85,74 @@ function scrollToBottom(): void {
   });
 }
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&": return "&amp;";
+      case "<": return "&lt;";
+      case ">": return "&gt;";
+      case '"': return "&quot;";
+      default: return "&#39;";
+    }
+  });
+}
+
+/** Minimal, safe markdown renderer for assistant answers. */
+function renderMarkdown(text: string): string {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const html: string[] = [];
+  let paragraph: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const closeList = () => {
+    if (!listType) return;
+    html.push(`</${listType}>`);
+    listType = null;
+  };
+
+  for (const line of lines) {
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    const numbered = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (bullet || numbered) {
+      flushParagraph();
+      const type = bullet ? "ul" : "ol";
+      if (listType !== type) {
+        closeList();
+        html.push(`<${type}>`);
+        listType = type;
+      }
+      html.push(`<li>${inlineMarkdown((bullet ?? numbered)![1])}</li>`);
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      closeList();
+      continue;
+    }
+    closeList();
+    paragraph.push(line.trim());
+  }
+  flushParagraph();
+  closeList();
+  return html.join("");
+}
+
+function inlineMarkdown(text: string): string {
+  let html = escapeHtml(text);
+  html = html.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
+  );
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  return html;
+}
+
 function jobCard(job: ChatJob): HTMLAnchorElement {
   const card = el("a", "chat-job") as HTMLAnchorElement;
   card.href = job.link;
@@ -119,7 +187,11 @@ function renderMessage(message: UIMessage): void {
   if (message.error) bubble.classList.add("chat-bubble--error");
 
   const text = el("div", "chat-text");
-  text.textContent = message.content;
+  if (message.role === "assistant") {
+    text.innerHTML = renderMarkdown(message.content);
+  } else {
+    text.textContent = message.content;
+  }
   bubble.appendChild(text);
 
   if (message.jobs?.length) {

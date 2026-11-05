@@ -42,6 +42,15 @@ export const STRINGS: Record<Lang, Dict> = {
     "category.marketing": "Marketing",
     "category.hr": "Human Resources",
 
+    "homeFilter.aria": "Filter jobs",
+    "location.label": "Location",
+    "location.all": "All locations",
+    "location.hcm": "Ho Chi Minh City",
+    "location.hanoi": "Ha Noi",
+    "location.danang": "Da Nang",
+    "location.remote": "Remote",
+    "location.other": "Other",
+
     "chat.launch": "Ask Good Jobs AI",
     "chat.title": "Good Jobs AI",
     "chat.subtitle": "Ask about jobs, skills, and companies",
@@ -60,6 +69,12 @@ export const STRINGS: Record<Lang, Dict> = {
     "chat.suggestion2": "Marketing jobs",
     "chat.suggestion3": "Remote jobs",
     "chat.suggestion4": "Skills for a Data Engineer",
+
+    "pager.perPage": "Jobs per page",
+    "pager.prev": "Prev",
+    "pager.next": "Next",
+    "pager.pageInfo": "Page {page} of {pages}",
+    "pager.showing": "Showing {from}–{to} of {total}",
 
     "slide1.title": "Multi-Source Search",
     "slide1.desc": "Results from LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo, and CareerViet at once.",
@@ -109,6 +124,7 @@ export const STRINGS: Record<Lang, Dict> = {
 
     "direct.title": "📌 Posted Directly to Good Jobs",
     "recent.title": "Recent Jobs",
+    "recent.loading": "Loading jobs…",
 
     "about.title": "Good Jobs — Smart Job Aggregation",
     "about.desc": "Good Jobs is an AI-powered job aggregator (Cloudflare Workers AI) that automatically syncs thousands of listings from LinkedIn, ITviec, TopCV, and Vietnam's largest job boards, plus LinkedIn, Indeed, RemoteOK, We Work Remotely, and Glassdoor for global roles. Unlike traditional keyword search, Good Jobs' Semantic Vector Search understands the context of your skills and background, surfacing cross-industry opportunities with a high-precision Matching Score.",
@@ -137,7 +153,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "status.serverBusy": "Server is busy. Please try again later.",
     "status.rateLimited": "You've searched too many times. Please wait 1 minute and try again.",
     "status.errorPrefix": "Error: {msg}",
-    "stats.jobsSuffix": "jobs",
+    "stats.jobsSuffix": "jobs · 14 days",
 
     "toast.question": "Have you applied yet?",
     "toast.yes": "✓ Applied",
@@ -192,6 +208,15 @@ export const STRINGS: Record<Lang, Dict> = {
     "category.marketing": "Tiếp thị",
     "category.hr": "Nhân sự",
 
+    "homeFilter.aria": "Lọc việc làm",
+    "location.label": "Địa điểm",
+    "location.all": "Tất cả địa điểm",
+    "location.hcm": "TP. Hồ Chí Minh",
+    "location.hanoi": "Hà Nội",
+    "location.danang": "Đà Nẵng",
+    "location.remote": "Remote",
+    "location.other": "Khác",
+
     "chat.launch": "Hỏi Good Jobs AI",
     "chat.title": "Good Jobs AI",
     "chat.subtitle": "Hỏi về việc làm, kỹ năng và công ty",
@@ -210,6 +235,12 @@ export const STRINGS: Record<Lang, Dict> = {
     "chat.suggestion2": "Việc Marketing",
     "chat.suggestion3": "Việc Remote",
     "chat.suggestion4": "Kỹ năng cho Data Engineer",
+
+    "pager.perPage": "Số việc mỗi trang",
+    "pager.prev": "Trước",
+    "pager.next": "Sau",
+    "pager.pageInfo": "Trang {page}/{pages}",
+    "pager.showing": "Hiển thị {from}–{to} trên {total}",
 
     "slide1.title": "Tìm Kiếm Đa Nguồn",
     "slide1.desc": "Kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerLink, TopDev, JobsGo và CareerViet trong một lần tìm.",
@@ -259,6 +290,7 @@ export const STRINGS: Record<Lang, Dict> = {
 
     "direct.title": "📌 Đăng Trực Tiếp Trên Good Jobs",
     "recent.title": "Việc Làm Gần Đây",
+    "recent.loading": "Đang tải việc làm…",
 
     "about.title": "Good Jobs — Tổng Hợp Việc Làm Thông Minh",
     "about.desc": "Good Jobs là công cụ tổng hợp việc làm dùng AI (Cloudflare Workers AI), tự động đồng bộ hàng nghìn tin tuyển dụng từ LinkedIn, ITviec, TopCV và các trang việc làm lớn nhất tại Việt Nam, cùng LinkedIn, Indeed, RemoteOK, We Work Remotely và Glassdoor cho các vị trí quốc tế. Khác với tìm kiếm từ khóa thông thường, Semantic Vector Search của Good Jobs hiểu bối cảnh kỹ năng và kinh nghiệm của bạn, giúp tìm ra cơ hội liên ngành với Điểm Phù Hợp có độ chính xác cao.",
@@ -287,7 +319,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "status.serverBusy": "Hệ thống đang bận. Vui lòng thử lại sau.",
     "status.rateLimited": "Bạn đã tìm kiếm quá nhiều lần. Vui lòng đợi 1 phút rồi thử lại.",
     "status.errorPrefix": "Lỗi: {msg}",
-    "stats.jobsSuffix": "việc làm",
+    "stats.jobsSuffix": "việc · 14 ngày",
 
     "toast.question": "Bạn đã ứng tuyển chưa?",
     "toast.yes": "✓ Đã ứng tuyển",
