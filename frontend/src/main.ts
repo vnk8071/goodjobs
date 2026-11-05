@@ -99,6 +99,8 @@ function homeJobs(): Job[] {
   return [...homeDirectJobs, ...homeScrapedJobs];
 }
 
+const byDate = (a: Job, b: Job): number => (b.posted_ts ?? 0) - (a.posted_ts ?? 0);
+
 /** Refresh the category/location dropdown labels and keep the active values. */
 function updateHomeFilters(): void {
   if (!homeCategoryBar || !homeCategorySelect || !homeLocationSelect) return;
@@ -145,10 +147,10 @@ function renderHomeJobs(): void {
 
   const directJobs = homeDirectJobs.filter(
     (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
-  );
+  ).sort(byDate);
   const scrapedJobs = homeScrapedJobs.filter(
     (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
-  );
+  ).sort(byDate);
 
   directRecentBody.innerHTML = "";
   if (directJobs.length > 0) {
