@@ -5,7 +5,6 @@
 ## Pages
 - [Trang tiếng Việt / Vietnamese home](https://goodjobs.io.vn/vi/): tìm việc làm tại Việt Nam.
 - [Danh mục việc làm](https://goodjobs.io.vn/vi/viec-lam/): việc làm theo ngành và khu vực.
-- [Việc làm Hồ Chí Minh](https://goodjobs.io.vn/viec-lam-ho-chi-minh/): trang tiếng Việt cho TP.HCM.
 - [Home / search](https://goodjobs.io.vn/): search by job title, skills or CV and location.
 - [Jobs directory](https://goodjobs.io.vn/jobs/): browse by category and location.
 - [Post a job](https://goodjobs.io.vn/post-job/): submit a job for review.

@@ -166,7 +166,7 @@ footer a:hover{color:var(--primary)}
 <main>
 ${body}
 </main>
-<footer>${lang === 'vi' ? '<div><a href="/vi/">Trang chủ</a><a href="/vi/viec-lam/">Việc làm</a><a href="/viec-lam-ho-chi-minh/">Hồ Chí Minh</a><a href="/post-job/">Đăng tin</a><a href="/contact/">Liên hệ</a></div>' : '<div><a href="/">Home</a><a href="/jobs/">Jobs</a><a href="/post-job/">Post a Job</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/contact/">Contact</a></div>'}<div>© ${new Date().getFullYear()} Good Jobs</div></footer>
+<footer>${lang === 'vi' ? '<div><a href="/vi/">Trang chủ</a><a href="/vi/viec-lam/">Việc làm</a><a href="/jobs/ho-chi-minh-city/">Hồ Chí Minh</a><a href="/post-job/">Đăng tin</a><a href="/contact/">Liên hệ</a></div>' : '<div><a href="/">Home</a><a href="/jobs/">Jobs</a><a href="/post-job/">Post a Job</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="/contact/">Contact</a></div>'}<div>© ${new Date().getFullYear()} Good Jobs</div></footer>
 </div>
 </body>
 </html>`;
@@ -285,9 +285,8 @@ for (const l of LOCATIONS) {
   await writePage(`jobs/${l.key}`, page({
     title: `Jobs in ${l.label} — Good Jobs`,
     description: trunc(`Browse recent jobs in ${l.label} — engineering, data, product, marketing, finance and operations roles aggregated from 21 job boards.`, 155),
-    canonical: url, h1: `Jobs in ${l.label}`, body: (l.key === 'ho-chi-minh-city' ? body.replace('<h2>Latest jobs in', '<p class="notice"><a href="/viec-lam-ho-chi-minh/">Đọc trang tiếng Việt: Tìm việc làm ở Hồ Chí Minh →</a></p><h2>Latest jobs in') : body),
+    canonical: url, h1: `Jobs in ${l.label}`, body,
     jsonld: ld,
-    extraHead: l.key === 'ho-chi-minh-city' ? '<link rel="alternate" hreflang="vi" href="' + BASE + '/viec-lam-ho-chi-minh/">' + '<link rel="alternate" hreflang="en" href="' + url + '">' + '<link rel="alternate" hreflang="x-default" href="' + url + '">' : '',
   }));
 }
 
@@ -342,72 +341,15 @@ ${catUrl ? `<h2>More ${esc(j.categoryLabel)} jobs</h2><div class="jobs">${jobs.f
 }
 
 
-// Vietnamese landing page targeting "tìm việc làm ở Hồ Chí Minh"
-const hcm = jobs.filter(j => j.loc === 'ho-chi-minh-city').slice(0, 24);
-const viUrl = `${BASE}/viec-lam-ho-chi-minh/`;
 const viJobCard = j => `<a class="job-card" href="/jobs/job/${j.slug}/"><b>${esc(j.title)}</b><div class="job-meta"><span>${esc(j.company)}</span><span>${esc(j.location || 'Hồ Chí Minh')}</span><span>${esc(j.source)}</span><span>${esc(j.posted || 'Hôm nay')}</span></div>${j.skills.length ? `<div class="skills">${j.skills.slice(0, 5).map(x => `<span>${esc(x)}</span>`).join('')}</div>` : ''}</a>`;
 const viCatLabels = { 'data-ai': 'Data & AI', 'it-software': 'IT & Phần mềm', 'product-design': 'Sản phẩm & Thiết kế', 'marketing': 'Marketing', 'finance-banking': 'Tài chính & Ngân hàng', 'operations-sales': 'Vận hành & Kinh doanh' };
-const viBody = `${crumbs([{ name: 'Trang chủ', url: '/' }, { name: 'Việc làm Hồ Chí Minh' }])}
-<div class="hero"><p class="eyebrow">Website tìm việc tổng hợp</p>
-<h1>Tìm việc làm ở Hồ Chí Minh</h1>
-<p class="lead">Good Jobs là website tổng hợp việc làm mới tại TP. Hồ Chí Minh và toàn Việt Nam. Một lần tìm kiếm, bạn nhận kết quả từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, TopDev, JobsGo, CareerLink và nhiều trang tuyển dụng khác — cập nhật hàng ngày, kèm kỹ năng và mức độ phù hợp.</p>
-<a class="btn" href="/?kw=Software%20Engineer&amp;loc=Ho%20Chi%20Minh%20City">Tìm việc ngay</a>
-<a class="btn secondary" href="/jobs/ho-chi-minh-city/">Browse in English</a>
-<p class="notice">Trang này tổng hợp tin đăng trong ngày. Mỗi tin đều dẫn về trang gốc để bạn ứng tuyển trực tiếp.</p></div>
-
-<h2>Việc làm mới tại Hồ Chí Minh</h2>
-<div class="jobs">${hcm.length ? hcm.map(viJobCard).join('') : '<p class="lead">Hôm nay chưa có tin phù hợp trong bản tổng hợp. Bạn có thể dùng ô tìm kiếm để lấy kết quả trực tiếp từ các trang tuyển dụng.</p>'}</div>
-
-<h2>Tìm việc theo ngành</h2>
-<div class="chips">${CATEGORIES.map(c => `<a href="/jobs/${c.key}/">${esc(viCatLabels[c.key] || c.label)}</a>`).join('')}</div>
-
-<h2>Tìm việc theo khu vực</h2>
-<div class="chips">${LOCATIONS.slice(0, 4).map(l => `<a href="/jobs/${l.key}/">${esc(l.label === 'Ho Chi Minh City' ? 'TP. Hồ Chí Minh' : l.label === 'Hanoi' ? 'Hà Nội' : l.label === 'Da Nang' ? 'Đà Nẵng' : 'Remote')}</a>`).join('')}</div>
-
-<h2>Vì sao nên dùng Good Jobs?</h2>
-<p><strong>Một chỗ thay vì mười trang:</strong> thay vì mở từng trang tuyển dụng, bạn nhập vị trí, kỹ năng hoặc dán CV và nhận kết quả tổng hợp, có link gốc để ứng tuyển.</p>
-<p><strong>Cập nhật mỗi ngày:</strong> Good Jobs ưu tiên tin mới trong ngày, tự động loại tin trùng theo link và chỉ giữ tin còn mô tả công việc.</p>
-<p><strong>Tìm theo CV hoặc kỹ năng:</strong> AI đọc nội dung bạn dán vào, gợi ý từ khóa phù hợp và chấm điểm mức độ khớp với từng tin — hữu ích khi bạn không chắc nên tìm chức danh nào.</p>
-<p><strong>Có việc làm remote:</strong> chọn địa điểm "Remote" để xem các vị trí không cần lên văn phòng, từ các nguồn trong nước và quốc tế.</p>
-
-<h2>Cách tìm việc hiệu quả</h2>
-<ul>
-<li>Dùng chức danh tiếng Anh cho các vị trí IT, dữ liệu hoặc công ty đa quốc gia: "Data Engineer" thường cho nhiều kết quả hơn bản dịch tiếng Việt.</li>
-<li>Thêm cấp bậc nếu cần: "Senior", "Junior", "Intern".</li>
-<li>Nhập địa điểm cụ thể như "Quận 1", "Thủ Đức", "Bình Thạnh" hoặc "Hồ Chí Minh".</li>
-<li>Dán CV hoặc danh sách kỹ năng để AI gợi ý vị trí gần nhất.</li>
-<li>Kiểm tra kỹ mô tả, mức lương và hạn ứng tuyển trên trang gốc trước khi nộp.</li>
-</ul>
-
-<h2>Câu hỏi thường gặp</h2>
-<p><strong>Good Jobs có phải trang tuyển dụng không?</strong> Không. Good Jobs tổng hợp tin từ các trang tuyển dụng và dẫn bạn về trang gốc; chúng tôi không phải nhà tuyển dụng và không thu phí ứng viên.</p>
-<p><strong>Tìm việc làm ở Hồ Chí Minh trên Good Jobs như thế nào?</strong> Nhập vị trí hoặc kỹ năng, chọn địa điểm Hồ Chí Minh, rồi bấm tìm. Bạn cũng có thể mở trang danh mục ngành hoặc khu vực ở trên.</p>
-<p><strong>Có mất phí không?</strong> Không. Việc tìm kiếm và ứng tuyển là miễn phí cho ứng viên. Nhà tuyển dụng có thể đăng tin qua trang Post a Job.</p>
-<p><strong>Có việc làm remote không?</strong> Có. Chọn "Remote" ở ô địa điểm để xem các vị trí làm từ xa.</p>
-<p class="notice">Thông tin tuyển dụng thuộc về trang gốc. Nếu bạn là nhà tuyển dụng và muốn chỉnh sửa hoặc gỡ tin, xem <a href="/contact/">trang liên hệ</a>.</p>`;
-const viLd = { '@context': 'https://schema.org', '@graph': [
-  { '@type': 'Organization', '@id': BASE + '/#organization', name: 'Good Jobs', url: BASE + '/', logo: BASE + '/favicon.svg' },
-  { '@type': 'CollectionPage', '@id': viUrl + '#webpage', url: viUrl, name: 'Tìm việc làm ở Hồ Chí Minh', description: 'Website tổng hợp việc làm mới tại TP. Hồ Chí Minh từ 21 trang tuyển dụng.', inLanguage: 'vi', isPartOf: { '@id': BASE + '/#website' } },
-  { '@type': 'BreadcrumbList', '@id': viUrl + '#breadcrumb', itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Trang chủ', item: BASE + '/' },
-    { '@type': 'ListItem', position: 2, name: 'Việc làm Hồ Chí Minh', item: viUrl },
-  ] },
-  ...(hcm.length ? [{ '@type': 'ItemList', '@id': viUrl + '#jobs', itemListElement: hcm.map((j, i) => ({ '@type': 'ListItem', position: i + 1, name: j.title, url: `${BASE}/jobs/job/${j.slug}/` })) }] : []),
-] };
-await writePage('viec-lam-ho-chi-minh', page({
-  title: 'Tìm Việc Làm Ở Hồ Chí Minh | Good Jobs',
-  description: trunc('Good Jobs tổng hợp việc làm mới ở Hồ Chí Minh từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet... Tìm theo CV, kỹ năng hoặc vị trí, cập nhật hàng ngày.', 155),
-  canonical: viUrl, h1: 'Tìm việc làm ở Hồ Chí Minh', body: viBody, jsonld: viLd, lang: 'vi',
-  extraHead: `<link rel="alternate" hreflang="vi" href="${viUrl}"><link rel="alternate" hreflang="en" href="${BASE}/jobs/ho-chi-minh-city/"><link rel="alternate" hreflang="x-default" href="${BASE}/jobs/ho-chi-minh-city/">`,
-}));
-
 
 // Vietnamese homepage and jobs directory (English remains the default)
 const viAll = jobs.slice(0, 18);
 const viHomeUrl = `${BASE}/vi/`;
 const viDirUrl = `${BASE}/vi/viec-lam/`;
 const viCatCards = CATEGORIES.map(c => `<a class="job-card" href="/jobs/${c.key}/"><b>${esc(viCatLabels[c.key] || c.label)}</b><span class="job-meta">${esc(c.label)} jobs</span></a>`).join('');
-const viLocChips = `<div class="chips"><a href="/viec-lam-ho-chi-minh/">TP. Hồ Chí Minh</a><a href="/jobs/ha-noi/">Hà Nội</a><a href="/jobs/da-nang/">Đà Nẵng</a><a href="/jobs/remote/">Remote</a></div>`;
+const viLocChips = `<div class="chips"><a href="/jobs/ho-chi-minh-city/">TP. Hồ Chí Minh</a><a href="/jobs/ha-noi/">Hà Nội</a><a href="/jobs/da-nang/">Đà Nẵng</a><a href="/jobs/remote/">Remote</a></div>`;
 const viHomeBody = `${crumbs([{ name: 'Trang chủ' }])}
 <div class="hero"><p class="eyebrow">Website tìm việc tổng hợp</p>
 <h1>Tìm việc làm tại Việt Nam</h1>
@@ -443,7 +385,7 @@ ${viLocChips}
 <h2>Câu hỏi thường gặp</h2>
 <p><strong>Good Jobs có phải trang tuyển dụng không?</strong> Không. Good Jobs tổng hợp tin từ các trang tuyển dụng và dẫn về trang gốc; chúng tôi không phải nhà tuyển dụng và không thu phí ứng viên.</p>
 <p><strong>Good Jobs có miễn phí không?</strong> Có. Tìm kiếm và ứng tuyển miễn phí cho ứng viên. Nhà tuyển dụng có thể đăng tin qua trang <a href="/post-job/">Post a Job</a>.</p>
-<p><strong>Tìm việc làm ở Hồ Chí Minh ở đâu?</strong> Mở <a href="/viec-lam-ho-chi-minh/">trang việc làm Hồ Chí Minh</a> hoặc nhập "Hồ Chí Minh" vào ô địa điểm.</p>
+<p><strong>Tìm việc làm ở Hồ Chí Minh ở đâu?</strong> Mở <a href="/jobs/ho-chi-minh-city/">trang việc làm Hồ Chí Minh</a> hoặc nhập "Hồ Chí Minh" vào ô địa điểm.</p>
 <p><strong>Có việc làm remote không?</strong> Có. Chọn "Remote" ở ô địa điểm để xem các vị trí làm từ xa.</p>`;
 const viHomeLd = { '@context': 'https://schema.org', '@graph': [
   { '@type': 'Organization', '@id': BASE + '/#organization', name: 'Good Jobs', url: BASE + '/', logo: BASE + '/favicon.svg' },
@@ -495,7 +437,6 @@ try {
   const extra = [];
   for (const c of CATEGORIES) extra.push({ loc: `${BASE}/jobs/${c.key}/`, freq: 'weekly', pri: '0.8' });
   for (const l of LOCATIONS) extra.push({ loc: `${BASE}/jobs/${l.key}/`, freq: 'weekly', pri: '0.8' });
-  extra.push({ loc: `${BASE}/viec-lam-ho-chi-minh/`, freq: 'daily', pri: '0.9' });
   extra.push({ loc: `${BASE}/vi/`, freq: 'daily', pri: '0.9' });
   extra.push({ loc: `${BASE}/vi/viec-lam/`, freq: 'daily', pri: '0.8' });
   for (const j of jobs) extra.push({ loc: `${BASE}/jobs/job/${j.slug}/`, freq: 'daily', pri: '0.6' });
