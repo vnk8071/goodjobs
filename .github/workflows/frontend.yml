@@ -6,8 +6,6 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
-  schedule:
-    - cron: '0 2 * * *'
   workflow_dispatch:
 
 permissions:

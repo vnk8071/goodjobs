@@ -1,9 +1,25 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, API_BASE } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage } from "./ui";
+import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
+
+// EN/VI toggle — same single page, no separate /vi/ URL.
+initLang();
+applyStaticTranslations();
+const langToggleBtn = document.getElementById("langToggle") as HTMLButtonElement | null;
+function syncLangToggleLabel(): void {
+  if (langToggleBtn) langToggleBtn.textContent = getLang() === "en" ? "VI" : "EN";
+}
+syncLangToggleLabel();
+langToggleBtn?.addEventListener("click", () => {
+  setLang(getLang() === "en" ? "vi" : "en");
+  applyStaticTranslations();
+  syncLangToggleLabel();
+  refreshUILanguage();
+});
 
 const recentJobsSection  = document.getElementById("recentJobsSection")  as HTMLElement | null;
 // Direct submissions (source "Direct") get their own featured table on the
@@ -131,7 +147,7 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
       if (data.jobs_this_week > 0) {
         const rounded = Math.floor(data.jobs_this_week / 100) * 100;
         const display = rounded > 0 ? rounded.toLocaleString("en-US") : data.jobs_this_week;
-        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> jobs`;
+        weeklyStatsEl.innerHTML = `<strong>${display}+</strong> ${t("stats.jobsSuffix")}`;
         weeklyStatsEl.classList.remove("hidden");
       }
     }
@@ -211,22 +227,22 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         hideProgress();
         const count = currentJobs.length;
         if (count === 0) {
-          setStatus("No matching jobs found in the past week. Try a different keyword.", "error");
+          setStatus(t("status.noMatch"), "error");
           return;
         }
 
         if (sharedJobLink && !openJobByLink(sharedJobLink)) {
-          setStatus("Couldn't find the job from the shared link (it may have expired).", "error");
+          setStatus(t("status.sharedNotFound"), "error");
           return;
         }
 
         _descStatusPending = !(_isCacheHit || _isFuzzyCache);
         if (_isCacheHit || _isFuzzyCache) {
-          setStatus(`Found ${count} jobs from the past week.`, "success");
+          setStatus(t("status.foundWeek", { count }), "success");
         } else if (fromCvOrSkills) {
-          setStatus(`Found ${count} jobs matching your profile — loading descriptions…`, "success");
+          setStatus(t("status.foundProfile", { count }), "success");
         } else {
-          setStatus(`Found ${count} jobs — loading descriptions…`, "success");
+          setStatus(t("status.foundLoading", { count }), "success");
         }
       },
       abortController.signal,
@@ -241,12 +257,12 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       () => {
         setLinkedInEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Found ${count} jobs from the past week.`, "success");
+        setStatus(t("status.foundWeek", { count }), "success");
       },
       () => {
         setTopCVEnriching(false);
         const count = currentJobs.length;
-        setStatus(`Found ${count} jobs from the past week.`, "success");
+        setStatus(t("status.foundWeek", { count }), "success");
       },
       (_fetchedTs, fuzzy) => {
         if (!fuzzy) _isCacheHit = true;
@@ -263,7 +279,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     );
     setEnrichmentDone(true);
     if (_descStatusPending && currentJobs.length > 0) {
-      setStatus(`Found ${currentJobs.length} jobs from the past week.`, "success");
+      setStatus(t("status.foundWeek", { count: currentJobs.length }), "success");
     }
   } catch (err) {
     hideProgress();
@@ -272,7 +288,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     currentJobs = [];
     const isNetworkDown = err instanceof TypeError && err.message.toLowerCase().includes("fetch");
     if (isNetworkDown) {
-      setStatus("Server is busy — trying a direct LinkedIn search…", "error");
+      setStatus(t("status.serverBusyFallback"), "error");
       try {
         const fallbackJobs = await scrapeLinkedInFallback(
           keyword,
@@ -282,22 +298,19 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         if (fallbackJobs.length > 0) {
           currentJobs = appendJobs([], fallbackJobs);
           const count = fallbackJobs.length;
-          setStatus(
-            `Server busy — showing only ${count} LinkedIn results.`,
-            "error",
-          );
+          setStatus(t("status.linkedinOnly", { count }), "error");
         } else {
-          setStatus("Server is busy. Please try again later.", "error");
+          setStatus(t("status.serverBusy"), "error");
         }
       } catch {
-        setStatus("Server is busy. Please try again later.", "error");
+        setStatus(t("status.serverBusy"), "error");
       }
     } else {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("searched too many times") || msg.includes("Too Many") || msg.includes("429")) {
-        setStatus("You've searched too many times. Please wait 1 minute and try again.", "error");
+        setStatus(t("status.rateLimited"), "error");
       } else {
-        setStatus(`Error: ${msg}`, "error");
+        setStatus(t("status.errorPrefix", { msg }), "error");
       }
     }
   } finally {
@@ -311,7 +324,7 @@ fetchBtn.addEventListener("click", async () => {
 
   const rawInput = keywordEl.value.trim();
   if (!rawInput) {
-    setStatus("Please enter a job title or paste your skills/CV.", "error");
+    setStatus(t("status.enterKeyword"), "error");
     return;
   }
 
@@ -336,7 +349,7 @@ fetchBtn.addEventListener("click", async () => {
   }
 
   // Classify all non-warmup input via AI (job title vs CV/skills).
-  setStatus("Analyzing…", "info");
+  setStatus(t("status.analyzing"), "info");
   fetchBtn.disabled = true;
   const classifyTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
   const classified = await Promise.race([

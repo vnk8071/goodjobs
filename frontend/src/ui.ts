@@ -1,4 +1,5 @@
 import type { Job } from "./types";
+import { t, getLang } from "./i18n";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
@@ -84,12 +85,12 @@ export function initApplyToast(): void {
   el.innerHTML = `
     <div class="apply-toast__icon">📋</div>
     <div class="apply-toast__body">
-      <div class="apply-toast__q">Have you applied yet?</div>
+      <div class="apply-toast__q">${t("toast.question")}</div>
       <div class="apply-toast__title" id="applyToastTitle"></div>
     </div>
     <div class="apply-toast__actions">
-      <button class="apply-toast__yes" id="applyToastYes">✓ Applied</button>
-      <button class="apply-toast__no"  id="applyToastNo">✕ Not yet</button>
+      <button class="apply-toast__yes" id="applyToastYes">${t("toast.yes")}</button>
+      <button class="apply-toast__no"  id="applyToastNo">${t("toast.no")}</button>
     </div>
   `;
   document.body.appendChild(el);
@@ -106,6 +107,16 @@ export function initApplyToast(): void {
   el.querySelector("#applyToastNo")!.addEventListener("click", () => {
     _hideApplyToast();
   });
+}
+
+function _refreshApplyToastLanguage(): void {
+  if (!_applyToast) return;
+  const q = _applyToast.querySelector<HTMLElement>(".apply-toast__q");
+  const yes = _applyToast.querySelector<HTMLElement>("#applyToastYes");
+  const no = _applyToast.querySelector<HTMLElement>("#applyToastNo");
+  if (q) q.textContent = t("toast.question");
+  if (yes) yes.textContent = t("toast.yes");
+  if (no) no.textContent = t("toast.no");
 }
 
 function _showApplyToast(link: string, title: string): void {
@@ -145,13 +156,13 @@ function _refreshApplyUI(link: string): void {
 
 function _styleApplyBtn(btn: HTMLButtonElement, applied: boolean): void {
   btn.classList.toggle("apply-btn--applied", applied);
-  btn.textContent = applied ? "✓ Applied" : "Apply ↗";
-  btn.title = applied ? "You've marked this as applied. Click to unmark." : "Apply to this position";
+  btn.textContent = applied ? t("apply.applied") : t("apply.cta");
+  btn.title = applied ? t("apply.titleUnmark") : t("apply.titleApply");
 }
 
 function _styleModalApplyBtn(btn: HTMLAnchorElement, applied: boolean): void {
   btn.classList.toggle("modal-apply-btn--applied", applied);
-  btn.textContent = applied ? "✓ Applied" : "Apply ↗";
+  btn.textContent = applied ? t("apply.applied") : t("apply.cta");
 }
 
 // Generic role nouns and level words that carry no domain signal.
@@ -291,7 +302,7 @@ async function _copyToClipboard(text: string): Promise<boolean> {
 function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
   const original = btn.textContent ?? "";
   void _copyToClipboard(text).then((ok) => {
-    btn.textContent = ok ? "Copied" : "Couldn't share";
+    btn.textContent = ok ? t("copy.copied") : t("copy.failed");
     btn.disabled = true;
     window.setTimeout(() => {
       btn.textContent = original;
@@ -307,7 +318,7 @@ function formatPostedDate(dateStr?: string): string {
   if (isNaN(d.getTime())) return "—";
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
-  return d.toLocaleDateString("en-US", opts);
+  return d.toLocaleDateString(getLang() === "vi" ? "vi-VN" : "en-US", opts);
 }
 
 /** Render skill tags as HTML spans, collapsing extras into a "+N" pill. */
@@ -397,7 +408,7 @@ function openJobModal(job: Job): void {
     (_linkedinEnriching && job.source === "LinkedIn") ||
     (_topcvEnriching    && job.source === "TopCV"));
   if (!job.skills?.length && isEnriching) {
-    jobModalSkills.innerHTML = '<span class="desc-loading">Finding skills…</span>';
+    jobModalSkills.innerHTML = `<span class="desc-loading">${t("modal.findingSkills")}</span>`;
   } else {
     // Modal can show more skills than the table.
     jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
@@ -427,7 +438,7 @@ function openJobModal(job: Job): void {
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   const descHtml = (!job.description && isEnriching)
-    ? '<span class="desc-loading">Finding description…</span>'
+    ? `<span class="desc-loading">${t("modal.findingDesc")}</span>`
     : (job.description || "");
   requestAnimationFrame(() => {
     jobModalBody.scrollTop = 0;
@@ -494,59 +505,48 @@ let _topcvEnriching    = false;
 let _enrichmentDone    = true;
 let _openModalLink = "";
 
-const _PROGRESS_MESSAGES = [
-  "Vibing…",
-  "Scouting…",
-  "Scoring…",
-  "Hunting…",
-  "Crawling…",
-  "Fetching…",
-  "Searching…",
-  "Browsing…",
-  "Scanning…",
-  "Digging…",
-  "Grinding…",
-  "Hustling…",
-  "Lurking…",
-  "Sniffing…",
-  "Stalking…",
-  "Probing…",
-  "Yapping…",
-  "Cooking…",
-  "Rizzling…",
-  "Slaying…",
-  "Leveling up…",
-  "No-lifing…",
-  "Sweating…",
-  "Speedrunning…",
-  "Farming…",
-  "Touching grass…",
-  "Manifesting…",
-  "Crunching…",
-  "Summoning…",
-  "Plotting…",
-];
+const _PROGRESS_MESSAGES: Record<"en" | "vi", string[]> = {
+  en: [
+    "Vibing…", "Scouting…", "Scoring…", "Hunting…", "Crawling…", "Fetching…",
+    "Searching…", "Browsing…", "Scanning…", "Digging…", "Grinding…", "Hustling…",
+    "Lurking…", "Sniffing…", "Stalking…", "Probing…", "Yapping…", "Cooking…",
+    "Rizzling…", "Slaying…", "Leveling up…", "No-lifing…", "Sweating…",
+    "Speedrunning…", "Farming…", "Touching grass…", "Manifesting…", "Crunching…",
+    "Summoning…", "Plotting…",
+  ],
+  vi: [
+    "Đang vibe…", "Đang dò la…", "Đang chấm điểm…", "Đang săn việc…", "Đang bò…",
+    "Đang lấy data…", "Đang tìm…", "Đang lượn…", "Đang quét…", "Đang đào…",
+    "Đang cày…", "Đang cố gắng…", "Đang rình…", "Đang đánh hơi…", "Đang theo dõi…",
+    "Đang dò xét…", "Đang lảm nhảm…", "Đang nấu…", "Đang gáy…", "Đang cháy…",
+    "Đang lên level…", "Đang cắm mặt…", "Đang đổ mồ hôi…", "Đang speedrun…",
+    "Đang farm…", "Đang hít thở…", "Đang ước…", "Đang nghiền…", "Đang triệu hồi…",
+    "Đang lên kế hoạch…",
+  ],
+};
 
 /** Show the progress bar and start the rotating status message animation. */
 export function showProgress(): void {
   progressPills.innerHTML = "";
-  progressCount.textContent = "Searching…";
+  progressCount.textContent = t("progress.searching");
   progressBar.classList.remove("hidden");
 
-  let msgIndex = Math.floor(Math.random() * _PROGRESS_MESSAGES.length);
-  progressTimer.textContent = _PROGRESS_MESSAGES[msgIndex];
+  const messages = _PROGRESS_MESSAGES[getLang()];
+  let msgIndex = Math.floor(Math.random() * messages.length);
+  progressTimer.textContent = messages[msgIndex];
 
   if (_timerInterval) clearInterval(_timerInterval);
   _timerInterval = setInterval(() => {
-    msgIndex = (msgIndex + 1) % _PROGRESS_MESSAGES.length;
-    progressTimer.textContent = _PROGRESS_MESSAGES[msgIndex];
+    const msgs = _PROGRESS_MESSAGES[getLang()];
+    msgIndex = (msgIndex + 1) % msgs.length;
+    progressTimer.textContent = msgs[msgIndex];
   }, 3000);
 }
 
 /** Update the progress bar job count with a per-source breakdown. */
 export function updateProgressCount(jobs: Job[]): void {
   if (jobs.length === 0) {
-    progressCount.textContent = "Searching…";
+    progressCount.textContent = t("progress.searching");
     return;
   }
   const bySource = new Map<string, number>();
@@ -555,7 +555,7 @@ export function updateProgressCount(jobs: Job[]): void {
     .sort((a, b) => b[1] - a[1])
     .map(([src, n]) => `${src} ${n}`)
     .join(" · ");
-  progressCount.textContent = `Found ${jobs.length} — ${breakdown}`;
+  progressCount.textContent = t("progress.foundBreakdown", { count: jobs.length, breakdown });
 }
 
 /** Set whether LinkedIn Phase 2 description enrichment is in progress. */
@@ -592,8 +592,8 @@ export function markSiteLoading(site: string, count: number): void {
   const pill = document.createElement("span");
   pill.className = "progress-pill progress-pill-loading";
   pill.dataset.site = label;
-  pill.textContent = `${label} loading description…`;
-  pill.title = `Loading description for ${count} jobs`;
+  pill.textContent = t("progress.siteLoading", { label });
+  pill.title = t("progress.siteLoadingTitle", { count });
   progressPills.appendChild(pill);
 }
 
@@ -613,7 +613,7 @@ export function markSiteDone(site: string, count: number): void {
 
 /** Show the queue banner indicating the user's position in the scrape queue. */
 export function showQueuedMessage(position: number): void {
-  queueBanner.textContent = `⏳ Server is busy — you're at position #${position} in the queue. Please wait…`;
+  queueBanner.textContent = t("queue.waiting", { position });
   queueBanner.classList.remove("hidden");
 }
 
@@ -653,6 +653,20 @@ export function hideResults(): void {
   titleFilter.value = "";
 }
 
+/** Re-render all language-dependent dynamic UI after an EN/VI toggle (static
+ * markup is handled separately via data-i18n attributes in main.ts). */
+export function refreshUILanguage(): void {
+  _refreshApplyToastLanguage();
+  if (_allJobs.length > 0) {
+    _rebuildFilterBar();
+    _applyFilter();
+  }
+  if (_openModalLink) {
+    const btn = document.getElementById("jobModalApplyBtn") as HTMLAnchorElement | null;
+    if (btn) _styleModalApplyBtn(btn, isApplied(_openModalLink));
+  }
+}
+
 export function openJobByLink(link: string): boolean {
   const job = _allJobs.find((j) => j.link === link);
   if (!job) return false;
@@ -686,7 +700,7 @@ function _applyFilter(): void {
   jobsBody.innerHTML = "";
   if (visible.length === 0) {
     jobsBody.innerHTML =
-      '<tr><td colspan="10" class="empty">No jobs match the selected filters.</td></tr>';
+      `<tr><td colspan="10" class="empty">${t("empty.noMatch")}</td></tr>`;
   } else {
     visible.forEach((job, i) => jobsBody.appendChild(buildRow(job, i + 1)));
   }
@@ -695,8 +709,8 @@ function _applyFilter(): void {
   const shown = visible.length;
   jobCountEl.textContent =
     shown === total
-      ? `${total} results`
-      : `${shown} of ${total} results`;
+      ? t("results.countAll", { total })
+      : t("results.countFiltered", { shown, total });
 }
 
 /** Rebuild the source filter pill bar from current _allJobs. */
@@ -902,7 +916,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
     ? esc(descText)
     : _enrichmentDone
       ? '<span class="no-skills">—</span>'
-      : `<span class="desc-loading">Loading description…</span>`;
+      : `<span class="desc-loading">${t("table.loadingDesc")}</span>`;
   const score = typeof job._vector_score === "number" ? job._vector_score.toFixed(3) : "";
   const scorePill = score ? `<span class="title-score" title="Vector similarity score">${esc(score)}</span>` : "";
   const levelBadge = job.level_match ? `<span class="level-badge">✓ Match</span>` : "";
@@ -928,7 +942,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
     <td><span class="badge badge-${job.source.toLowerCase()}">${esc(sourceLabel(job.source))}</span></td>
     <td class="apply-cell">
       ${job.link
-        ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? "Applied — click to unmark" : "Apply to this position"}" onclick="event.stopPropagation()">${applied ? "✓ Applied" : "Apply ↗"}</button>`
+        ? `<button class="apply-btn${applied ? " apply-btn--applied" : ""}" data-apply-link="${esc(job.link)}" title="${applied ? t("apply.titleUnmark") : t("apply.titleApply")}" onclick="event.stopPropagation()">${applied ? t("apply.applied") : t("apply.cta")}</button>`
         : `<span class="view-link" style="opacity:0.45;cursor:default">—</span>`}
     </td>
   `;
@@ -966,18 +980,18 @@ export function showIntentBox(keyword: string, inputType: "job_title" | "cv_or_s
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
-        This doesn't look like a job title — did you mean:
+        ${t("intent.notJob")}
       </div>
     `;
   } else {
-    const label = inputType === "cv_or_skills" ? "Resume / skills" : "Job title";
+    const label = inputType === "cv_or_skills" ? t("intent.resumeSkills") : t("intent.jobTitle");
     _intentBox.innerHTML = `
       <div class="intent-box__header">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
         </svg>
-        AI detected: <span style="font-weight:400;color:#374151;">${label}</span>
-        &rarr; searching with keyword <span class="intent-box__keyword">${esc(keyword)}</span>
+        ${t("intent.detectedPrefix")} <span style="font-weight:400;color:#374151;">${label}</span>
+        ${t("intent.searchingWith")} <span class="intent-box__keyword">${esc(keyword)}</span>
       </div>
       ${reasoning ? `<div class="intent-box__reasoning">${esc(reasoning)}</div>` : ""}
     `;
@@ -996,7 +1010,7 @@ export function setIntentAlternatives(
 
   const row = document.createElement("div");
   row.className = "intent-box__alts";
-  row.innerHTML = `<span class="intent-box__alts-label">Suggestions:</span>`;
+  row.innerHTML = `<span class="intent-box__alts-label">${t("intent.suggestions")}</span>`;
 
   for (const t of top) {
     const btn = document.createElement("button");
@@ -1040,7 +1054,7 @@ export function showSuggestionBanner(
   corrected: string,
   onAccept: (corrected: string) => void,
   onDismiss: () => void,
-  label = "Did you mean: ",
+  label = t("suggestion.didYouMean"),
 ): void {
   const banner = _getOrCreateSuggestionBanner();
   banner.innerHTML = `

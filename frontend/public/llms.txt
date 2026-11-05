@@ -3,9 +3,7 @@
 > Good Jobs is a self-hosted job search aggregator for Vietnam and global/remote roles. One search streams recent listings from 21 job boards — LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, CareerLink, TopDev, JobsGo, Glints, ViecOi, Indeed VN, TechJobs, Xóm Jobs, Google Careers, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS and Dice — with AI keyword detection, skill extraction and match scores. Every listing links back to the original posting.
 
 ## Pages
-- [Trang tiếng Việt / Vietnamese home](https://goodjobs.io.vn/vi/): tìm việc làm tại Việt Nam.
-- [Danh mục việc làm](https://goodjobs.io.vn/vi/viec-lam/): việc làm theo ngành và khu vực.
-- [Home / search](https://goodjobs.io.vn/): search by job title, skills or CV and location.
+- [Home / search](https://goodjobs.io.vn/): search by job title, skills or CV and location. English by default, with an EN/VI toggle in the header (client-side, same URL).
 - [Post a job](https://goodjobs.io.vn/post-job/): submit a job for review.
 - [Contact](https://goodjobs.io.vn/contact/): support, partnerships and privacy requests.
 - [Privacy policy](https://goodjobs.io.vn/privacy/)
