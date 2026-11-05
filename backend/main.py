@@ -897,6 +897,13 @@ async def recent_jobs_stream(compact: bool = True):
                         continue
                     seen_links.add(link)
                     batch.append(job)
+                    if len(batch) >= 25:
+                        total += len(batch)
+                        payload = (
+                            [_compact_recent_job(j) for j in batch] if compact else batch
+                        )
+                        yield f"event: batch\ndata: {json.dumps({'jobs': payload}, ensure_ascii=False)}\n\n"
+                        batch = []
 
                 if batch:
                     total += len(batch)

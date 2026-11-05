@@ -2,7 +2,7 @@ import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity,
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
-import { CATEGORY_IDS, getJobCategories, jobMatchesCategory, type CategoryFilter } from "./categories";
+import { CATEGORY_IDS, jobMatchesCategory, type CategoryFilter } from "./categories";
 import type { Job } from "./types";
 
 // Initialise apply tracker toast (injected into DOM once)
@@ -111,7 +111,7 @@ function scheduleHomeRender(): void {
   });
 }
 
-/** Refresh the category/location dropdown options and their counts. */
+/** Refresh the category/location dropdown labels and keep the active values. */
 function updateHomeFilters(): void {
   if (!homeCategoryBar || !homeCategorySelect || !homeLocationSelect) return;
   const jobs = homeJobs();
@@ -121,50 +121,31 @@ function updateHomeFilters(): void {
   }
   homeCategoryBar.classList.remove("hidden");
 
-  // Counts for each dropdown respect the other active filter, so "Artificial
-  // Intelligence (120)" means 120 AI jobs in the selected location.
-  const locationScoped = jobs.filter((job) => jobMatchesLocation(job, homeLocation));
-  const categoryCounts: Record<CategoryFilter, number> = {
-    all: locationScoped.length, ai: 0, it: 0, data: 0, product: 0,
-    business: 0, design: 0, marketing: 0, hr: 0,
-  };
-  for (const job of locationScoped) {
-    for (const id of getJobCategories(job)) categoryCounts[id]++;
-  }
-
-  const categoryScoped = jobs.filter((job) => jobMatchesCategory(job, homeCategory));
-  const locationCounts: Record<LocationFilter, number> = {
-    all: categoryScoped.length, hcm: 0, hanoi: 0, danang: 0, remote: 0, other: 0,
-  };
-  for (const job of categoryScoped) {
-    locationCounts[jobLocationBucket(job)]++;
-  }
-
   const selectedCategory = homeCategory;
   homeCategorySelect.innerHTML = "";
-  const addCategory = (value: CategoryFilter, label: string, count: number) => {
+  const addCategory = (value: CategoryFilter, label: string) => {
     const option = document.createElement("option");
     option.value = value;
-    option.textContent = `${label} (${count})`;
+    option.textContent = label;
     homeCategorySelect.appendChild(option);
   };
-  addCategory("all", t("category.all"), categoryCounts.all);
+  addCategory("all", t("category.all"));
   for (const id of CATEGORY_IDS) {
-    addCategory(id, t(`category.${id}`), categoryCounts[id]);
+    addCategory(id, t(`category.${id}`));
   }
   homeCategorySelect.value = selectedCategory;
 
   const selectedLocation = homeLocation;
   homeLocationSelect.innerHTML = "";
-  const addLocation = (value: LocationFilter, label: string, count: number) => {
+  const addLocation = (value: LocationFilter, label: string) => {
     const option = document.createElement("option");
     option.value = value;
-    option.textContent = `${label} (${count})`;
+    option.textContent = label;
     homeLocationSelect.appendChild(option);
   };
-  addLocation("all", t("location.all"), locationCounts.all);
+  addLocation("all", t("location.all"));
   for (const id of LOCATION_FILTERS) {
-    addLocation(id, t(LOCATION_KEYS[id]), locationCounts[id]);
+    addLocation(id, t(LOCATION_KEYS[id]));
   }
   homeLocationSelect.value = selectedLocation;
 }
