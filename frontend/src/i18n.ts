@@ -19,7 +19,7 @@ type Dict = Record<string, string>;
 export const STRINGS: Record<Lang, Dict> = {
   en: {
     "header.subtitle": "Search recent jobs in Vietnam and beyond",
-    "header.postJob": "Post a Job",
+    "header.postJob": "Post",
     "header.news": "News",
     "header.githubAria": "View source on GitHub",
     "header.themeAria": "Toggle dark/light theme",
@@ -216,7 +216,7 @@ export const STRINGS: Record<Lang, Dict> = {
   },
   vi: {
     "header.subtitle": "Tìm việc mới tại Việt Nam và nhiều nơi khác",
-    "header.postJob": "Đăng tin tuyển dụng",
+    "header.postJob": "Đăng tin",
     "header.news": "Tin tức",
     "header.githubAria": "Xem mã nguồn trên GitHub",
     "header.themeAria": "Chuyển giao diện sáng/tối",
