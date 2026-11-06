@@ -11,7 +11,7 @@ import unicodedata
 from datetime import datetime, timezone
 
 from ..constants import HEADERS, CHROMIUM_ARGS
-from ..utils import _relative_display
+from ..utils import _relative_display, _clean_html
 
 _BASE = "https://www.google.com/about/careers/applications/jobs/results"
 _MAX_PAGES = 2
@@ -125,3 +125,45 @@ def scrape_google(keyword: str, location: str = "Ho Chi Minh City", max_results:
 
     jobs = [j for j in raw if _city_key(j["location"]) == city]
     return jobs[:max_results]
+
+
+def scrape_google_detail_one(job: dict, cooldown: float = 0.0) -> None:
+    """Enrich one Google Careers job with its full description HTML.
+
+    The listing cards have no description, so this opens the job page and
+    extracts the main details container. The HTML is sanitised with
+    `_clean_html` before being stored in the cache.
+    """
+    link = (job.get("link") or "").strip()
+    if not link:
+        return
+    if cooldown:
+        time.sleep(cooldown)
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=CHROMIUM_ARGS)
+            try:
+                ctx = browser.new_context(user_agent=HEADERS["User-Agent"], locale="en-US")
+                page = ctx.new_page()
+                page.goto(link, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
+                cards = page.evaluate(
+                    """() => {
+                        const el = document.querySelector('div.DkhPwc') || document.querySelector('main');
+                        return el ? el.innerHTML : '';
+                    }"""
+                )
+                if not cards:
+                    return
+                cleaned = _clean_html(cards)
+                if cleaned:
+                    job["description"] = cleaned
+            finally:
+                browser.close()
+    except Exception as e:
+        print(f"[Google detail] {e}")

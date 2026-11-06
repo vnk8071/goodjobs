@@ -132,14 +132,37 @@ export interface NormalizeCityResult {
 
 export async function fetchJobDetail(
   link: string,
+  cacheKey?: string,
   signal?: AbortSignal,
 ): Promise<Job | null> {
   try {
-    const resp = await fetch(`${API_BASE}/job?link=${encodeURIComponent(link)}`, { signal });
+    const params = new URLSearchParams({ link });
+    if (cacheKey) params.set("key", cacheKey);
+    const resp = await fetch(`${API_BASE}/job?${params.toString()}`, { signal });
     if (!resp.ok) return null;
     return (await resp.json()) as Job;
   } catch {
     return null;
+  }
+}
+
+export async function fetchJobDetails(
+  items: Array<{ link: string; key?: string }>,
+  signal?: AbortSignal,
+): Promise<Job[]> {
+  if (items.length === 0) return [];
+  try {
+    const resp = await fetch(`${API_BASE}/jobs-details`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+      signal,
+    });
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as { jobs?: Job[] };
+    return data.jobs ?? [];
+  } catch {
+    return [];
   }
 }
 

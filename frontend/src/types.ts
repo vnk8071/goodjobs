@@ -28,6 +28,7 @@ export interface Job {
   _vector_score?: number;
   _from_vector?: boolean;
   _compact?: boolean;     // true for homepage stream rows; full details are fetched on modal open
+  _cache_key?: string;    // Redis key for the row's cache entry (fast detail lookup)
   level_match?: boolean;   // true when title contains the requested level word (e.g. "junior")
 }
 

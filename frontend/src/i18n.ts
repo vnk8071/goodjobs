@@ -56,6 +56,8 @@ export const STRINGS: Record<Lang, Dict> = {
     "location.danang": "Da Nang",
     "location.remote": "Remote",
     "location.other": "Other",
+    "source.label": "Source",
+    "source.all": "All sources",
 
     "chat.launch": "Ask Good Jobs AI",
     "chat.title": "Good Jobs AI",
@@ -195,6 +197,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "results.countFiltered": "{shown} of {total} results",
     "modal.findingSkills": "Finding skills…",
     "modal.findingDesc": "Finding description…",
+    "modal.loadingFullDesc": "Loading full description…",
     "table.loadingDesc": "Loading description…",
     "intent.notJob": "This doesn't look like a job title — did you mean:",
     "intent.detectedPrefix": "AI detected:",
@@ -248,6 +251,8 @@ export const STRINGS: Record<Lang, Dict> = {
     "location.danang": "Đà Nẵng",
     "location.remote": "Remote",
     "location.other": "Khác",
+    "source.label": "Nguồn",
+    "source.all": "Tất cả nguồn",
 
     "chat.launch": "Hỏi Good Jobs AI",
     "chat.title": "Good Jobs AI",
@@ -387,6 +392,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "results.countFiltered": "{shown}/{total} kết quả",
     "modal.findingSkills": "Đang tìm kỹ năng…",
     "modal.findingDesc": "Đang tìm mô tả…",
+    "modal.loadingFullDesc": "Đang tải mô tả đầy đủ…",
     "table.loadingDesc": "Đang tải mô tả…",
     "intent.notJob": "Có vẻ đây không phải chức danh — có phải bạn muốn tìm:",
     "intent.detectedPrefix": "AI phát hiện:",

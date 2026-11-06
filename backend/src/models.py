@@ -51,6 +51,15 @@ class ChatRequest(BaseModel):
     lang: str = "en"     # "en" | "vi"
 
 
+class JobDetailItem(BaseModel):
+    link: str
+    key: str = ""        # Redis cache key, when available
+
+
+class JobDetailsRequest(BaseModel):
+    items: list[JobDetailItem] = []
+
+
 class SubmissionRequest(BaseModel):
     title: str = ""
     company: str = ""

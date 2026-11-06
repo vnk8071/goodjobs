@@ -39,6 +39,7 @@ from src.scrapers import (
     scrape_glints_detail_one,
     scrape_viecoi_detail_one,
     scrape_topdev_detail_one,
+    scrape_google_detail_one,
 )
 from src.background_summarizer import run_background_summarization
 
@@ -202,6 +203,7 @@ async def _scrape_keyword(
     glints_jobs: list[dict] = []
     viecoi_jobs: list[dict] = []
     topdev_jobs: list[dict] = []
+    google_jobs: list[dict] = []
     seen_links: set[str] = set()
     site_succeeded: set[str] = set()
     site_timeouts: set[str] = set()
@@ -262,6 +264,8 @@ async def _scrape_keyword(
                     viecoi_jobs.append(j)
                 elif j.get("source") == "TopDev":
                     topdev_jobs.append(j)
+                elif j.get("source") == "Google":
+                    google_jobs.append(j)
         # Inter-site delay with jitter — only between sites, not after the last one.
         if i < len(scrapers) - 1:
             base = _SITE_DELAY.get(site, 4.0)
@@ -334,6 +338,7 @@ async def _scrape_keyword(
         ("Glints", glints_jobs, scrape_glints_detail_one, 10, False),
         ("ViecOi", viecoi_jobs, scrape_viecoi_detail_one, 10, False),
         ("TopDev", topdev_jobs, scrape_topdev_detail_one, 10, False),
+        ("Google", google_jobs, scrape_google_detail_one, 10, False),
     ]
 
     any_enriched = False
@@ -609,6 +614,7 @@ async def _enrich_cycle(executor, loop) -> None:
         "Glints": scrape_glints_detail_one,
         "ViecOi": scrape_viecoi_detail_one,
         "TopDev": scrape_topdev_detail_one,
+        "Google": scrape_google_detail_one,
     }
 
     log_app("[warmup][enrich] starting description enrich pass over cached jobs...")

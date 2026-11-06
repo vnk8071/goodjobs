@@ -55,7 +55,7 @@ from src.matching import (
     _LEVEL_WORDS,
     LEVEL_SYNONYMS,
 )
-from src.models import Job, ScrapeRequest, SubmissionRequest, ChatRequest
+from src.models import Job, ScrapeRequest, SubmissionRequest, ChatRequest, JobDetailsRequest
 from src.intent import suggest_query, record_search, classify_and_extract, normalize_city
 from src.chat import answer_job_question, check_chat_rate_limit
 from src.ratelimit import check_rate_limit, ip_active_inc, ip_active_dec
@@ -760,7 +760,7 @@ async def _expected_cycle_size() -> int:
 
 _COMPACT_JOB_FIELDS = (
     "title", "company", "location", "link", "source", "posted",
-    "posted_ts", "posted_date", "skills", "logo",
+    "posted_ts", "posted_date", "skills", "logo", "_cache_key",
 )
 
 
@@ -813,6 +813,7 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
                     if not link or link in seen_links:
                         continue
                     seen_links.add(link)
+                    job["_cache_key"] = key
                     all_jobs.append(job)
             except Exception:
                 continue
@@ -919,6 +920,7 @@ async def recent_jobs_stream(compact: bool = True):
                     if (job.get("posted_ts") or 0.0) < cutoff:
                         continue
                     seen_links.add(link)
+                    job["_cache_key"] = key
                     batch.append(job)
                     if len(batch) >= 25:
                         total += len(batch)
@@ -971,22 +973,34 @@ async def recent_jobs_stream(compact: bool = True):
 
 
 @app.get("/job")
-async def job_detail(link: str):
+async def job_detail(link: str, key: str = ""):
     """Return the full cached job for a link (used by the homepage modal).
 
     The homepage stream ships short description snippets for every job; this
-    endpoint loads the full description only when the user opens a job.
+    endpoint loads the full description only when the user opens a job. When the
+    stream provides the cache key, this is a single Redis GET instead of a scan.
     """
     link = link.strip()
     if not link:
         raise HTTPException(status_code=400, detail="link is required")
 
+    if key and key.startswith("jobs:") and is_vn_cache_key(key):
+        try:
+            raw = await get_redis().get(key)
+            if raw:
+                data = json.loads(raw)
+                for job in data.get("jobs", []):
+                    if job.get("link") == link:
+                        return job
+        except Exception as e:
+            log_app(f"[job] direct key lookup error: {e}", "ERROR")
+
     try:
         redis = get_redis()
-        async for key in redis.scan_iter("jobs:*"):
-            if not is_vn_cache_key(key):
+        async for redis_key in redis.scan_iter("jobs:*"):
+            if not is_vn_cache_key(redis_key):
                 continue
-            raw = await redis.get(key)
+            raw = await redis.get(redis_key)
             if not raw:
                 continue
             try:
@@ -1007,6 +1021,49 @@ async def job_detail(link: str):
         log_app(f"[job] direct lookup error: {e}", "ERROR")
 
     raise HTTPException(status_code=404, detail="Job not found")
+
+
+@app.post("/jobs-details")
+async def jobs_details(req: JobDetailsRequest):
+    """Return full cached jobs for a batch of homepage rows (one page at a time).
+
+    The frontend asks only for the rows currently visible, so full descriptions
+    are loaded lazily per page instead of for the whole cache.
+    """
+    if not req.items:
+        return {"jobs": []}
+    if len(req.items) > 100:
+        raise HTTPException(status_code=400, detail="too many items")
+
+    by_key: dict[str, list[str]] = {}
+    for item in req.items:
+        cache_key = item.key.strip()
+        link = item.link.strip()
+        if not link:
+            continue
+        if cache_key and cache_key.startswith("jobs:") and is_vn_cache_key(cache_key):
+            by_key.setdefault(cache_key, []).append(link)
+
+    results: list[dict] = []
+    try:
+        redis = get_redis()
+        for cache_key, links in by_key.items():
+            raw = await redis.get(cache_key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            by_link = {job.get("link"): job for job in data.get("jobs", [])}
+            for link in links:
+                job = by_link.get(link)
+                if job:
+                    results.append(job)
+    except Exception as e:
+        log_app(f"[jobs-details] error: {e}", "ERROR")
+
+    return {"jobs": results}
 
 
 @app.get("/stats")

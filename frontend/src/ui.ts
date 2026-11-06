@@ -1,6 +1,6 @@
 import type { Job } from "./types";
 import { t, getLang } from "./i18n";
-import { fetchJobDetail } from "./api";
+import { fetchJobDetail, fetchJobDetails } from "./api";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
@@ -432,8 +432,53 @@ function sourceLogoHtml(source: string): string {
   return `<span class="badge badge-${esc(key)}">${esc(label)}</span>`;
 }
 
+/** Cached full jobs, loaded lazily for the current page only. */
+const _fullJobCache = new Map<string, Job>();
+
+function cacheFullJob(full: Job): void {
+  if (!full.link) return;
+  if (_fullJobCache.size > 500) {
+    const first = _fullJobCache.keys().next().value;
+    if (first) _fullJobCache.delete(first);
+  }
+  _fullJobCache.set(full.link, full);
+}
+
+function applyFullJobToModal(full: Job): void {
+  if (jobModal.classList.contains("hidden")) return;
+  if (full.description) jobModalDesc.innerHTML = full.description;
+  jobModalSkills.innerHTML = renderSkillTags(full.skills, 30);
+  jobModalCompany.innerHTML = `<div class="company-cell">${companyLogoHtml(full.company, full.source, full.logo)}<span>${esc(full.company)}</span></div>`;
+}
+
+/**
+ * Load full descriptions only for the jobs on the current page.
+ * Called after rendering a page, so opening a modal is instant.
+ */
+export async function prefetchJobDetails(jobs: Job[]): Promise<void> {
+  const items = jobs
+    .filter((job) => job._compact && job.link && job._cache_key)
+    .map((job) => ({ link: job.link, key: job._cache_key }));
+  if (items.length === 0) return;
+
+  const fullJobs = await fetchJobDetails(items);
+  for (const full of fullJobs) cacheFullJob(full);
+  if (_openModalLink) {
+    const openFull = _fullJobCache.get(_openModalLink);
+    if (openFull) applyFullJobToModal(openFull);
+  }
+}
+
 /** Open the job detail modal, populating all fields from the given job. */
 function openJobModal(job: Job): void {
+  const cachedFull = job.link ? _fullJobCache.get(job.link) : undefined;
+  if (cachedFull) {
+    job.description = cachedFull.description || job.description;
+    job.skills = cachedFull.skills ?? job.skills;
+    job.company = cachedFull.company || job.company;
+    job.logo = cachedFull.logo || job.logo;
+  }
+
   _openModalLink               = job.link;
   jobModalTitle.textContent    = job.title;
   jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div>`;
@@ -467,25 +512,27 @@ function openJobModal(job: Job): void {
 
   jobModal.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  const needsFull = Boolean(job._compact && job.link && !cachedFull);
   const descHtml = (!job.description && isEnriching)
     ? `<span class="desc-loading">${t("modal.findingDesc")}</span>`
-    : (job.description || "");
+    : (job.description || "") +
+      (needsFull ? `<div class="desc-loading">${t("modal.loadingFullDesc")}</div>` : "");
   requestAnimationFrame(() => {
     jobModalBody.scrollTop = 0;
     jobModalDesc.innerHTML = descHtml;
   });
 
-  // Homepage stream rows carry only a short description snippet. Fetch the
-  // full cached job when the modal opens so the description is complete.
+  // Homepage stream rows carry only a short description snippet. If the current
+  // page's prefetch hasn't arrived yet, fetch this one job as a fallback.
   const modalLink = job.link;
-  if (job._compact && modalLink) {
-    void fetchJobDetail(modalLink).then((full) => {
-      if (!full || _openModalLink !== modalLink) return;
-      job.description = full.description || job.description;
-      job.skills = full.skills ?? job.skills;
-      jobModalDesc.innerHTML = job.description || "";
-      jobModalSkills.innerHTML = renderSkillTags(job.skills, 30);
-      jobModalCompany.innerHTML = `<div class="company-cell">${companyLogoHtml(full.company, full.source, full.logo)}<span>${esc(full.company)}</span></div>`;
+  if (needsFull && modalLink) {
+    void fetchJobDetail(modalLink, job._cache_key).then((full) => {
+      if (!full) {
+        jobModalDesc.querySelector(".desc-loading")?.remove();
+        return;
+      }
+      cacheFullJob(full);
+      if (_openModalLink === modalLink) applyFullJobToModal(full);
     });
   }
 }

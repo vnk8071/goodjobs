@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, streamRecentJobs } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
 import { CATEGORY_IDS, jobMatchesCategory, type CategoryFilter } from "./categories";
@@ -63,6 +63,7 @@ const directRecentBody    = document.getElementById("directRecentBody")    as HT
 const homeCategoryBar   = document.getElementById("homeCategoryBar") as HTMLElement | null;
 const homeCategorySelect = document.getElementById("homeCategorySelect") as HTMLSelectElement | null;
 const homeLocationSelect = document.getElementById("homeLocationSelect") as HTMLSelectElement | null;
+const homeSourceSelect   = document.getElementById("homeSourceSelect") as HTMLSelectElement | null;
 const recentPager        = document.getElementById("recentPager") as HTMLElement | null;
 const recentPageSizeEl   = document.getElementById("recentPageSize") as HTMLSelectElement | null;
 const recentPrevBtn      = document.getElementById("recentPrev") as HTMLButtonElement | null;
@@ -112,10 +113,15 @@ function jobMatchesLocation(job: Job, filter: LocationFilter): boolean {
   return filter === "all" || jobLocationBucket(job) === filter;
 }
 
+function jobMatchesSource(job: Job, source: string): boolean {
+  return source === "all" || job.source === source;
+}
+
 let homeDirectJobs: Job[] = [];
 let homeScrapedJobs: Job[] = [];
 let homeCategory: CategoryFilter = "all";
 let homeLocation: LocationFilter = "all";
+let homeSource = "all";
 let homeVisible = true;
 let homePage = 1;
 let homePageSize = Number(recentPageSizeEl?.value) || 10;
@@ -158,9 +164,9 @@ function interleaveBySource(jobs: Job[]): Job[] {
   return result;
 }
 
-/** Refresh the category/location dropdown labels and keep the active values. */
+/** Refresh the category/location/source dropdown labels and keep the active values. */
 function updateHomeFilters(): void {
-  if (!homeCategoryBar || !homeCategorySelect || !homeLocationSelect) return;
+  if (!homeCategoryBar || !homeCategorySelect || !homeLocationSelect || !homeSourceSelect) return;
   const jobs = homeJobs();
   if (jobs.length === 0) {
     homeCategoryBar.classList.add("hidden");
@@ -195,6 +201,23 @@ function updateHomeFilters(): void {
     addLocation(id, t(LOCATION_KEYS[id]));
   }
   homeLocationSelect.value = selectedLocation;
+
+  const selectedSource = homeSource;
+  homeSourceSelect.innerHTML = "";
+  const addSource = (value: string, label: string) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    homeSourceSelect.appendChild(option);
+  };
+  addSource("all", t("source.all"));
+  const sources = [...new Set(jobs.map((job) => job.source))].sort((a, b) => a.localeCompare(b));
+  for (const source of sources) addSource(source, source);
+  homeSourceSelect.value = selectedSource;
+  if (homeSourceSelect.value !== selectedSource) {
+    homeSourceSelect.value = "all";
+    homeSource = "all";
+  }
 }
 
 /** Render the homepage "Posted Directly" and "Recent Jobs" tables for the active filters. */
@@ -203,11 +226,17 @@ function renderHomeJobs(): void {
   if (!recentJobsBody || !directRecentBody) return;
 
   const directJobs = homeDirectJobs.filter(
-    (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
+    (job) =>
+      jobMatchesCategory(job, homeCategory) &&
+      jobMatchesLocation(job, homeLocation) &&
+      jobMatchesSource(job, homeSource),
   ).sort(byDate);
   const scrapedJobs = interleaveBySource(
     homeScrapedJobs.filter(
-      (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
+      (job) =>
+        jobMatchesCategory(job, homeCategory) &&
+        jobMatchesLocation(job, homeLocation) &&
+        jobMatchesSource(job, homeSource),
     ),
   );
 
@@ -232,7 +261,9 @@ function renderHomeJobs(): void {
     pageJobs.forEach((job, i) => frag.appendChild(buildRow(job, start + i + 1, "date")));
     recentJobsBody.appendChild(frag);
     recentJobsSection?.classList.remove("hidden");
-  } else if ((homeCategory !== "all" || homeLocation !== "all") && homeJobs().length > 0) {
+    // Load full descriptions only for the rows on this page.
+    void prefetchJobDetails(pageJobs);
+  } else if ((homeCategory !== "all" || homeLocation !== "all" || homeSource !== "all") && homeJobs().length > 0) {
     const row = document.createElement("tr");
     row.innerHTML = `<td colspan="10" class="empty">${t("category.empty")}</td>`;
     recentJobsBody.appendChild(row);
@@ -272,7 +303,10 @@ function updateHomePager(scrapedJobs: Job[], totalPages: number, start: number):
 function refreshHomePager(): void {
   if (!homeVisible) return;
   const scrapedJobs = homeScrapedJobs.filter(
-    (job) => jobMatchesCategory(job, homeCategory) && jobMatchesLocation(job, homeLocation),
+    (job) =>
+      jobMatchesCategory(job, homeCategory) &&
+      jobMatchesLocation(job, homeLocation) &&
+      jobMatchesSource(job, homeSource),
   );
   const totalPages = Math.max(1, Math.ceil(scrapedJobs.length / homePageSize));
   const start = (homePage - 1) * homePageSize;
@@ -306,6 +340,12 @@ homeCategorySelect?.addEventListener("change", () => {
 
 homeLocationSelect?.addEventListener("change", () => {
   homeLocation = homeLocationSelect.value as LocationFilter;
+  homePage = 1;
+  renderHomeJobs();
+});
+
+homeSourceSelect?.addEventListener("change", () => {
+  homeSource = homeSourceSelect.value;
   homePage = 1;
   renderHomeJobs();
 });
