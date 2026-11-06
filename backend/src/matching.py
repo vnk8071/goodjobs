@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from datetime import datetime, timezone
 
 from .constants import SYNONYMS, COMPILED_SKILLS
@@ -21,6 +22,54 @@ LEVEL_SYNONYMS: dict[str, set[str]] = {
     "principal": {"principal"},
     "staff":     {"staff"},
 }
+
+# Canonical location strings. Cache keys require an EXACT location match, and the
+# warmup system writes under _WARMUP_LOCATIONS ("Ho Chi Minh City", "Ha Noi"), so
+# any accent/casing/abbreviation difference ("Hồ Chí Minh", "hcm") would miss the
+# cache and trigger a brand-new scrape. Lookups are accent-insensitive (see
+# _fold_location), so both "Hồ Chí Minh" and "ho chi minh" resolve here.
+_CITY_CANONICAL_ALIASES: dict[str, str] = {
+    "ha noi": "Ha Noi",
+    "hanoi": "Ha Noi",
+    "ho chi minh": "Ho Chi Minh City",
+    "ho chi minh city": "Ho Chi Minh City",
+    "hcm": "Ho Chi Minh City",
+    "hcmc": "Ho Chi Minh City",
+    "tp hcm": "Ho Chi Minh City",
+    "tphcm": "Ho Chi Minh City",
+    "tp ho chi minh": "Ho Chi Minh City",
+    "thanh pho ho chi minh": "Ho Chi Minh City",
+    "sai gon": "Ho Chi Minh City",
+    "saigon": "Ho Chi Minh City",
+    "da nang": "Da Nang",
+    "danang": "Da Nang",
+    "remote": "Remote",
+}
+
+
+def _fold_location(value: str) -> str:
+    """Lowercase a location and strip Vietnamese diacritics for alias lookup.
+
+    "Hồ Chí Minh" → "ho chi minh", "Hà Nội" → "ha noi", "TP. HCM" → "tp hcm".
+    """
+    text = unicodedata.normalize("NFD", value or "")
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = text.replace("đ", "d").replace("Đ", "D").lower()
+    text = re.sub(r"[.,]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def canonical_location(location: str) -> str:
+    """Snap a city/location string to the exact form the cache and scrapers use.
+
+    Returns the original (trimmed) string when it is not a known alias, so
+    free-text and international locations keep working unchanged.
+    """
+    raw = (location or "").strip()
+    if not raw:
+        return raw
+    return _CITY_CANONICAL_ALIASES.get(_fold_location(raw), raw)
+
 
 # Generic role nouns that carry little discriminating signal on their own.
 # Stripped when building a fallback match keyword so "LLM Specialist" → "llm"

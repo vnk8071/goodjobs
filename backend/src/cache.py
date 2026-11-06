@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 
 from .constants import REDIS_URL, RECENT_DAYS
 from .logger import log_app
-from .matching import strip_level
+from .matching import strip_level, canonical_location
 
 # Redis key for an O(1)-lookup index of all cached keyword:location pairs.
 # Maintained by cache_set; replaces SCAN-based enumeration in fuzzy-get and suggest-query.
@@ -40,14 +40,19 @@ def _key(keyword: str, location: str, country: str = "VN") -> str:
     country="VN" (the default) produces the exact same key as before —
     existing VN cache entries need no migration. Any other country is
     namespaced into the key so global and VN results never collide.
+
+    Locations are canonicalised first ("Hồ Chí Minh" → "Ho Chi Minh City") so
+    accented/abbreviated input hits the same entry the warmup job wrote.
     """
-    base = f"jobs:{keyword.lower().strip()}:{location.lower().strip()}"
-    return base if country == "VN" else f"jobs:{country.lower()}:{keyword.lower().strip()}:{location.lower().strip()}"
+    loc = canonical_location(location).lower().strip()
+    base = f"jobs:{keyword.lower().strip()}:{loc}"
+    return base if country == "VN" else f"jobs:{country.lower()}:{keyword.lower().strip()}:{loc}"
 
 
 def _access_key(keyword: str, location: str) -> str:
     """Build the last-access timestamp key for non-warmup keywords."""
-    return f"jobs-access:{keyword.lower().strip()}:{location.lower().strip()}"
+    loc = canonical_location(location).lower().strip()
+    return f"jobs-access:{keyword.lower().strip()}:{loc}"
 
 
 def is_vn_cache_key(key: str) -> bool:
@@ -93,7 +98,7 @@ async def cache_set(
     try:
         redis = get_redis()
         kw_norm = keyword.lower().strip()
-        loc_norm = location.lower().strip()
+        loc_norm = canonical_location(location).lower().strip()
         ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
@@ -134,7 +139,7 @@ async def cache_get_ts(keyword: str, location: str, country: str = "VN") -> floa
     """
     try:
         kw_norm = keyword.lower().strip()
-        loc_norm = location.lower().strip()
+        loc_norm = canonical_location(location).lower().strip()
         ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
         raw = await get_redis().get(f"{_TS_KEY_PREFIX}{ts_suffix}")
         return float(raw) if raw else None
@@ -159,7 +164,7 @@ async def cache_fuzzy_get(
     keyword never carries a stray country prefix into the scrape.
     """
     try:
-        loc = location.lower().strip()
+        loc = canonical_location(location).lower().strip()
 
         # Read the index — this is a single SMEMBERS call, no SCAN needed.
         index_entries = await cache_get_all_keys()

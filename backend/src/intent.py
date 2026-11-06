@@ -44,7 +44,7 @@ def _scrub_pii(text: str) -> str:
 import requests
 
 from .cache import get_redis
-from .matching import _LEVEL_WORDS
+from .matching import _LEVEL_WORDS, canonical_location
 from .constants import (
     CLOUDFLARE_ACCOUNT_ID,
     CLOUDFLARE_API_BASE,
@@ -419,30 +419,13 @@ Rules:
 - Return ONLY the JSON, no markdown, no explanation.
 """
 
-# Snap AI-normalized (or raw, if AI is unavailable) city text back to the exact
-# canonical forms the warmup cache and scrapers already use — case/spacing
-# differences here silently break cache hits, since cache keys require an
-# EXACT location match (see cache.py's _key(), cache_fuzzy_get()) and the
-# warmup system writes under these precise strings (see warmup.py's
-# _WARMUP_LOCATIONS). This is the actual safety net; the system prompt's
-# own wording is a secondary signal, not a guarantee.
-_CITY_CANONICAL_ALIASES: dict[str, str] = {
-    "hanoi": "Ha Noi",
-    "ha noi": "Ha Noi",
-    "ho chi minh city": "Ho Chi Minh City",
-    "ho chi minh": "Ho Chi Minh City",
-    "hcm": "Ho Chi Minh City",
-    "hcmc": "Ho Chi Minh City",
-    "sai gon": "Ho Chi Minh City",
-    "saigon": "Ho Chi Minh City",
-    "remote": "Remote",
-}
-
-
 def _canonicalize_city(city: str) -> str:
-    """Snap a city string to its exact canonical form if it's a known alias,
-    otherwise return it unchanged."""
-    return _CITY_CANONICAL_ALIASES.get(city.strip().lower(), city)
+    """Snap a city string to the exact canonical form used by the cache.
+
+    Accent-insensitive: "Hồ Chí Minh", "ho chi minh" and "HCM" all resolve to
+    "Ho Chi Minh City", matching the warmup cache keys.
+    """
+    return canonical_location(city)
 
 
 def normalize_city(raw_city: str) -> dict:

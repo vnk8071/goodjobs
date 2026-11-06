@@ -52,6 +52,7 @@ from src.matching import (
     strip_generic_role,
     correct_keyword_typos,
     normalize_keyword,
+    canonical_location,
     _LEVEL_WORDS,
     LEVEL_SYNONYMS,
 )
@@ -1259,7 +1260,7 @@ async def suggest_query_endpoint(req: ScrapeRequest, request: Request):
     # Build candidate list from key index (O(1) SMEMBERS) instead of a full SCAN.
     cached_kws: list[str] = list(warmup_kws)
     try:
-        loc = req.location.lower().strip() if req.location else ""
+        loc = canonical_location(req.location).lower().strip() if req.location else ""
         all_index_entries = await cache_get_all_keys()
         for entry in all_index_entries:
             # entry format: "{kw}:{loc}"
@@ -1320,6 +1321,9 @@ async def scrape(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
+    # "Hồ Chí Minh" / "HCM" → "Ho Chi Minh City", so the exact-match cache key
+    # (and the scrapers) use the same location the warmup job wrote.
+    req.location = canonical_location(req.location)
     log_search(request, keyword, req.location, req.intent or ("cv_or_skills" if req.raw_input else "job_title"))
 
     # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
@@ -1447,6 +1451,10 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
+    # Accent/abbreviation-insensitive location: "Hồ Chí Minh" and "HCM" both
+    # become "Ho Chi Minh City", the exact key the warmup cache writes. Without
+    # this, the cache lookup misses and the request re-scrapes every site.
+    req.location = canonical_location(req.location)
     country = (req.country or "VN").strip().upper()
     if country == "VN":
         country = _resolve_country(req.location)
