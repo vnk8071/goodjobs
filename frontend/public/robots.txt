@@ -3,3 +3,5 @@ Allow: /
 Disallow: /admin/
 
 Sitemap: https://goodjobs.io.vn/sitemap.xml
+
+Sitemap: https://goodjobs.io.vn/sitemap-news.xml

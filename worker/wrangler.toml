@@ -4,11 +4,15 @@ compatibility_date = "2026-10-30"
 workers_dev = false
 preview_urls = false
 
-# Both patterns are served by this Worker on the main domain.
-# The rest of goodjobs.io.vn keeps going to GitHub Pages.
+# Routes served by this Worker on the main domain. Everything else on
+# goodjobs.io.vn keeps going to GitHub Pages.
 routes = [
   { pattern = "goodjobs.io.vn/api/jobs/*", zone_name = "goodjobs.io.vn" },
-  { pattern = "goodjobs.io.vn/jobs/*", zone_name = "goodjobs.io.vn" }
+  { pattern = "goodjobs.io.vn/jobs/*", zone_name = "goodjobs.io.vn" },
+  { pattern = "goodjobs.io.vn/api/news/*", zone_name = "goodjobs.io.vn" },
+  { pattern = "goodjobs.io.vn/news", zone_name = "goodjobs.io.vn" },
+  { pattern = "goodjobs.io.vn/news/*", zone_name = "goodjobs.io.vn" },
+  { pattern = "goodjobs.io.vn/sitemap-news.xml", zone_name = "goodjobs.io.vn" }
 ]
 
 # D1 database in account 2ea08cf1cba04b632d819356c96d24fd.
@@ -17,6 +21,16 @@ binding = "DB"
 database_name = "goodjobs-jobs"
 database_id = "bcf3f823-1866-4131-ba11-3241511b0aba"
 
+# Workers AI writes the daily news analysis.
+[ai]
+binding = "AI"
+
+# 20:00 ICT (13:00 UTC) daily news run.
+[triggers]
+crons = ["0 13 * * *"]
+
 [vars]
 SITE_URL = "https://goodjobs.io.vn"
 JOBS_API_BASE = "https://api.goodjobs.io.vn"
+NEWS_PER_RUN = "2"
+NEWS_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"

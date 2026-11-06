@@ -20,6 +20,7 @@ export const STRINGS: Record<Lang, Dict> = {
   en: {
     "header.subtitle": "Search recent jobs in Vietnam and beyond",
     "header.postJob": "Post a Job",
+    "header.news": "News",
     "header.githubAria": "View source on GitHub",
     "header.themeAria": "Toggle dark/light theme",
     "header.themeTitle": "Toggle theme",
@@ -146,6 +147,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "footer.privacy": "Privacy Policy",
     "footer.terms": "Terms of Service",
     "footer.postJob": "Post a Job",
+    "footer.news": "News",
     "footer.contact": "Contact",
     "footer.contactEmail": "Contact · khoivn@goodjobs.io.vn",
     "footer.tagline": "Search recent jobs across Vietnam and global job boards, refreshed daily.",
@@ -215,6 +217,7 @@ export const STRINGS: Record<Lang, Dict> = {
   vi: {
     "header.subtitle": "Tìm việc mới tại Việt Nam và nhiều nơi khác",
     "header.postJob": "Đăng tin tuyển dụng",
+    "header.news": "Tin tức",
     "header.githubAria": "Xem mã nguồn trên GitHub",
     "header.themeAria": "Chuyển giao diện sáng/tối",
     "header.themeTitle": "Đổi giao diện",
@@ -341,6 +344,7 @@ export const STRINGS: Record<Lang, Dict> = {
     "footer.privacy": "Chính Sách Bảo Mật",
     "footer.terms": "Điều Khoản Dịch Vụ",
     "footer.postJob": "Đăng Tin Tuyển Dụng",
+    "footer.news": "Tin tức",
     "footer.contact": "Liên Hệ",
     "footer.contactEmail": "Liên hệ · khoivn@goodjobs.io.vn",
     "footer.tagline": "Tìm việc mới từ các trang tuyển dụng Việt Nam và quốc tế, cập nhật mỗi ngày.",

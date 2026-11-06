@@ -6,6 +6,8 @@
  * backend; D1 is the durable store for job pages and sharing.
  */
 
+import { handleNewsApi, handleNewsRequest, runNewsJob } from "./news/index.js";
+
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -303,6 +305,14 @@ export default {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
 
+    if (path.startsWith("/api/news/")) {
+      return handleNewsApi(request, env, url);
+    }
+
+    if (path === "/news" || path.startsWith("/news/") || path === "/sitemap-news.xml") {
+      return handleNewsRequest(request, env, url);
+    }
+
     if (path.startsWith("/api/jobs/")) {
       if (path === "/api/jobs/ensure") return handleEnsure(url, env);
       if (path === "/api/jobs/by-link") return handleByLink(url, env);
@@ -318,6 +328,14 @@ export default {
     }
 
     return new Response("Not found", { status: 404 });
+  },
+
+  async scheduled(controller, env, ctx) {
+    ctx.waitUntil(
+      runNewsJob(env)
+        .then((result) => console.log("news run", JSON.stringify(result).slice(0, 2000)))
+        .catch((error) => console.error("news run failed", String(error))),
+    );
   },
 };
 
