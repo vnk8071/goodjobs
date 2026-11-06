@@ -234,8 +234,31 @@ const jobCountEl    = document.getElementById("jobCount")     as HTMLSpanElement
 // Related jobs section removed (feature gated for later release).
 const filterBar    = document.getElementById("filterBar")   as HTMLDivElement;
 const titleFilter  = document.getElementById("titleFilter") as HTMLInputElement;
+const resultsPager       = document.getElementById("resultsPager")       as HTMLDivElement | null;
+const resultsPrevBtn     = document.getElementById("resultsPrev")        as HTMLButtonElement | null;
+const resultsNextBtn     = document.getElementById("resultsNext")        as HTMLButtonElement | null;
+const resultsPageInfo    = document.getElementById("resultsPageInfo")    as HTMLSpanElement | null;
+const resultsPagerShowing = document.getElementById("resultsPagerShowing") as HTMLDivElement | null;
 
-titleFilter.addEventListener("input", () => _applyFilter());
+/** Search results are paginated; only this many rows render at once. */
+const RESULTS_PAGE_SIZE = 10;
+let _resultsPage = 1;
+
+titleFilter.addEventListener("input", () => _applyFilter(true));
+
+resultsPrevBtn?.addEventListener("click", () => {
+  if (_resultsPage > 1) {
+    _resultsPage -= 1;
+    _applyFilter();
+    resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
+
+resultsNextBtn?.addEventListener("click", () => {
+  _resultsPage += 1;
+  _applyFilter();
+  resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+});
 
 // Job detail modal elements
 const jobModal         = document.getElementById("jobModal")         as HTMLDivElement;
@@ -752,6 +775,8 @@ export function hideResults(): void {
   _activeSources.clear();
   _activeSkills.clear();
   titleFilter.value = "";
+  _resultsPage = 1;
+  resultsPager?.classList.add("hidden");
 }
 
 /** Re-render all language-dependent dynamic UI after an EN/VI toggle (static
@@ -787,8 +812,10 @@ let _allJobs: Job[] = [];
 let _activeSources = new Set<string>();
 let _activeSkills = new Set<string>();
 
-/** Re-render the table rows based on the current _activeSources filter set, title words, and active skills. */
-function _applyFilter(): void {
+/** Re-render the table rows based on the current _activeSources filter set, title words, and active skills.
+ *  Results are paginated (RESULTS_PAGE_SIZE per page) so a big search does not render hundreds of rows at once. */
+function _applyFilter(resetPage = false): void {
+  if (resetPage) _resultsPage = 1;
   const words = titleFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const visible = _allJobs.filter((j) => {
     if (_activeSources.size > 0 && !_activeSources.has(j.source)) return false;
@@ -803,6 +830,11 @@ function _applyFilter(): void {
     return true;
   });
 
+  const totalPages = Math.max(1, Math.ceil(visible.length / RESULTS_PAGE_SIZE));
+  _resultsPage = Math.min(Math.max(1, _resultsPage), totalPages);
+  const start = (_resultsPage - 1) * RESULTS_PAGE_SIZE;
+  const pageJobs = visible.slice(start, start + RESULTS_PAGE_SIZE);
+
   // Direct submissions (source "Direct") are merged into the same results
   // table as scraped jobs when searching — they only get a separate table
   // on the default homepage "Recent Jobs" feed (see main.ts).
@@ -811,7 +843,7 @@ function _applyFilter(): void {
     jobsBody.innerHTML =
       `<tr><td colspan="10" class="empty">${t("empty.noMatch")}</td></tr>`;
   } else {
-    visible.forEach((job, i) => jobsBody.appendChild(buildRow(job, i + 1)));
+    pageJobs.forEach((job, i) => jobsBody.appendChild(buildRow(job, start + i + 1)));
   }
 
   const total = _allJobs.length;
@@ -820,6 +852,28 @@ function _applyFilter(): void {
     shown === total
       ? t("results.countAll", { total })
       : t("results.countFiltered", { shown, total });
+
+  _renderResultsPager(shown, totalPages, start);
+}
+
+/** Update the search-results pager (hidden when everything fits on one page). */
+function _renderResultsPager(total: number, totalPages: number, start: number): void {
+  if (!resultsPager) return;
+  const show = total > RESULTS_PAGE_SIZE;
+  resultsPager.classList.toggle("hidden", !show);
+  if (!show) return;
+  if (resultsPrevBtn) resultsPrevBtn.disabled = _resultsPage <= 1;
+  if (resultsNextBtn) resultsNextBtn.disabled = _resultsPage >= totalPages;
+  if (resultsPageInfo) {
+    resultsPageInfo.textContent = t("pager.pageInfo", { page: _resultsPage, pages: totalPages });
+  }
+  if (resultsPagerShowing) {
+    resultsPagerShowing.textContent = t("pager.showing", {
+      from: start + 1,
+      to: Math.min(start + RESULTS_PAGE_SIZE, total),
+      total,
+    });
+  }
 }
 
 /** Rebuild the source filter pill bar from current _allJobs. */
@@ -857,7 +911,7 @@ function _rebuildFilterBar(): void {
         _activeSources.add(source);
         btn.classList.add("active");
       }
-      _applyFilter();
+      _applyFilter(true);
     });
 
     filterBar.appendChild(btn);
@@ -898,7 +952,7 @@ function _rebuildFilterBar(): void {
           _activeSkills.add(skill);
           pill.classList.add("active");
         }
-        _applyFilter();
+        _applyFilter(true);
       });
       skillRow.appendChild(pill);
     });
