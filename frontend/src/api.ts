@@ -190,8 +190,7 @@ export async function ensureJobPage(
     if (import.meta.env.DEV || isLocal) {
       return data.url ?? `${window.location.origin}/jobs/${slug}`;
     }
-    // Production share URL lives on the main domain; GitHub Pages serves the
-    // 404.html fallback for /jobs/<slug> and renders the D1 job data.
+    // Production share URL lives on the main domain.
     return `${window.location.origin}/jobs/${slug}`;
   } catch {
     return null;

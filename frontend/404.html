@@ -210,7 +210,8 @@
   </footer>
   <script>
     (function () {
-      const WORKER = "https://goodjobs-jobs.company-brain-demo-b36c.workers.dev";
+      // Same origin: the Worker owns /api/jobs/* and /jobs/* on goodjobs.io.vn.
+      const WORKER = "";
       const app = document.getElementById("app");
       const slug = (location.pathname.match(/^\/jobs\/([^/]+)\/?$/) || [])[1];
 

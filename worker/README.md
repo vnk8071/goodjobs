@@ -8,19 +8,17 @@ cache through the FastAPI backend. D1 is only the durable store for job pages.
 
 ## Current deployment
 
-- Worker: `https://goodjobs-jobs.company-brain-demo-b36c.workers.dev`
-  (the account's `workers.dev` subdomain; used as the internal API).
-- D1: `goodjobs-jobs`.
+- Cloudflare account: `2ea08cf1cba04b632d819356c96d24fd`.
+- Worker: `goodjobs-jobs`, served only on the main domain:
+  - `https://goodjobs.io.vn/jobs/*` → server-rendered job pages (HTTP 200).
+  - `https://goodjobs.io.vn/api/jobs/*` → JSON API used by the homepage.
+  - `workers.dev` and preview URLs are disabled.
+- D1: `goodjobs-jobs` (`bcf3f823-1866-4131-ba11-3241511b0aba`).
 - Public share URL: `https://goodjobs.io.vn/jobs/<slug>`.
-  GitHub Pages serves `frontend/404.html` for `/jobs/*`; that page fetches the
-  Worker API and renders the job. The HTTP status is 404 until the Worker can
-  own the route on `goodjobs.io.vn`.
+- The rest of `goodjobs.io.vn` (homepage, static pages) is still GitHub Pages;
+  only the two Worker routes above are intercepted.
 - Sync: daily at 20:00 ICT (13:00 UTC) via
   `.github/workflows/sync-d1.yml`; only changed rows are written.
-- To serve real 200/SEO pages on the main domain, add the `goodjobs.io.vn`
-  zone to the Cloudflare account that owns this Worker, uncomment `routes` in
-  `wrangler.toml`, and redeploy. The share code already produces
-  `https://goodjobs.io.vn/jobs/<slug>`.
 
 ## Routes
 
