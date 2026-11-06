@@ -122,6 +122,15 @@ function parsedSkills(job) {
   }
 }
 
+/** Some sources store "N/A"/"Unknown" as the company; don't show that to users. */
+function displayCompany(job) {
+  const value = String(job?.company ?? "").trim();
+  if (!value || /^(n\/?a|unknown|none|null|-+)$/i.test(value)) {
+    return "Company not specified";
+  }
+  return value;
+}
+
 function normalizeJob(job) {
   return {
     title: String(job.title || "").trim(),
@@ -238,19 +247,19 @@ function jobPageHtml(job, canonical) {
   const skills = parsedSkills(job);
   const text = plainText(job.description);
   const logo = job.logo
-    ? `<img class="job-logo" src="${esc(job.logo)}" alt="${esc(job.company || "Company")}">`
+    ? `<img class="job-logo" src="${esc(job.logo)}" alt="${esc(displayCompany(job))}">`
     : `<img class="job-logo" src="/favicon.svg" alt="Good Jobs">`;
   const description = text
     ? paragraphs(text)
     : `<p>No description is available for this listing yet. Open the original posting for full details.</p>`;
-  const metaDescription = text.slice(0, 158) || `${job.title} at ${job.company || "a company"} in ${job.location || "Vietnam"}.`;
+  const metaDescription = text.slice(0, 158) || `${job.title} at ${displayCompany(job)} in ${job.location || "Vietnam"}.`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
     description: text.slice(0, 5000),
     datePosted: job.posted_date || (job.posted_ts ? new Date(job.posted_ts * 1000).toISOString().slice(0, 10) : undefined),
-    hiringOrganization: { "@type": "Organization", name: job.company || "Good Jobs" },
+    hiringOrganization: { "@type": "Organization", name: displayCompany(job) },
     jobLocation: {
       "@type": "Place",
       address: { "@type": "PostalAddress", addressLocality: job.location || "Vietnam", addressCountry: "VN" },
@@ -265,7 +274,7 @@ function jobPageHtml(job, canonical) {
         ${logo}
         <div>
           <h1>${esc(job.title)}</h1>
-          <p class="company">${esc(job.company || "Company not specified")}</p>
+          <p class="company">${esc(displayCompany(job))}</p>
         </div>
       </div>
       <div class="meta">
@@ -464,7 +473,7 @@ async function handleJobPage(slug, url, env) {
   const canonical = `${url.origin}/jobs/${job.slug}`;
   const page = jobPageHtml(job, canonical);
   return html(layout({
-    title: `${job.title} — ${job.company || "Good Jobs"}`,
+    title: `${job.title} — ${displayCompany(job)}`,
     description: page.metaDescription,
     canonical,
     bodyHtml: page.body,

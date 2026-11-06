@@ -371,6 +371,13 @@ const _SOURCE_DOMAINS: Record<string, string> = {
   "google":       "google.com",
 };
 
+/** Some sources store "N/A"/"Unknown" as the company; don't show that to users. */
+function displayCompany(company?: string | null): string {
+  const value = (company ?? "").trim();
+  if (!value || /^(n\/?a|unknown|none|null|-+)$/i.test(value)) return "Company not specified";
+  return value;
+}
+
 /** Render a company logo img or letter-avatar span, with Clearbit and scraped-logo fallbacks. */
 function companyLogoHtml(company: string, source: string, logo?: string): string {
   const initial = (company.trim()[0] || "?").toUpperCase();
@@ -448,7 +455,7 @@ function applyFullJobToModal(full: Job): void {
   if (jobModal.classList.contains("hidden")) return;
   if (full.description) jobModalDesc.innerHTML = full.description;
   jobModalSkills.innerHTML = renderSkillTags(full.skills, 30);
-  jobModalCompany.innerHTML = `<div class="company-cell">${companyLogoHtml(full.company, full.source, full.logo)}<span>${esc(full.company)}</span></div>`;
+  jobModalCompany.innerHTML = `<div class="company-cell">${companyLogoHtml(full.company, full.source, full.logo)}<span>${esc(displayCompany(full.company))}</span></div>`;
 }
 
 /**
@@ -482,7 +489,7 @@ function openJobModal(job: Job): void {
   _openModalLink               = job.link;
   _openModalCacheKey           = job._cache_key || "";
   jobModalTitle.textContent    = job.title;
-  jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div>`;
+  jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(displayCompany(job.company))}</span></div>`;
   jobModalLocation.textContent = job.location;
   jobModalPosted.textContent   = job.posted || "N/A";
   jobModalSource.innerHTML     = `${sourceLogoHtml(job.source)}<span class="modal-source-name">${esc(sourceLabel(job.source))}</span>`;
@@ -1025,11 +1032,11 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
       <div class="title-main">${_fromCache ? esc(job.title) : highlightDomain(job.title, _searchKeyword)}${levelBadge}</div>
       <div class="title-meta">
         ${companyLogoHtml(job.company, job.source, job.logo)}
-        <span class="title-company">${esc(job.company)}</span>
+        <span class="title-company">${esc(displayCompany(job.company))}</span>
         ${scorePill}
       </div>
     </td>
-    <td><div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div></td>
+    <td><div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(displayCompany(job.company))}</span></div></td>
     <td>${esc(job.location)}</td>
     <td class="posted">${esc(job.posted ?? "")}</td>
     <td class="score" title="Vector similarity score">${esc(score)}</td>
