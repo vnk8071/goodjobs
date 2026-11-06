@@ -14,6 +14,7 @@ export default defineConfig({
       "/classify-input": "http://localhost:8000",
       "/normalize-city": "http://localhost:8000",
       "/chat": "http://localhost:8000",
+      "/api/jobs": "http://localhost:8787",
     },
   },
   build: {

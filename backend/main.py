@@ -1066,6 +1066,13 @@ async def jobs_details(req: JobDetailsRequest):
     return {"jobs": results}
 
 
+@app.get("/export-jobs")
+async def export_jobs(n: int = 100000):
+    """Export all cached jobs with full descriptions for the D1 sync job."""
+    jobs = await recent_jobs(n=n, source="", compact=False)
+    return {"jobs": jobs, "count": len(jobs)}
+
+
 @app.get("/stats")
 async def stats():
     """Return total unique jobs posted in the last RECENT_DAYS days across all cached keys."""

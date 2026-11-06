@@ -1,0 +1,32 @@
+name: Sync jobs to Cloudflare D1
+
+on:
+  schedule:
+    # Daily at 20:00 ICT (13:00 UTC), after the 17:00 ICT scrape cycle.
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: d1-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync Redis cache → D1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Sync jobs
+        working-directory: worker
+        env:
+          JOBS_API_BASE: https://api.goodjobs.io.vn
+          JOBS_WORKER_URL: ${{ secrets.JOBS_WORKER_URL }}
+          SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+        run: node scripts/sync.mjs

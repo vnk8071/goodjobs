@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+/**
+ * Sync jobs from the Good Jobs API (Redis cache) into Cloudflare D1 via the
+ * Worker's /api/jobs/sync endpoint.
+ *
+ * Run locally:
+ *   JOBS_WORKER_URL=https://goodjobs.io.vn SYNC_SECRET=... node worker/scripts/sync.mjs
+ *
+ * GitHub Actions runs this on a schedule (see .github/workflows/sync-d1.yml).
+ * Search still reads from Redis; D1 only powers permanent /jobs/<slug> pages.
+ */
+
+import { createHash } from "node:crypto";
+
+const API_BASE = (process.env.JOBS_API_BASE || "https://api.goodjobs.io.vn").replace(/\/+$/, "");
+const WORKER_URL = (process.env.JOBS_WORKER_URL || "").replace(/\/+$/, "");
+const SYNC_SECRET = process.env.SYNC_SECRET || "";
+const BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.BATCH_SIZE) || 100));
+
+if (!WORKER_URL || !SYNC_SECRET) {
+  console.error("Missing JOBS_WORKER_URL or SYNC_SECRET.");
+  process.exit(1);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(String(value ?? "")).digest("hex");
+}
+
+function slugify(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function normalizeJob(job) {
+  return {
+    title: String(job.title || "").trim(),
+    company: String(job.company || "").trim(),
+    location: String(job.location || "").trim(),
+    source: String(job.source || "").trim(),
+    posted: String(job.posted || "").trim(),
+    posted_ts: Number(job.posted_ts) || 0,
+    posted_date: String(job.posted_date || "").trim(),
+    description: String(job.description || ""),
+    skills: Array.isArray(job.skills) ? job.skills : [],
+    logo: String(job.logo || "").trim(),
+    link: String(job.link || "").trim(),
+  };
+}
+
+function contentHash(job) {
+  // Keep this key order identical to contentHash() in worker/src/index.js.
+  return sha256(JSON.stringify({
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    source: job.source,
+    posted: job.posted,
+    posted_ts: job.posted_ts,
+    posted_date: job.posted_date,
+    description: job.description,
+    skills: job.skills,
+    logo: job.logo,
+  }));
+}
+
+function prepareJob(raw) {
+  const job = normalizeJob(raw);
+  if (!job.link || !job.title) return null;
+  const id = sha256(job.link).slice(0, 24);
+  const slug = `${slugify(job.title) || "job"}-${id.slice(0, 8)}`;
+  return {
+    id,
+    slug,
+    title: job.title,
+    company: job.company,
+    location: job.location,
+    source: job.source,
+    posted: job.posted,
+    posted_ts: job.posted_ts,
+    posted_date: job.posted_date,
+    description: job.description,
+    skills: job.skills,
+    logo: job.logo,
+    link: job.link,
+    content_hash: contentHash(job),
+  };
+}
+
+async function fetchJobs() {
+  const response = await fetch(`${API_BASE}/export-jobs?n=100000`, {
+    headers: { "User-Agent": "GoodJobs-D1-Sync/1.0" },
+  });
+  if (!response.ok) {
+    throw new Error(`export-jobs failed: ${response.status} ${response.statusText}`);
+  }
+  const data = await response.json();
+  if (!Array.isArray(data.jobs)) throw new Error("export-jobs returned no jobs array");
+  return data.jobs;
+}
+
+async function postBatch(batch, attempt = 1) {
+  const response = await fetch(`${WORKER_URL}/api/jobs/sync`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${SYNC_SECRET}`,
+    },
+    body: JSON.stringify({ jobs: batch }),
+  });
+  if (!response.ok) {
+    if (attempt < 4 && (response.status === 429 || response.status >= 500)) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+      return postBatch(batch, attempt + 1);
+    }
+    const text = await response.text().catch(() => "");
+    throw new Error(`sync batch failed: ${response.status} ${text.slice(0, 200)}`);
+  }
+  return response.json();
+}
+
+async function main() {
+  console.log(`Fetching jobs from ${API_BASE}/export-jobs ...`);
+  const rawJobs = await fetchJobs();
+  const jobs = rawJobs.map(prepareJob).filter(Boolean);
+  console.log(`Prepared ${jobs.length} jobs (${rawJobs.length - jobs.length} skipped).`);
+
+  let written = 0;
+  let skipped = 0;
+  for (let i = 0; i < jobs.length; i += BATCH_SIZE) {
+    const batch = jobs.slice(i, i + BATCH_SIZE);
+    const result = await postBatch(batch);
+    written += Number(result.written) || 0;
+    skipped += Number(result.skipped) || 0;
+    console.log(`  ${i + batch.length}/${jobs.length} — wrote ${written}, skipped ${skipped}`);
+  }
+  console.log(`Done. Wrote ${written}, skipped ${skipped}.`);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

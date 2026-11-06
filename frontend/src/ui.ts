@@ -1,6 +1,6 @@
 import type { Job } from "./types";
 import { t, getLang } from "./i18n";
-import { fetchJobDetail, fetchJobDetails } from "./api";
+import { fetchJobDetail, fetchJobDetails, ensureJobPage } from "./api";
 
 type StatusType = "loading" | "success" | "error" | "info";
 
@@ -480,6 +480,7 @@ function openJobModal(job: Job): void {
   }
 
   _openModalLink               = job.link;
+  _openModalCacheKey           = job._cache_key || "";
   jobModalTitle.textContent    = job.title;
   jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(job.company)}</span></div>`;
   jobModalLocation.textContent = job.location;
@@ -542,6 +543,7 @@ function closeJobModal(): void {
   jobModal.classList.add("hidden");
   document.body.style.overflow = "";
   _openModalLink = "";
+  _openModalCacheKey = "";
 }
 
 jobModalClose.addEventListener("click", closeJobModal);
@@ -595,6 +597,7 @@ let _topcvEnriching    = false;
 // arrive, so rows still missing one show "—" instead of a never-ending spinner.
 let _enrichmentDone    = true;
 let _openModalLink = "";
+let _openModalCacheKey = "";
 
 const _PROGRESS_MESSAGES: Record<"en" | "vi", string[]> = {
   en: [
@@ -1188,13 +1191,17 @@ resultsShareBtn?.addEventListener("click", () => {
 
 jobModalShareBtn?.addEventListener("click", () => {
   if (!_openModalLink) return;
-  const url = new URL(window.location.origin + window.location.pathname);
-  if (_searchKeyword) url.searchParams.set("kw", _searchKeyword);
-  else url.searchParams.delete("kw");
-  if (_searchLocation) url.searchParams.set("loc", _searchLocation);
-  else url.searchParams.delete("loc");
-  url.searchParams.set("job", _openModalLink);
-  _copyWithFeedback(jobModalShareBtn, url.toString());
+  const link = _openModalLink;
+  const fallback = new URL(window.location.origin + window.location.pathname);
+  if (_searchKeyword) fallback.searchParams.set("kw", _searchKeyword);
+  else fallback.searchParams.delete("kw");
+  if (_searchLocation) fallback.searchParams.set("loc", _searchLocation);
+  else fallback.searchParams.delete("loc");
+  fallback.searchParams.set("job", link);
+
+  void ensureJobPage(link, _openModalCacheKey || undefined).then((pageUrl) => {
+    _copyWithFeedback(jobModalShareBtn, pageUrl ?? fallback.toString());
+  });
 });
 
 /** Escape a string for safe insertion into HTML attribute or text contexts. */

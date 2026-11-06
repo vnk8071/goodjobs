@@ -1,0 +1,16 @@
+{
+  "name": "goodjobs-jobs-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute goodjobs-jobs --local --file=./schema.sql",
+    "db:remote": "wrangler d1 execute goodjobs-jobs --remote --file=./schema.sql",
+    "sync": "node scripts/sync.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

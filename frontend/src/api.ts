@@ -166,6 +166,30 @@ export async function fetchJobDetails(
   }
 }
 
+const JOBS_API_BASE = import.meta.env.VITE_JOBS_API_URL ?? "";
+
+/** Get the permanent D1 job page URL for sharing (Worker-backed). */
+export async function ensureJobPage(
+  link: string,
+  cacheKey?: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (!link) return null;
+  try {
+    const params = new URLSearchParams({ link });
+    if (cacheKey) params.set("key", cacheKey);
+    const resp = await fetch(
+      `${JOBS_API_BASE}/api/jobs/ensure?${params.toString()}`,
+      { signal },
+    );
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { url?: string };
+    return data.url ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function askJobs(
   message: string,
   history: ChatHistoryMessage[],

@@ -1,0 +1,19 @@
+name = "goodjobs-jobs"
+main = "src/index.js"
+compatibility_date = "2026-10-30"
+workers_dev = false
+
+routes = [
+  { pattern = "goodjobs.io.vn/api/jobs/*", zone_name = "goodjobs.io.vn" },
+  { pattern = "goodjobs.io.vn/jobs/*", zone_name = "goodjobs.io.vn" }
+]
+
+# Replace database_id after: npx wrangler d1 create goodjobs-jobs
+[[d1_databases]]
+binding = "DB"
+database_name = "goodjobs-jobs"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+SITE_URL = "https://goodjobs.io.vn"
+JOBS_API_BASE = "https://api.goodjobs.io.vn"

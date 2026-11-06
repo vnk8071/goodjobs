@@ -20,6 +20,11 @@ env/
 .env
 .env.*
 *.env
+worker/.dev.vars
+
+# Cloudflare Worker
+worker/.wrangler/
+worker/node_modules/
 
 # Playwright
 playwright-browsers/
