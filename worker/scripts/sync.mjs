@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 const API_BASE = (process.env.JOBS_API_BASE || "https://api.goodjobs.io.vn").replace(/\/+$/, "");
 const WORKER_URL = (process.env.JOBS_WORKER_URL || "").replace(/\/+$/, "");
 const SYNC_SECRET = process.env.SYNC_SECRET || "";
-const BATCH_SIZE = Math.max(1, Math.min(100, Number(process.env.BATCH_SIZE) || 100));
+const BATCH_SIZE = Math.max(1, Math.min(20, Number(process.env.BATCH_SIZE) || 10));
 
 if (!WORKER_URL || !SYNC_SECRET) {
   console.error("Missing JOBS_WORKER_URL or SYNC_SECRET.");
@@ -96,6 +96,7 @@ function prepareJob(raw) {
 async function fetchJobs() {
   const response = await fetch(`${API_BASE}/export-jobs?n=100000`, {
     headers: { "User-Agent": "GoodJobs-D1-Sync/1.0" },
+    signal: AbortSignal.timeout(90000),
   });
   if (!response.ok) {
     throw new Error(`export-jobs failed: ${response.status} ${response.statusText}`);
@@ -106,23 +107,33 @@ async function fetchJobs() {
 }
 
 async function postBatch(batch, attempt = 1) {
-  const response = await fetch(`${WORKER_URL}/api/jobs/sync`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${SYNC_SECRET}`,
-    },
-    body: JSON.stringify({ jobs: batch }),
-  });
-  if (!response.ok) {
-    if (attempt < 4 && (response.status === 429 || response.status >= 500)) {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/jobs/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${SYNC_SECRET}`,
+      },
+      body: JSON.stringify({ jobs: batch }),
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) {
+      if (attempt < 4 && (response.status === 429 || response.status >= 500)) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+        return postBatch(batch, attempt + 1);
+      }
+      const text = await response.text().catch(() => "");
+      throw new Error(`sync batch failed: ${response.status} ${text.slice(0, 200)}`);
+    }
+    return response.json();
+  } catch (error) {
+    if (attempt < 4) {
+      console.warn(`  batch attempt ${attempt} failed (${error.message || error}); retrying...`);
       await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
       return postBatch(batch, attempt + 1);
     }
-    const text = await response.text().catch(() => "");
-    throw new Error(`sync batch failed: ${response.status} ${text.slice(0, 200)}`);
+    throw error;
   }
-  return response.json();
 }
 
 async function main() {
@@ -139,6 +150,7 @@ async function main() {
     written += Number(result.written) || 0;
     skipped += Number(result.skipped) || 0;
     console.log(`  ${i + batch.length}/${jobs.length} — wrote ${written}, skipped ${skipped}`);
+    await new Promise((resolve) => setTimeout(resolve, 150));
   }
   console.log(`Done. Wrote ${written}, skipped ${skipped}.`);
 }

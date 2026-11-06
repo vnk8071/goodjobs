@@ -333,7 +333,7 @@ async function handleByLink(url, env) {
   if (!link) return json({ error: "link is required" }, 400, env);
   const row = await env.DB.prepare("SELECT slug FROM jobs WHERE link = ?").bind(link).first();
   if (!row) return json({ error: "job not found" }, 404, env);
-  return json({ slug: row.slug, url: `${env.SITE_URL}/jobs/${row.slug}` }, 200, env);
+  return json({ slug: row.slug, url: `${url.origin}/jobs/${row.slug}` }, 200, env);
 }
 
 async function handleEnsure(url, env) {
@@ -343,7 +343,7 @@ async function handleEnsure(url, env) {
 
   const existing = await env.DB.prepare("SELECT slug FROM jobs WHERE link = ?").bind(link).first();
   if (existing) {
-    return json({ slug: existing.slug, url: `${env.SITE_URL}/jobs/${existing.slug}` }, 200, env);
+    return json({ slug: existing.slug, url: `${url.origin}/jobs/${existing.slug}` }, 200, env);
   }
 
   const apiBase = env.JOBS_API_BASE || "https://api.goodjobs.io.vn";
@@ -372,7 +372,7 @@ async function handleEnsure(url, env) {
 
   const row = await env.DB.prepare("SELECT slug FROM jobs WHERE link = ?").bind(link).first();
   const slug = row?.slug || identity.slug;
-  return json({ slug, url: `${env.SITE_URL}/jobs/${slug}` }, 200, env);
+  return json({ slug, url: `${url.origin}/jobs/${slug}` }, 200, env);
 }
 
 async function handleSync(request, env) {
@@ -455,13 +455,13 @@ async function handleJobPage(slug, url, env) {
     return html(layout({
       title: "Job not found — Good Jobs",
       description: "This job listing is no longer available.",
-      canonical: `${env.SITE_URL}/jobs/${slug}`,
+      canonical: `${url.origin}/jobs/${slug}`,
       bodyHtml: body,
       jsonLd: null,
     }), 404, env);
   }
 
-  const canonical = `${env.SITE_URL}/jobs/${job.slug}`;
+  const canonical = `${url.origin}/jobs/${job.slug}`;
   const page = jobPageHtml(job, canonical);
   return html(layout({
     title: `${job.title} — ${job.company || "Good Jobs"}`,

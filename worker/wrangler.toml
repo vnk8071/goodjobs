@@ -1,18 +1,20 @@
 name = "goodjobs-jobs"
 main = "src/index.js"
 compatibility_date = "2026-10-30"
-workers_dev = false
+workers_dev = true
 
-routes = [
-  { pattern = "goodjobs.io.vn/api/jobs/*", zone_name = "goodjobs.io.vn" },
-  { pattern = "goodjobs.io.vn/jobs/*", zone_name = "goodjobs.io.vn" }
-]
+# Custom-domain routes require the goodjobs.io.vn zone to be in the same
+# Cloudflare account as this Worker. Enable these after adding the zone:
+# routes = [
+#   { pattern = "goodjobs.io.vn/api/jobs/*", zone_name = "goodjobs.io.vn" },
+#   { pattern = "goodjobs.io.vn/jobs/*", zone_name = "goodjobs.io.vn" }
+# ]
 
 # Replace database_id after: npx wrangler d1 create goodjobs-jobs
 [[d1_databases]]
 binding = "DB"
 database_name = "goodjobs-jobs"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "51af4dc1-702a-41a1-819a-38196c97d4e6"
 
 [vars]
 SITE_URL = "https://goodjobs.io.vn"

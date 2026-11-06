@@ -29,4 +29,5 @@ jobs:
           JOBS_API_BASE: https://api.goodjobs.io.vn
           JOBS_WORKER_URL: ${{ secrets.JOBS_WORKER_URL }}
           SYNC_SECRET: ${{ secrets.SYNC_SECRET }}
+          BATCH_SIZE: 10
         run: node scripts/sync.mjs

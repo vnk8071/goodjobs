@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job — Good Jobs</title>
+  <meta name="description" content="View this job on Good Jobs.">
+  <link rel="canonical" href="https://goodjobs.io.vn/">
+  <meta name="robots" content="index,follow">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e5e5e5;
+      --text: #1a1a1a;
+      --muted: #666666;
+      --primary: #2563eb;
+      --primary-soft: #dbeafe;
+      --primary-strong: #1d4ed8;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f0f0f;
+        --card: #1a1a1a;
+        --border: #2a2a2a;
+        --text: #f5f5f5;
+        --muted: #a3a3a3;
+        --primary: #60a5fa;
+        --primary-soft: rgba(59, 130, 246, .15);
+        --primary-strong: #93c5fd;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.6;
+      letter-spacing: -.01em;
+    }
+
+    a { color: var(--primary); }
+
+    .wrap {
+      width: min(920px, calc(100% - 2rem));
+      margin: 0 auto;
+    }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 0;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: .65rem;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+
+    .brand img { width: 36px; height: 36px; border-radius: 9px; }
+
+    .nav { color: var(--muted); font-size: .84rem; text-decoration: none; }
+    .nav:hover { color: var(--primary); }
+
+    main { padding: 2.25rem 0 3rem; }
+
+    .back {
+      display: inline-block;
+      margin-bottom: 1.25rem;
+      color: var(--muted);
+      font-size: .84rem;
+      text-decoration: none;
+    }
+
+    .back:hover { color: var(--primary); }
+
+    .job-card {
+      padding: clamp(1.25rem, 3vw, 2.25rem);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--card);
+      box-shadow: 0 16px 48px -30px rgba(15, 23, 42, .25);
+    }
+
+    .job-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+
+    .job-logo {
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+    }
+
+    h1 {
+      margin: 0 0 .35rem;
+      font-size: clamp(1.5rem, 3vw, 2.1rem);
+      line-height: 1.15;
+      letter-spacing: -.035em;
+    }
+
+    .company { margin: 0; font-size: 1rem; font-weight: 600; }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem 1rem;
+      margin: .75rem 0 1rem;
+      color: var(--muted);
+      font-size: .84rem;
+    }
+
+    .badges { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.25rem; }
+
+    .badge {
+      display: inline-flex;
+      padding: .25rem .65rem;
+      border-radius: 99px;
+      background: var(--primary-soft);
+      color: var(--primary-strong);
+      font-size: .74rem;
+      font-weight: 600;
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.25rem 0 1.5rem; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 0 1.2rem;
+      border-radius: 10px;
+      font-size: .9rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 8px 22px -8px rgba(37, 99, 235, .55);
+    }
+
+    .btn-primary:hover { background: var(--primary-strong); }
+
+    .btn-ghost { border: 1px solid var(--border); color: var(--text); background: var(--card); }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+
+    hr { margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border); }
+
+    h2 { margin: 1.5rem 0 .65rem; font-size: 1.1rem; letter-spacing: -.02em; }
+
+    .description {
+      white-space: pre-wrap;
+      font-size: .93rem;
+      color: var(--text);
+    }
+
+    .loading, .not-found { padding: 4rem 0; text-align: center; color: var(--muted); }
+    .not-found h1 { color: var(--text); margin-bottom: .5rem; }
+
+    footer {
+      padding: 1.5rem 0 2rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .75rem; }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="wrap header-inner">
+      <a class="brand" href="/"><img src="/favicon.svg" alt="Good Jobs" width="36" height="36">Good Jobs</a>
+      <a class="nav" href="/">Search jobs →</a>
+    </div>
+  </header>
+  <main class="wrap" id="app">
+    <div class="loading">Loading job…</div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <span>Good Jobs — job aggregation for Vietnam and beyond.</span>
+      <span><a href="/">goodjobs.io.vn</a></span>
+    </div>
+  </footer>
+  <script>
+    (function () {
+      const WORKER = "https://goodjobs-jobs.company-brain-demo-b36c.workers.dev";
+      const app = document.getElementById("app");
+      const slug = (location.pathname.match(/^\/jobs\/([^/]+)\/?$/) || [])[1];
+
+      function esc(value) {
+        return String(value ?? "").replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+
+      function plainText(value) {
+        return String(value ?? "")
+          .replace(/<\s*br\s*\/?>/gi, "\n")
+          .replace(/<\s*\/\s*(p|div|li|h[1-6]|tr|section|article)\s*>/gi, "\n")
+          .replace(/<\s*li[^>]*>/gi, "• ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/[ \t]+/g, " ")
+          .replace(/\n[ \t]+/g, "\n")
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
+      }
+
+      function setMeta(name, value) {
+        let el = document.querySelector('meta[name="' + name + '"]');
+        if (!el) {
+          el = document.createElement("meta");
+          el.setAttribute("name", name);
+          document.head.appendChild(el);
+        }
+        el.setAttribute("content", value);
+      }
+
+      function setOg(property, value) {
+        let el = document.querySelector('meta[property="' + property + '"]');
+        if (!el) {
+          el = document.createElement("meta");
+          el.setAttribute("property", property);
+          document.head.appendChild(el);
+        }
+        el.setAttribute("content", value);
+      }
+
+      function notFound() {
+        app.innerHTML = '<div class="not-found"><h1>Job not found</h1><p>This job may have expired or the link is incorrect.</p><a class="btn btn-primary" href="/">Search jobs on Good Jobs</a></div>';
+        document.title = "Job not found — Good Jobs";
+      }
+
+      function render(job) {
+        const skills = Array.isArray(job.skills) ? job.skills : [];
+        const text = plainText(job.description);
+        const logo = job.logo
+          ? '<img class="job-logo" src="' + esc(job.logo) + '" alt="' + esc(job.company || "Company") + '">'
+          : '<img class="job-logo" src="/favicon.svg" alt="Good Jobs">';
+        const description = text
+          ? esc(text)
+          : "No description is available for this listing yet. Open the original posting for full details.";
+        const metaDescription = text.slice(0, 158) || (job.title + " at " + (job.company || "a company") + " in " + (job.location || "Vietnam") + ".");
+        const canonical = location.origin + "/jobs/" + job.slug;
+
+        document.title = job.title + " — " + (job.company || "Good Jobs");
+        setMeta("description", metaDescription);
+        setOg("og:title", job.title);
+        setOg("og:description", metaDescription);
+        setOg("og:url", canonical);
+        let canonicalEl = document.querySelector('link[rel="canonical"]');
+        if (canonicalEl) canonicalEl.setAttribute("href", canonical);
+
+        app.innerHTML =
+          '<a class="back" href="/">← Back to Good Jobs</a>' +
+          '<article class="job-card">' +
+            '<div class="job-head">' + logo +
+              '<div><h1>' + esc(job.title) + '</h1><p class="company">' + esc(job.company || "Company not specified") + '</p></div>' +
+            '</div>' +
+            '<div class="meta">' +
+              '<span>📍 ' + esc(job.location || "Vietnam") + '</span>' +
+              '<span>🕒 ' + esc(job.posted || "Recently") + '</span>' +
+              '<span>🌐 ' + esc(job.source || "Good Jobs") + '</span>' +
+            '</div>' +
+            (skills.length ? '<div class="badges">' + skills.slice(0, 20).map(function (skill) {
+              return '<span class="badge">' + esc(skill) + '</span>';
+            }).join("") + '</div>' : "") +
+            '<div class="actions">' +
+              '<a class="btn btn-primary" href="' + esc(job.link) + '" target="_blank" rel="noopener noreferrer">Apply now ↗</a>' +
+              '<a class="btn btn-ghost" href="/?kw=' + encodeURIComponent(job.title) + '">Search similar jobs</a>' +
+            '</div>' +
+            '<hr>' +
+            '<h2>Job description</h2>' +
+            '<div class="description">' + description + '</div>' +
+          '</article>';
+      }
+
+      if (!slug) {
+        location.replace("/");
+        return;
+      }
+
+      fetch(WORKER + "/api/jobs/" + encodeURIComponent(slug))
+        .then(function (response) {
+          if (!response.ok) throw new Error("not found");
+          return response.json();
+        })
+        .then(render)
+        .catch(notFound);
+    })();
+  </script>
+</body>
+
+</html>

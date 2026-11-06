@@ -183,8 +183,16 @@ export async function ensureJobPage(
       { signal },
     );
     if (!resp.ok) return null;
-    const data = (await resp.json()) as { url?: string };
-    return data.url ?? null;
+    const data = (await resp.json()) as { url?: string; slug?: string };
+    const slug = data.slug || data.url?.split("/jobs/")[1]?.replace(/\/+$/, "");
+    if (!slug) return null;
+    const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    if (import.meta.env.DEV || isLocal) {
+      return data.url ?? `${window.location.origin}/jobs/${slug}`;
+    }
+    // Production share URL lives on the main domain; GitHub Pages serves the
+    // 404.html fallback for /jobs/<slug> and renders the D1 job data.
+    return `${window.location.origin}/jobs/${slug}`;
   } catch {
     return null;
   }

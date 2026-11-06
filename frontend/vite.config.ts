@@ -26,6 +26,7 @@ export default defineConfig({
         contact: resolve(__dirname, "contact/index.html"),
         admin: resolve(__dirname, "admin/index.html"),
         postJob: resolve(__dirname, "post-job/index.html"),
+        notFound: resolve(__dirname, "404.html"),
       },
     },
   },
