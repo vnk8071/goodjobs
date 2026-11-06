@@ -33,8 +33,8 @@ function parseObject(value) {
 function newsStyles() {
   return `
     :root {
-      color-scheme: light dark;
-      --bg: #fbfbfa;
+      color-scheme: light;
+      --bg: #ffffff;
       --card: #ffffff;
       --border: #e6e6e3;
       --text: #1a1a1a;
@@ -44,17 +44,16 @@ function newsStyles() {
       --primary-strong: #1d4ed8;
       --serif: Georgia, "Times New Roman", "Noto Serif", serif;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #101012;
-        --card: #18181b;
-        --border: #2c2c30;
-        --text: #f3f3f2;
-        --muted: #a1a1aa;
-        --primary: #7aa2ff;
-        --primary-soft: rgba(85, 130, 240, .16);
-        --primary-strong: #a9c1ff;
-      }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #101012;
+      --card: #18181b;
+      --border: #2c2c30;
+      --text: #f3f3f2;
+      --muted: #a1a1aa;
+      --primary: #7aa2ff;
+      --primary-soft: rgba(85, 130, 240, .16);
+      --primary-strong: #a9c1ff;
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -229,6 +228,16 @@ function layout({ title, description, canonical, bodyHtml, jsonLd, ogType = "web
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        document.documentElement.setAttribute("data-theme", stored === "dark" ? "dark" : "light");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${esc(canonical)}">

@@ -47,7 +47,7 @@
       --error-text: #991b1b;
       --loading-bg: #dbeafe;
       --loading-text: #1e40af;
-      --bg: #fafafa;
+      --bg: #ffffff;
       --card: #ffffff;
       --border: #e5e5e5;
       --text: #1a1a1a;
@@ -85,7 +85,7 @@
     }
 
     html[data-theme="light"] {
-      --bg: #fafafa;
+      --bg: #ffffff;
       --card: #ffffff;
       --border: #e5e5e5;
       --text: #1a1a1a;
@@ -3664,10 +3664,11 @@
         <span data-i18n="header.news">News</span>
       </a>
       <a id="postJobLink" href="/post-job/"
-        style="display:inline-flex; align-items:center; gap:0.4rem; height:40px; padding:0 1rem; border-radius:var(--radius); background:var(--primary); color:#fff; font-weight:600; font-size:0.85rem; white-space:nowrap; text-decoration:none; flex-shrink:0; transition:all 0.3s cubic-bezier(0.4,0,0.2,1);"
-        onmouseover="this.style.background='var(--primary-hover)'" onmouseout="this.style.background='var(--primary)'"
+        style="display:inline-flex; align-items:center; gap:0.3rem; height:34px; padding:0 0.7rem; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); font-weight:600; font-size:0.76rem; white-space:nowrap; text-decoration:none; flex-shrink:0; transition:border-color .2s, color .2s;"
+        onmouseover="this.style.borderColor='var(--primary)';this.style.color='var(--primary)'"
+        onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text)'"
         data-i18n-title="header.postJob">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M12 5v14M5 12h14" />
         </svg>
         <span data-i18n="header.postJob">Post a Job</span>

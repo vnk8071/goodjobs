@@ -4,6 +4,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        document.documentElement.setAttribute("data-theme", stored === "dark" ? "dark" : "light");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
   <title>Job — Good Jobs</title>
   <meta name="description" content="View this job on Good Jobs.">
   <link rel="canonical" href="https://goodjobs.io.vn/">
@@ -11,8 +21,8 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     :root {
-      color-scheme: light dark;
-      --bg: #fafafa;
+      color-scheme: light;
+      --bg: #ffffff;
       --card: #ffffff;
       --border: #e5e5e5;
       --text: #1a1a1a;
@@ -22,17 +32,16 @@
       --primary-strong: #1d4ed8;
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f0f0f;
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f0f0f;
         --card: #1a1a1a;
         --border: #2a2a2a;
         --text: #f5f5f5;
         --muted: #a3a3a3;
         --primary: #60a5fa;
         --primary-soft: rgba(59, 130, 246, .15);
-        --primary-strong: #93c5fd;
-      }
+      --primary-strong: #93c5fd;
     }
 
     * { box-sizing: border-box; }

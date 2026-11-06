@@ -152,17 +152,16 @@ function normalizeJob(job) {
 function pageStyles() {
   return `
     :root {
-      color-scheme: light dark;
-      --bg: #fafafa; --card: #ffffff; --border: #e5e5e5;
+      color-scheme: light;
+      --bg: #ffffff; --card: #ffffff; --border: #e5e5e5;
       --text: #1a1a1a; --muted: #666666; --primary: #2563eb;
       --primary-soft: #dbeafe; --primary-strong: #1d4ed8;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f0f0f; --card: #1a1a1a; --border: #2a2a2a;
-        --text: #f5f5f5; --muted: #a3a3a3; --primary: #60a5fa;
-        --primary-soft: rgba(59,130,246,.15); --primary-strong: #93c5fd;
-      }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f0f0f; --card: #1a1a1a; --border: #2a2a2a;
+      --text: #f5f5f5; --muted: #a3a3a3; --primary: #60a5fa;
+      --primary-soft: rgba(59,130,246,.15); --primary-strong: #93c5fd;
     }
     * { box-sizing: border-box; }
     body {
@@ -213,6 +212,16 @@ function layout({ title, description, canonical, bodyHtml, jsonLd }) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        document.documentElement.setAttribute("data-theme", stored === "dark" ? "dark" : "light");
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
   <title>${esc(title)}</title>
   <meta name="description" content="${esc(description)}">
   <link rel="canonical" href="${esc(canonical)}">

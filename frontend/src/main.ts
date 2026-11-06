@@ -1,9 +1,11 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, streamRecentJobs } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails, showResults } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
 import { CATEGORY_IDS, jobMatchesCategory, type CategoryFilter } from "./categories";
 import type { Job } from "./types";
+import { isHomeCacheFresh, readHomeFeed, writeHomeFeed } from "./homeCache";
+import { isSearchCacheFresh, readSearchCache, searchCacheKey, writeSearchCache } from "./searchCache";
 
 // Initialise apply tracker toast (injected into DOM once)
 initApplyToast();
@@ -363,22 +365,48 @@ function showRecentJobs(): void {
   if (homeJobs().length > 0) renderHomeJobs();
 }
 
-// Stream all cached jobs onto the homepage. Jobs are appended in the order
-// the backend sends them (most recently fetched cache first), so the visible
-// rows stay stable while the rest of the feed loads in the background.
+// Paint the homepage feed from IndexedDB first; only hit the network when the
+// cache is missing or older than HOME_CACHE_TTL_MS. The feed is ~3.4 MB, so
+// localStorage is not an option (5 MB quota, synchronous, UTF-16).
 (async () => {
   if (!recentJobsBody || !recentJobsSection) return;
 
   let firstRender = false;
   let knownSourceCount = 0;
   const sourceCount = () => new Set(homeScrapedJobs.map((job) => job.source)).size;
+
+  const applyJobs = (jobs: Job[]): void => {
+    homeDirectJobs = jobs.filter((job) => job.source === "Direct");
+    homeScrapedJobs = jobs.filter((job) => job.source !== "Direct");
+  };
+
+  const mergeHomeJobs = (existing: Job[], incoming: Job[]): Job[] => {
+    const byKey = new Map<string, Job>();
+    const keyOf = (job: Job) => job.link || `${job.title}|${job.company}|${job.posted_ts}`;
+    for (const job of existing) byKey.set(keyOf(job), job);
+    for (const job of incoming) byKey.set(keyOf(job), job);
+    return [...byKey.values()];
+  };
+
+  const cached = await readHomeFeed();
+  if (cached) {
+    applyJobs(cached.jobs);
+    firstRender = homeScrapedJobs.length >= homePageSize;
+    knownSourceCount = sourceCount();
+    renderHomeJobs();
+    // Fresh enough: skip the network entirely.
+    if (isHomeCacheFresh(cached.fetchedAt)) return;
+  }
+
+  let streamed: Job[] = [];
   try {
     await streamRecentJobs(
       (batch) => {
-        for (const job of batch) {
-          if (job.source === "Direct") homeDirectJobs.push(job);
-          else homeScrapedJobs.push(job);
-        }
+        streamed = mergeHomeJobs(streamed, batch);
+        // While refreshing a stale cache, keep the cached rows visible until
+        // the stream completes (avoids a half-empty table during the refresh).
+        if (cached) return;
+        applyJobs(streamed);
         if (!firstRender && homeScrapedJobs.length >= homePageSize) {
           firstRender = true;
           knownSourceCount = sourceCount();
@@ -394,11 +422,15 @@ function showRecentJobs(): void {
       },
       () => {
         firstRender = true;
+        if (streamed.length > 0) {
+          applyJobs(streamed);
+          void writeHomeFeed(streamed);
+        }
         renderHomeJobs();
       },
     );
   } catch {
-    // silently ignore — recent jobs is non-critical
+    // Keep the cached feed if we have one; only hide the section when empty.
     if (homeJobs().length === 0) {
       recentJobsBody.innerHTML = "";
       recentJobsSection.classList.add("hidden");
@@ -549,6 +581,30 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
   let _descStatusPending = false;
   setEnrichmentDone(false);
 
+  // Client-side search cache: a fresh result set renders instantly and skips
+  // the SSE request entirely. CV/skills and shared-job searches are not cached.
+  const cacheKey = !fromCvOrSkills && !sharedJobLink
+    ? searchCacheKey(keyword, location, estimatedLevel)
+    : "";
+  const cachedSearch = cacheKey ? await readSearchCache(cacheKey) : null;
+  if (cachedSearch && isSearchCacheFresh(cachedSearch.fetchedAt)) {
+    currentJobs = cachedSearch.jobs;
+    showResults(currentJobs);
+    setFromCache(true);
+    setEnrichmentDone(true);
+    hideProgress();
+    setStatus(t("status.foundWeek", { count: currentJobs.length }), "success");
+    fetchBtn.disabled = false;
+    return;
+  }
+  if (cachedSearch) {
+    currentJobs = cachedSearch.jobs;
+    showResults(currentJobs);
+    setFromCache(true);
+    setStatus(t("status.foundLoading", { count: currentJobs.length }), "success");
+  }
+
+  let completed = false;
   try {
     await scrapeJobsStream(
       { keyword, location, ...(rawInput ? { raw_input: rawInput.slice(0, 2000) } : {}), ...(estimatedLevel ? { estimated_level: estimatedLevel } : {}), ...(intent ? { intent } : {}) },
@@ -632,6 +688,7 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
         currentJobs = replaceJobs(rescored);
       },
     );
+    completed = true;
     setEnrichmentDone(true);
     if (_descStatusPending && currentJobs.length > 0) {
       setStatus(t("status.foundWeek", { count: currentJobs.length }), "success");
@@ -670,6 +727,9 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
     }
   } finally {
     fetchBtn.disabled = false;
+    if (completed && cacheKey && currentJobs.length > 0) {
+      void writeSearchCache(cacheKey, keyword, location, currentJobs);
+    }
   }
 }
 
