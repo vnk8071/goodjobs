@@ -239,12 +239,19 @@ const resultsPrevBtn     = document.getElementById("resultsPrev")        as HTML
 const resultsNextBtn     = document.getElementById("resultsNext")        as HTMLButtonElement | null;
 const resultsPageInfo    = document.getElementById("resultsPageInfo")    as HTMLSpanElement | null;
 const resultsPagerShowing = document.getElementById("resultsPagerShowing") as HTMLDivElement | null;
+const resultsPageSizeEl   = document.getElementById("resultsPageSize")    as HTMLSelectElement | null;
 
 /** Search results are paginated; only this many rows render at once. */
-const RESULTS_PAGE_SIZE = 10;
+let resultsPageSize = Math.max(1, Number(resultsPageSizeEl?.value) || 10);
 let _resultsPage = 1;
 
 titleFilter.addEventListener("input", () => _applyFilter(true));
+
+resultsPageSizeEl?.addEventListener("change", () => {
+  resultsPageSize = Math.max(1, Number(resultsPageSizeEl.value) || 10);
+  _resultsPage = 1;
+  _applyFilter();
+});
 
 resultsPrevBtn?.addEventListener("click", () => {
   if (_resultsPage > 1) {
@@ -813,7 +820,7 @@ let _activeSources = new Set<string>();
 let _activeSkills = new Set<string>();
 
 /** Re-render the table rows based on the current _activeSources filter set, title words, and active skills.
- *  Results are paginated (RESULTS_PAGE_SIZE per page) so a big search does not render hundreds of rows at once. */
+ *  Results are paginated (resultsPageSize per page) so a big search does not render hundreds of rows at once. */
 function _applyFilter(resetPage = false): void {
   if (resetPage) _resultsPage = 1;
   const words = titleFilter.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -830,10 +837,10 @@ function _applyFilter(resetPage = false): void {
     return true;
   });
 
-  const totalPages = Math.max(1, Math.ceil(visible.length / RESULTS_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(visible.length / resultsPageSize));
   _resultsPage = Math.min(Math.max(1, _resultsPage), totalPages);
-  const start = (_resultsPage - 1) * RESULTS_PAGE_SIZE;
-  const pageJobs = visible.slice(start, start + RESULTS_PAGE_SIZE);
+  const start = (_resultsPage - 1) * resultsPageSize;
+  const pageJobs = visible.slice(start, start + resultsPageSize);
 
   // Direct submissions (source "Direct") are merged into the same results
   // table as scraped jobs when searching — they only get a separate table
@@ -859,7 +866,7 @@ function _applyFilter(resetPage = false): void {
 /** Update the search-results pager (hidden when everything fits on one page). */
 function _renderResultsPager(total: number, totalPages: number, start: number): void {
   if (!resultsPager) return;
-  const show = total > RESULTS_PAGE_SIZE;
+  const show = total > resultsPageSize;
   resultsPager.classList.toggle("hidden", !show);
   if (!show) return;
   if (resultsPrevBtn) resultsPrevBtn.disabled = _resultsPage <= 1;
@@ -870,7 +877,7 @@ function _renderResultsPager(total: number, totalPages: number, start: number): 
   if (resultsPagerShowing) {
     resultsPagerShowing.textContent = t("pager.showing", {
       from: start + 1,
-      to: Math.min(start + RESULTS_PAGE_SIZE, total),
+      to: Math.min(start + resultsPageSize, total),
       total,
     });
   }
