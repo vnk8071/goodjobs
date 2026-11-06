@@ -765,6 +765,14 @@ export function openJobByLink(link: string): boolean {
   return true;
 }
 
+/** Open a shared job link directly, without needing a matching search. */
+export async function openSharedJob(link: string): Promise<boolean> {
+  const full = await fetchJobDetail(link);
+  if (!full) return false;
+  openJobModal(full);
+  return true;
+}
+
 let _allJobs: Job[] = [];
 let _activeSources = new Set<string>();
 let _activeSkills = new Set<string>();

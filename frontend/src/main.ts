@@ -1,5 +1,5 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, streamRecentJobs } from "./api";
-import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails } from "./ui";
+import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
 import { CATEGORY_IDS, jobMatchesCategory, type CategoryFilter } from "./categories";
@@ -576,13 +576,18 @@ async function runSearch(keyword: string, location: string | undefined, sharedJo
       () => {
         hideProgress();
         const count = currentJobs.length;
-        if (count === 0) {
-          setStatus(t("status.noMatch"), "error");
+
+        if (sharedJobLink) {
+          if (openJobByLink(sharedJobLink)) return;
+          // The job may not be in this search's results; open it directly from cache.
+          void openSharedJob(sharedJobLink).then((ok) => {
+            if (!ok) setStatus(t("status.sharedNotFound"), "error");
+          });
           return;
         }
 
-        if (sharedJobLink && !openJobByLink(sharedJobLink)) {
-          setStatus(t("status.sharedNotFound"), "error");
+        if (count === 0) {
+          setStatus(t("status.noMatch"), "error");
           return;
         }
 
@@ -758,15 +763,28 @@ showIntentBox(extractedKeyword, inputType, reasoning);
   const url = new URL(window.location.href);
   const kw = (url.searchParams.get("kw") ?? "").trim();
   const loc = (url.searchParams.get("loc") ?? "").trim();
-  _pendingSharedJobLink = (url.searchParams.get("job") ?? "").trim() || null;
+  const job = (url.searchParams.get("job") ?? "").trim() || null;
+  _pendingSharedJobLink = job;
 
-  if (!kw && !_pendingSharedJobLink) return;
+  if (!kw && !job) return;
 
   if (kw) {
     keywordEl.value = kw;
   }
   if (loc) {
     locationInput.value = loc;
+  }
+
+  // A job-only share link can open the job directly from the cache; no search
+  // keyword is required.
+  if (job && !kw) {
+    queueMicrotask(() => {
+      _pendingSharedJobLink = null;
+      void openSharedJob(job).then((ok) => {
+        if (!ok) setStatus(t("status.sharedNotFound"), "error");
+      });
+    });
+    return;
   }
 
   // Kick off the search after the initial DOM is ready.
