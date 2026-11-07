@@ -223,7 +223,7 @@ export async function askJobs(
  */
 export async function streamRecentJobs(
   onBatch: (jobs: Job[]) => void,
-  onDone: () => void,
+  onDone: (info: { completed: boolean; count?: number }) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/recent-jobs-stream?compact=1`, { signal });
@@ -232,16 +232,21 @@ export async function streamRecentJobs(
   }
 
   let doneFired = false;
+  let sawDoneEvent = false;
+  let serverCount: number | undefined;
+
   const fireDone = () => {
     if (doneFired) return;
     doneFired = true;
-    onDone();
+    onDone({ completed: sawDoneEvent, count: serverCount });
   };
 
   const contentType = resp.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     const jobs = (await resp.json()) as Job[];
     if (jobs.length > 0) onBatch(jobs);
+    sawDoneEvent = true;
+    serverCount = jobs.length;
     fireDone();
     return;
   }
@@ -275,6 +280,8 @@ export async function streamRecentJobs(
         if (eventType === "batch" && Array.isArray(payload.jobs)) {
           onBatch(payload.jobs);
         } else if (eventType === "done") {
+          sawDoneEvent = true;
+          if (typeof payload.count === "number") serverCount = payload.count;
           fireDone();
         }
       } catch {
@@ -284,6 +291,17 @@ export async function streamRecentJobs(
     }
   }
   fireDone();
+}
+
+/**
+ * Full homepage feed as one JSON payload. Used as a fallback when the SSE
+ * stream ends early (large streams can be truncated by intermediaries).
+ */
+export async function fetchRecentJobsSnapshot(signal?: AbortSignal): Promise<Job[]> {
+  const resp = await fetch(`${API_BASE}/recent-jobs?n=5000&compact=true`, { signal });
+  if (!resp.ok) throw new Error(`recent-jobs snapshot failed: ${resp.status}`);
+  const jobs = (await resp.json()) as Job[];
+  return Array.isArray(jobs) ? jobs : [];
 }
 
 export async function normalizeCity(

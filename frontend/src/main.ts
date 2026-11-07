@@ -1,4 +1,4 @@
-import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, normalizeCity, streamRecentJobs } from "./api";
+import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, fetchRecentJobsSnapshot, normalizeCity, streamRecentJobs } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails, showResults } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
@@ -399,6 +399,9 @@ function showRecentJobs(): void {
   }
 
   let streamed: Job[] = [];
+  let streamCompleted = false;
+  let streamCount: number | undefined;
+
   try {
     await streamRecentJobs(
       (batch) => {
@@ -420,15 +423,41 @@ function showRecentJobs(): void {
           refreshHomePager();
         }
       },
-      () => {
+      (info) => {
+        streamCompleted = info.completed;
+        streamCount = info.count;
         firstRender = true;
-        if (streamed.length > 0) {
-          applyJobs(streamed);
-          void writeHomeFeed(streamed);
-        }
         renderHomeJobs();
       },
     );
+
+    // A truncated SSE stream must never become the 3-hour cache. If the
+    // server's done count is missing or larger than what we received, fetch
+    // the full JSON snapshot and only cache when the payload is complete.
+    const complete =
+      streamCompleted && (streamCount === undefined || streamed.length >= streamCount * 0.98);
+    if (!complete) {
+      try {
+        const snapshot = await fetchRecentJobsSnapshot();
+        if (snapshot.length > 0) {
+          streamed = snapshot;
+          streamCount = snapshot.length;
+          streamCompleted = true;
+        }
+      } catch {
+        // keep the streamed data; do not cache a partial feed
+      }
+    }
+
+    if (streamed.length > 0) {
+      if (!cached || streamCompleted) {
+        applyJobs(streamed);
+        renderHomeJobs();
+      }
+      if (streamCompleted) {
+        void writeHomeFeed(streamed, streamCount || streamed.length);
+      }
+    }
   } catch {
     // Keep the cached feed if we have one; only hide the section when empty.
     if (homeJobs().length === 0) {

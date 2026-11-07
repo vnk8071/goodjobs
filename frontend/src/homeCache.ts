@@ -11,7 +11,7 @@ import type { Job } from "./types";
 const DB_NAME = "goodjobs-cache";
 const STORE = "kv";
 const KEY = "home-feed";
-const VERSION = 1;
+const VERSION = 2;
 const MAX_JOBS = 5000;
 export const HOME_CACHE_TTL_MS = 3 * 60 * 60 * 1000; // 3 hours
 
@@ -19,6 +19,8 @@ type CacheRecord = {
   key: string;
   version: number;
   fetchedAt: number;
+  /** Number of unique jobs the server reported when this snapshot was written. */
+  expectedCount: number;
   jobs: Job[];
 };
 
@@ -45,7 +47,7 @@ function openDb(): Promise<IDBDatabase | null> {
 }
 
 /** Read the cached homepage feed, or null when missing/unavailable. */
-export async function readHomeFeed(): Promise<{ jobs: Job[]; fetchedAt: number } | null> {
+export async function readHomeFeed(): Promise<{ jobs: Job[]; fetchedAt: number; expectedCount: number } | null> {
   const db = await openDb();
   if (!db) return null;
   try {
@@ -58,7 +60,14 @@ export async function readHomeFeed(): Promise<{ jobs: Job[]; fetchedAt: number }
     if (!record || record.version !== VERSION || !Array.isArray(record.jobs) || record.jobs.length === 0) {
       return null;
     }
-    return { jobs: record.jobs, fetchedAt: Number(record.fetchedAt) || 0 };
+    const expected = Number(record.expectedCount) || 0;
+    // Reject partial snapshots written by an interrupted stream.
+    if (expected > 0 && record.jobs.length < expected * 0.98) return null;
+    return {
+      jobs: record.jobs,
+      fetchedAt: Number(record.fetchedAt) || 0,
+      expectedCount: expected,
+    };
   } catch {
     return null;
   } finally {
@@ -71,7 +80,7 @@ export function isHomeCacheFresh(fetchedAt: number): boolean {
 }
 
 /** Persist the homepage feed for the next visit. Best-effort only. */
-export async function writeHomeFeed(jobs: Job[]): Promise<void> {
+export async function writeHomeFeed(jobs: Job[], expectedCount = jobs.length): Promise<void> {
   if (!Array.isArray(jobs) || jobs.length === 0) return;
   const db = await openDb();
   if (!db) return;
@@ -80,6 +89,7 @@ export async function writeHomeFeed(jobs: Job[]): Promise<void> {
       key: KEY,
       version: VERSION,
       fetchedAt: Date.now(),
+      expectedCount: Math.max(Number(expectedCount) || 0, jobs.length),
       jobs: jobs.slice(0, MAX_JOBS),
     };
     await new Promise<void>((resolve) => {
