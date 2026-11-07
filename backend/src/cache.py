@@ -6,7 +6,7 @@ from redis.asyncio import Redis
 
 from .constants import REDIS_URL, RECENT_DAYS
 from .logger import log_app
-from .matching import strip_level, canonical_location
+from .matching import strip_level, canonical_location, normalize_posted_fields
 
 # Redis key for an O(1)-lookup index of all cached keyword:location pairs.
 # Maintained by cache_set; replaces SCAN-based enumeration in fuzzy-get and suggest-query.
@@ -100,6 +100,8 @@ async def cache_set(
         kw_norm = keyword.lower().strip()
         loc_norm = canonical_location(location).lower().strip()
         ts_suffix = f"{kw_norm}:{loc_norm}" if country == "VN" else f"{country.lower()}:{kw_norm}:{loc_norm}"
+        for job in jobs:
+            normalize_posted_fields(job, fetched_ts)
         payload = json.dumps(
             {"jobs": jobs, "fetched_ts": fetched_ts}, ensure_ascii=False
         )

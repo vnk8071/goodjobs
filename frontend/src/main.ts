@@ -126,7 +126,7 @@ let homeLocation: LocationFilter = "all";
 let homeSource = "all";
 let homeVisible = true;
 let homePage = 1;
-let homePageSize = Number(recentPageSizeEl?.value) || 10;
+let homePageSize = Number(recentPageSizeEl?.value) || 20;
 
 function homeJobs(): Job[] {
   return [...homeDirectJobs, ...homeScrapedJobs];
@@ -316,7 +316,7 @@ function refreshHomePager(): void {
 }
 
 recentPageSizeEl?.addEventListener("change", () => {
-  homePageSize = Number(recentPageSizeEl.value) || 10;
+  homePageSize = Number(recentPageSizeEl.value) || 20;
   homePage = 1;
   renderHomeJobs();
 });

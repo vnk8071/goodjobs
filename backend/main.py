@@ -53,6 +53,7 @@ from src.matching import (
     correct_keyword_typos,
     normalize_keyword,
     canonical_location,
+    normalize_posted_fields,
     _LEVEL_WORDS,
     LEVEL_SYNONYMS,
 )
@@ -761,7 +762,7 @@ async def _expected_cycle_size() -> int:
 
 _COMPACT_JOB_FIELDS = (
     "title", "company", "location", "link", "source", "posted",
-    "posted_ts", "posted_date", "skills", "logo", "_cache_key",
+    "posted_ts", "posted_date", "skills", "logo", "_cache_key", "_scraped_ts",
 )
 
 
@@ -774,6 +775,7 @@ def _compact_recent_job(job: dict) -> dict:
     description with a plain-text snippet. The full description is fetched
     on demand when the job modal opens.
     """
+    normalize_posted_fields(job, job.get("_scraped_ts") or 0)
     compact = {
         key: job[key]
         for key in _COMPACT_JOB_FIELDS
@@ -815,6 +817,7 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
                         continue
                     seen_links.add(link)
                     job["_cache_key"] = key
+                    job["_scraped_ts"] = data.get("fetched_ts") or 0
                     all_jobs.append(job)
             except Exception:
                 continue
@@ -840,7 +843,10 @@ async def recent_jobs(n: int = 20, source: str = "", compact: bool = False):
     # Keep the same RECENT_DAYS window as /stats so the homepage "All" count
     # and the weekly stats badge agree.
     cutoff = time.time() - RECENT_DAYS * 86400
-    all_jobs = [j for j in all_jobs if (j.get("posted_ts") or 0.0) >= cutoff]
+    all_jobs = [
+        j for j in all_jobs
+        if (j.get("posted_ts") or j.get("_scraped_ts") or 0.0) >= cutoff
+    ]
     for job in all_jobs:
         if not job.get("posted"):
             job["posted"] = posted_relative(job.get("posted_ts", 0.0))
@@ -918,10 +924,11 @@ async def recent_jobs_stream(compact: bool = True):
                     link = job.get("link", "")
                     if not link or link in seen_links:
                         continue
-                    if (job.get("posted_ts") or 0.0) < cutoff:
+                    if (job.get("posted_ts") or job.get("_scraped_ts") or 0.0) < cutoff:
                         continue
                     seen_links.add(link)
                     job["_cache_key"] = key
+                    job["_scraped_ts"] = data.get("fetched_ts") or 0
                     batch.append(job)
                     if len(batch) >= 25:
                         total += len(batch)
@@ -1090,9 +1097,10 @@ async def stats():
                 continue
             try:
                 data = json.loads(raw)
+                fetched_ts = data.get("fetched_ts") or 0
                 for job in data.get("jobs", []):
                     link = job.get("link", "")
-                    ts = job.get("posted_ts", 0.0)
+                    ts = job.get("posted_ts") or fetched_ts or 0.0
                     if ts >= cutoff and link and link not in seen_links:
                         seen_links.add(link)
                         count += 1

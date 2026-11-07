@@ -124,6 +124,17 @@ function parsedSkills(job) {
   }
 }
 
+/** Fall back to posted_date / posted_ts when the source posted text is empty or "-". */
+function displayPosted(job) {
+  const raw = String(job?.posted ?? "").trim();
+  if (raw && !/^(n\/?a|unknown|none|null|-+|—|not specified)$/i.test(raw)) return raw;
+  if (job?.posted_date) return String(job.posted_date);
+  if (job?.posted_ts) {
+    return new Date(Number(job.posted_ts) * 1000).toISOString().slice(0, 10);
+  }
+  return "Recently";
+}
+
 /** Some sources store "N/A"/"Unknown" as the company; don't show that to users. */
 function displayCompany(job) {
   const value = String(job?.company ?? "").trim();
@@ -269,7 +280,7 @@ function jobPageHtml(job, canonical) {
     "@type": "JobPosting",
     title: job.title,
     description: text.slice(0, 5000),
-    datePosted: job.posted_date || (job.posted_ts ? new Date(job.posted_ts * 1000).toISOString().slice(0, 10) : undefined),
+    datePosted: job.posted_date || (job.posted_ts ? new Date(Number(job.posted_ts) * 1000).toISOString().slice(0, 10) : undefined),
     hiringOrganization: { "@type": "Organization", name: displayCompany(job) },
     jobLocation: {
       "@type": "Place",
@@ -290,7 +301,7 @@ function jobPageHtml(job, canonical) {
       </div>
       <div class="meta">
         <span>📍 ${esc(job.location || "Vietnam")}</span>
-        <span>🕒 ${esc(job.posted || "Recently")}</span>
+        <span>🕒 ${esc(displayPosted(job))}</span>
         <span>🌐 ${esc(job.source || "Good Jobs")}</span>
       </div>
       ${skills.length ? `<div class="badges">${skills.slice(0, 20).map((skill) => `<span class="badge">${esc(skill)}</span>`).join("")}</div>` : ""}

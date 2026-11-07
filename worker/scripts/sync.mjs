@@ -62,12 +62,46 @@ function contentHash(job) {
     location: job.location,
     source: job.source,
     posted: job.posted,
-    posted_ts: job.posted_ts,
+    posted_ts: Number(job.posted_ts) || 0,
     posted_date: job.posted_date,
     description: job.description,
     skills: job.skills,
     logo: job.logo,
   }));
+}
+
+const INVALID_POSTED = /^(?:-|—|none|null|n\/a|unknown|not specified)?$/i;
+
+function relativeFromTs(ts) {
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (diff < 86400) return "Today";
+  const days = Math.floor(diff / 86400);
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.max(1, Math.floor(days / 7));
+  if (days < 30) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
+  const months = Math.max(1, Math.floor(days / 30));
+  if (days < 365) return `${months} month${months !== 1 ? "s" : ""} ago`;
+  const years = Math.max(1, Math.floor(days / 365));
+  return `${years} year${years !== 1 ? "s" : ""} ago`;
+}
+
+/** Fall back to the cache/scrape time when the source has no posted date. */
+function normalizePosted(job, raw) {
+  let ts = Number(job.posted_ts) || 0;
+  if (!ts && job.posted_date) {
+    const parsed = Date.parse(`${String(job.posted_date).slice(0, 10)}T00:00:00Z`);
+    if (!Number.isNaN(parsed)) ts = Math.floor(parsed / 1000);
+  }
+  if (!ts) ts = Number(raw._scraped_ts) || Math.floor(Date.now() / 1000);
+  const posted = job.posted && !INVALID_POSTED.test(String(job.posted).trim())
+    ? job.posted
+    : relativeFromTs(ts);
+  return {
+    posted,
+    posted_ts: ts,
+    posted_date: job.posted_date || new Date(ts * 1000).toISOString().slice(0, 10),
+  };
 }
 
 function prepareJob(raw) {
@@ -82,9 +116,7 @@ function prepareJob(raw) {
     company: job.company,
     location: job.location,
     source: job.source,
-    posted: job.posted,
-    posted_ts: job.posted_ts,
-    posted_date: job.posted_date,
+    ...normalizePosted(job, raw),
     description: job.description,
     skills: job.skills,
     logo: job.logo,

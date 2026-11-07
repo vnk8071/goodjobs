@@ -242,13 +242,13 @@ const resultsPagerShowing = document.getElementById("resultsPagerShowing") as HT
 const resultsPageSizeEl   = document.getElementById("resultsPageSize")    as HTMLSelectElement | null;
 
 /** Search results are paginated; only this many rows render at once. */
-let resultsPageSize = Math.max(1, Number(resultsPageSizeEl?.value) || 10);
+let resultsPageSize = Math.max(1, Number(resultsPageSizeEl?.value) || 20);
 let _resultsPage = 1;
 
 titleFilter.addEventListener("input", () => _applyFilter(true));
 
 resultsPageSizeEl?.addEventListener("change", () => {
-  resultsPageSize = Math.max(1, Number(resultsPageSizeEl.value) || 10);
+  resultsPageSize = Math.max(1, Number(resultsPageSizeEl.value) || 20);
   _resultsPage = 1;
   _applyFilter();
 });
@@ -343,13 +343,55 @@ function _copyWithFeedback(btn: HTMLButtonElement, text: string): void {
 }
 
 /** Format an ISO date (YYYY-MM-DD) as "Sep 5", adding the year only if it isn't the current one. */
-function formatPostedDate(dateStr?: string): string {
-  if (!dateStr) return "—";
-  const d = new Date(`${dateStr}T00:00:00`);
-  if (isNaN(d.getTime())) return "—";
+function formatPostedDate(dateStr?: string, ts?: number): string {
+  let d: Date | null = null;
+  if (dateStr) {
+    d = new Date(`${dateStr}T00:00:00`);
+    if (isNaN(d.getTime())) d = null;
+  }
+  if (!d && typeof ts === "number" && ts > 0) d = new Date(ts * 1000);
+  if (!d) return "—";
   const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
   if (d.getFullYear() !== new Date().getFullYear()) opts.year = "numeric";
   return d.toLocaleDateString(getLang() === "vi" ? "vi-VN" : "en-US", opts);
+}
+
+const _INVALID_POSTED = /^(?:-|—|none|null|n\/a|unknown|not specified)?$/i;
+
+/** Relative label from a Unix timestamp, matching the backend's wording. */
+function relativePosted(ts?: number): string {
+  if (!ts || ts <= 0) return "";
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (diff < 86400) return "Today";
+  const days = Math.floor(diff / 86400);
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.max(1, Math.floor(days / 7));
+  if (days < 30) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
+  const months = Math.max(1, Math.floor(days / 30));
+  if (days < 365) return `${months} month${months !== 1 ? "s" : ""} ago`;
+  const years = Math.max(1, Math.floor(days / 365));
+  return `${years} year${years !== 1 ? "s" : ""} ago`;
+}
+
+/** Never show "-"/"None": fall back to the post timestamp, date or scraped date. */
+function displayPosted(job: Job): string {
+  const raw = String(job.posted ?? "").trim();
+  if (raw && !_INVALID_POSTED.test(raw)) return raw;
+  const relative = relativePosted(job.posted_ts);
+  if (relative) return relative;
+  const date = formatPostedDate(job.posted_date, job.posted_ts);
+  if (date !== "—") return date;
+  const scraped = formatPostedDate(undefined, job._scraped_ts);
+  return scraped !== "—" ? scraped : "Recently";
+}
+
+/** Post-date cell value with posted_date → posted_ts → scrape time fallback. */
+function displayPostDate(job: Job): string {
+  const date = formatPostedDate(job.posted_date, job.posted_ts);
+  if (date !== "—") return date;
+  const scraped = formatPostedDate(undefined, job._scraped_ts);
+  return scraped !== "—" ? scraped : "Recently";
 }
 
 /** Render skill tags as HTML spans, collapsing extras into a "+N" pill. */
@@ -521,7 +563,7 @@ function openJobModal(job: Job): void {
   jobModalTitle.textContent    = job.title;
   jobModalCompany.innerHTML    = `<div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(displayCompany(job.company))}</span></div>`;
   jobModalLocation.textContent = job.location;
-  jobModalPosted.textContent   = job.posted || "N/A";
+  jobModalPosted.textContent   = displayPosted(job);
   jobModalSource.innerHTML     = `${sourceLogoHtml(job.source)}<span class="modal-source-name">${esc(sourceLabel(job.source))}</span>`;
   const isEnriching = !_enrichmentDone && (
     (_linkedinEnriching && job.source === "LinkedIn") ||
@@ -1067,7 +1109,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
     if (_domainWords.length > 0 && _domainWords.some(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(titleLower))) tr.classList.add("domain-match");
   }
   const seventhCellHtml = seventhColumn === "date"
-    ? `<td class="posted-date-cell">${esc(formatPostedDate(job.posted_date))}</td>`
+    ? `<td class="posted-date-cell">${esc(displayPostDate(job))}</td>`
     : (() => {
         const skillsHtml = renderSkillTags(job.skills, 6);
         return `<td class="skills-cell">${skillsHtml ? `<div class="skills-clamp">${skillsHtml}</div>` : '<span class="no-skills">—</span>'}</td>`;
@@ -1099,7 +1141,7 @@ export function buildRow(job: Job, num: number, seventhColumn: "skills" | "date"
     </td>
     <td><div class="company-cell">${companyLogoHtml(job.company, job.source, job.logo)}<span>${esc(displayCompany(job.company))}</span></div></td>
     <td>${esc(job.location)}</td>
-    <td class="posted">${esc(job.posted ?? "")}</td>
+    <td class="posted">${esc(displayPosted(job))}</td>
     <td class="score" title="Vector similarity score">${esc(score)}</td>
     ${seventhCellHtml}
     <td class="desc">${descCell}</td>

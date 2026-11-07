@@ -458,6 +458,28 @@ def posted_relative(posted_ts_val: float) -> str:
     return f"{years} year{'s' if years != 1 else ''} ago"
 
 
+_INVALID_POSTED_VALUES = {"", "-", "—", "none", "null", "n/a", "unknown", "not specified"}
+
+
+def normalize_posted_fields(job: dict, fallback_ts: float = 0.0) -> dict:
+    """Fill posted / posted_ts / posted_date without leaking "-" or "None".
+
+    If the source has no usable date, fall back to the cache fetch time (the
+    scrape time) so every cached job still has a displayable date.
+    """
+    raw = str(job.get("posted") or "").strip()
+    ts = float(job.get("posted_ts") or 0)
+    if ts <= 0:
+        ts = posted_ts(job) or float(fallback_ts or 0)
+        if ts > 0:
+            job["posted_ts"] = ts
+    if ts > 0 and not job.get("posted_date"):
+        job["posted_date"] = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    if raw.lower() in _INVALID_POSTED_VALUES:
+        job["posted"] = posted_relative(ts) if ts > 0 else "Recently"
+    return job
+
+
 # Sources whose listings are already remote-only (LinkedIn's remote filter, and the
 # remote-only job boards).
 _REMOTE_ONLY_SOURCES = {"LinkedIn", "RemoteOK", "WeWorkRemotely"}
