@@ -135,6 +135,30 @@ function displayPosted(job) {
   return "Recently";
 }
 
+function relativePosted(ts) {
+  const value = Number(ts) || 0;
+  if (value <= 0) return "Recently";
+  const diff = Math.max(0, Math.floor(Date.now() / 1000 - value));
+  if (diff < 86400) return "Today";
+  const days = Math.floor(diff / 86400);
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.max(1, Math.floor(days / 7));
+  if (days < 30) return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
+  const months = Math.max(1, Math.floor(days / 30));
+  if (days < 365) return `${months} month${months !== 1 ? "s" : ""} ago`;
+  const years = Math.max(1, Math.floor(days / 365));
+  return `${years} year${years !== 1 ? "s" : ""} ago`;
+}
+
+function parseDbTime(value) {
+  if (!value) return 0;
+  const text = String(value);
+  const iso = text.includes("T") ? text : `${text.replace(" ", "T")}Z`;
+  const parsed = Date.parse(iso);
+  return Number.isNaN(parsed) ? 0 : parsed / 1000;
+}
+
 /** Some sources store "N/A"/"Unknown" as the company; don't show that to users. */
 function displayCompany(job) {
   const value = String(job?.company ?? "").trim();
@@ -336,6 +360,8 @@ export default {
     if (path.startsWith("/api/jobs/")) {
       if (path === "/api/jobs/ensure") return handleEnsure(url, env);
       if (path === "/api/jobs/by-link") return handleByLink(url, env);
+      if (path === "/api/jobs/recent") return handleD1Recent(url, env);
+      if (path === "/api/jobs/detail") return handleD1Detail(url, env);
       if (path === "/api/jobs/sync" && request.method === "POST") return handleSync(request, env);
       if (path === "/api/jobs/health") return handleHealth(env);
       const slug = decodeURIComponent(path.slice("/api/jobs/".length));
@@ -365,6 +391,63 @@ async function handleHealth(env) {
     return json({ ok: true, jobs: row?.count ?? 0 }, 200, env);
   } catch (error) {
     return json({ ok: false, error: String(error) }, 500, env);
+  }
+}
+
+async function handleD1Recent(url, env) {
+  const limit = Math.min(5000, Math.max(1, Number(url.searchParams.get("limit")) || 5000));
+  const days = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 14));
+  const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+  const cutoffIso = new Date(cutoff * 1000).toISOString();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT title, company, location, link, source, posted, posted_ts, posted_date,
+              description, skills, logo, updated_at
+       FROM jobs
+       WHERE posted_ts >= ? OR (posted_ts = 0 AND datetime(updated_at) >= datetime(?))
+       ORDER BY posted_ts DESC
+       LIMIT ?`,
+    )
+      .bind(cutoff, cutoffIso, limit)
+      .all();
+
+    const jobs = (rows.results || []).map((row) => {
+      const scrapedTs = parseDbTime(row.updated_at);
+      const postedTs = Number(row.posted_ts) || scrapedTs || 0;
+      const rawPosted = String(row.posted || "").trim();
+      const validPosted = rawPosted && !/^(n\/?a|unknown|none|null|-+|—|not specified)$/i.test(rawPosted);
+      return {
+        title: row.title,
+        company: row.company,
+        location: row.location,
+        link: row.link,
+        source: row.source,
+        posted: validPosted ? rawPosted : relativePosted(postedTs),
+        posted_ts: postedTs,
+        posted_date: row.posted_date || (postedTs ? new Date(postedTs * 1000).toISOString().slice(0, 10) : ""),
+        skills: parsedSkills(row),
+        logo: row.logo,
+        description: plainText(row.description).slice(0, 320),
+        _compact: true,
+        _d1: true,
+        _scraped_ts: scrapedTs,
+      };
+    });
+    return json({ jobs, count: jobs.length }, 200, env);
+  } catch (error) {
+    return json({ error: String(error) }, 500, env);
+  }
+}
+
+async function handleD1Detail(url, env) {
+  const link = (url.searchParams.get("link") || "").trim();
+  if (!link) return json({ error: "link is required" }, 400, env);
+  try {
+    const row = await env.DB.prepare("SELECT * FROM jobs WHERE link = ?").bind(link).first();
+    if (!row) return json({ error: "job not found" }, 404, env);
+    return json({ ...row, skills: parsedSkills(row) }, 200, env);
+  } catch (error) {
+    return json({ error: String(error) }, 500, env);
   }
 }
 

@@ -1,4 +1,4 @@
-import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, fetchRecentJobsSnapshot, normalizeCity, streamRecentJobs } from "./api";
+import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, fetchD1RecentJobs, fetchRecentJobsSnapshot, normalizeCity, streamRecentJobs } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails, showResults } from "./ui";
 import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
@@ -388,14 +388,45 @@ function showRecentJobs(): void {
     return [...byKey.values()];
   };
 
+  const feedKey = (job: Job): string => job.link || `${job.title}|${job.company}|${job.posted_ts}`;
+
+  // Redis is the live source and always wins for duplicates; D1 only fills in
+  // jobs that have dropped out of Redis but are still within the 14-day window.
+  const mergeFeed = (redisJobs: Job[], d1Jobs: Job[]): Job[] => {
+    const byKey = new Map<string, Job>();
+    for (const job of redisJobs) byKey.set(feedKey(job), job);
+    for (const job of d1Jobs) {
+      const key = feedKey(job);
+      if (!byKey.has(key)) byKey.set(key, job);
+    }
+    return [...byKey.values()];
+  };
+
+  const mergeD1 = async (): Promise<void> => {
+    try {
+      const d1Jobs = await fetchD1RecentJobs();
+      if (d1Jobs.length > 0) {
+        applyJobs(mergeFeed(homeJobs(), d1Jobs));
+        renderHomeJobs();
+      }
+    } catch {
+      // D1 is a supplement; keep the Redis feed if it fails
+    }
+    feedJobCount = homeJobs().length;
+    renderWeeklyStats(Math.max(statsJobCount, feedJobCount));
+  };
+
   const cached = await readHomeFeed();
   if (cached) {
     applyJobs(cached.jobs);
     firstRender = homeScrapedJobs.length >= homePageSize;
     knownSourceCount = sourceCount();
     renderHomeJobs();
-    // Fresh enough: skip the network entirely.
-    if (isHomeCacheFresh(cached.fetchedAt)) return;
+    // Fresh Redis cache: skip the SSE network, but still merge the D1 archive.
+    if (isHomeCacheFresh(cached.fetchedAt)) {
+      await mergeD1();
+      return;
+    }
   }
 
   let streamed: Job[] = [];
@@ -465,6 +496,8 @@ function showRecentJobs(): void {
       recentJobsSection.classList.add("hidden");
     }
   }
+
+  await mergeD1();
 })();
 
 let currentJobs: Job[] = [];
@@ -549,6 +582,16 @@ keywordEl.addEventListener("keydown", (e) => {
 
 const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
 
+let statsJobCount = 0;
+let feedJobCount = 0;
+
+function renderWeeklyStats(count: number): void {
+  if (!count || count <= 0) return;
+  const display = count.toLocaleString("en-US");
+  weeklyStatsEl.innerHTML = `<strong>${display}</strong><span>${t("stats.jobsSuffix")}</span>`;
+  weeklyStatsEl.classList.remove("hidden");
+}
+
 (async () => {
   try {
     // Prefer remote API base when configured; fall back to Vite proxy in local dev.
@@ -556,11 +599,8 @@ const weeklyStatsEl = document.getElementById("weeklyStats") as HTMLElement;
     const res = await fetch(`${apiBase}/stats`);
     if (res.ok) {
       const data = await res.json() as { jobs_this_week: number };
-      if (data.jobs_this_week > 0) {
-        const display = data.jobs_this_week.toLocaleString("en-US");
-        weeklyStatsEl.innerHTML = `<strong>${display}</strong><span>${t("stats.jobsSuffix")}</span>`;
-        weeklyStatsEl.classList.remove("hidden");
-      }
+      statsJobCount = data.jobs_this_week || 0;
+      renderWeeklyStats(Math.max(statsJobCount, feedJobCount));
     }
   } catch {
     // silently ignore — stats are non-critical

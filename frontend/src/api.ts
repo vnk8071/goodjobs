@@ -139,8 +139,17 @@ export async function fetchJobDetail(
     const params = new URLSearchParams({ link });
     if (cacheKey) params.set("key", cacheKey);
     const resp = await fetch(`${API_BASE}/job?${params.toString()}`, { signal });
-    if (!resp.ok) return null;
-    return (await resp.json()) as Job;
+    if (resp.ok) return (await resp.json()) as Job;
+  } catch {
+    // fall through to the D1 copy (jobs that are no longer in Redis)
+  }
+  try {
+    const d1 = await fetch(
+      `${JOBS_API_BASE}/api/jobs/detail?link=${encodeURIComponent(link)}`,
+      { signal },
+    );
+    if (!d1.ok) return null;
+    return (await d1.json()) as Job;
   } catch {
     return null;
   }
@@ -302,6 +311,18 @@ export async function fetchRecentJobsSnapshot(signal?: AbortSignal): Promise<Job
   if (!resp.ok) throw new Error(`recent-jobs snapshot failed: ${resp.status}`);
   const jobs = (await resp.json()) as Job[];
   return Array.isArray(jobs) ? jobs : [];
+}
+
+/** Compact homepage feed from D1 (archive of jobs that may have left Redis). */
+export async function fetchD1RecentJobs(signal?: AbortSignal): Promise<Job[]> {
+  try {
+    const resp = await fetch(`${JOBS_API_BASE}/api/jobs/recent?limit=5000`, { signal });
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as { jobs?: Job[] };
+    return Array.isArray(data.jobs) ? data.jobs : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function normalizeCity(
