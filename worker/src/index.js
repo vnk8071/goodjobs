@@ -243,7 +243,7 @@ function pageStyles() {
 
 function layout({ title, description, canonical, bodyHtml, jsonLd }) {
   return `<!doctype html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -266,6 +266,8 @@ function layout({ title, description, canonical, bodyHtml, jsonLd }) {
   <meta property="og:description" content="${esc(description)}">
   <meta property="og:url" content="${esc(canonical)}">
   <meta property="og:image" content="https://goodjobs.io.vn/og-image.jpg">
+  <meta property="og:locale" content="vi_VN">
+  <meta property="og:site_name" content="Good Jobs">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>${pageStyles()}</style>
@@ -275,13 +277,13 @@ function layout({ title, description, canonical, bodyHtml, jsonLd }) {
   <header>
     <div class="wrap header-inner">
       <a class="brand" href="/"><img src="/favicon.svg" alt="Good Jobs" width="36" height="36">Good Jobs</a>
-      <a class="nav" href="/">Search jobs →</a>
+      <a class="nav" href="/">Tìm việc →</a>
     </div>
   </header>
   <main class="wrap">${bodyHtml}</main>
   <footer>
     <div class="wrap">
-      <span>Good Jobs — job aggregation for Vietnam and beyond.</span>
+      <span>Good Jobs — tổng hợp việc làm cho Việt Nam và quốc tế.</span>
       <span><a href="/">goodjobs.io.vn</a></span>
     </div>
   </footer>
@@ -297,8 +299,8 @@ function jobPageHtml(job, canonical) {
     : `<img class="job-logo" src="/favicon.svg" alt="Good Jobs">`;
   const description = text
     ? paragraphs(text)
-    : `<p>No description is available for this listing yet. Open the original posting for full details.</p>`;
-  const metaDescription = text.slice(0, 158) || `${job.title} at ${displayCompany(job)} in ${job.location || "Vietnam"}.`;
+    : `<p>Chưa có mô tả cho tin tuyển dụng này. Hãy mở tin gốc để xem đầy đủ.</p>`;
+  const metaDescription = text.slice(0, 158) || `${job.title} tại ${displayCompany(job)} ở ${job.location || "Việt Nam"}.`;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "JobPosting",
@@ -308,13 +310,13 @@ function jobPageHtml(job, canonical) {
     hiringOrganization: { "@type": "Organization", name: displayCompany(job) },
     jobLocation: {
       "@type": "Place",
-      address: { "@type": "PostalAddress", addressLocality: job.location || "Vietnam", addressCountry: "VN" },
+      address: { "@type": "PostalAddress", addressLocality: job.location || "Việt Nam", addressCountry: "VN" },
     },
     url: canonical,
     directApply: false,
   };
   const body = `
-    <a class="back" href="/">← Back to Good Jobs</a>
+    <a class="back" href="/">← Về Good Jobs</a>
     <article class="job-card">
       <div class="job-head">
         ${logo}
@@ -324,17 +326,17 @@ function jobPageHtml(job, canonical) {
         </div>
       </div>
       <div class="meta">
-        <span>📍 ${esc(job.location || "Vietnam")}</span>
+        <span>📍 ${esc(job.location || "Việt Nam")}</span>
         <span>🕒 ${esc(displayPosted(job))}</span>
         <span>🌐 ${esc(job.source || "Good Jobs")}</span>
       </div>
       ${skills.length ? `<div class="badges">${skills.slice(0, 20).map((skill) => `<span class="badge">${esc(skill)}</span>`).join("")}</div>` : ""}
       <div class="actions">
-        <a class="btn btn-primary" href="${esc(job.link)}" target="_blank" rel="noopener noreferrer">Apply now ↗</a>
-        <a class="btn btn-ghost" href="/?kw=${encodeURIComponent(job.title)}">Search similar jobs</a>
+        <a class="btn btn-primary" href="${esc(job.link)}" target="_blank" rel="noopener noreferrer">Ứng tuyển ngay ↗</a>
+        <a class="btn btn-ghost" href="/?kw=${encodeURIComponent(job.title)}">Tìm việc tương tự</a>
       </div>
       <hr class="divider">
-      <h2>Job description</h2>
+      <h2>Mô tả công việc</h2>
       <div class="description">${description}</div>
     </article>`;
   return { body, metaDescription, jsonLd };
@@ -578,13 +580,13 @@ async function handleJobPage(slug, url, env) {
     }
     const body = `
       <div class="not-found">
-        <h1>Job not found</h1>
-        <p>This job may have expired or the link is incorrect.</p>
-        <a class="btn btn-primary" href="/">Search jobs on Good Jobs</a>
+        <h1>Không tìm thấy việc làm</h1>
+        <p>Tin tuyển dụng có thể đã hết hạn hoặc đường dẫn không đúng.</p>
+        <a class="btn btn-primary" href="/">Tìm việc trên Good Jobs</a>
       </div>`;
     return html(layout({
-      title: "Job not found — Good Jobs",
-      description: "This job listing is no longer available.",
+      title: "Không tìm thấy việc làm — Good Jobs",
+      description: "Tin tuyển dụng không còn khả dụng.",
       canonical: `${url.origin}/jobs/${slug}`,
       bodyHtml: body,
       jsonLd: null,

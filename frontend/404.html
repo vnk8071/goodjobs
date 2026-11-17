@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="vi">
 
 <head>
   <meta charset="UTF-8">
@@ -14,8 +14,8 @@
       }
     })();
   </script>
-  <title>Job — Good Jobs</title>
-  <meta name="description" content="View this job on Good Jobs.">
+  <title>Việc làm — Good Jobs</title>
+  <meta name="description" content="Xem việc làm này trên Good Jobs.">
   <link rel="canonical" href="https://goodjobs.io.vn/">
   <meta name="robots" content="index,follow">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -205,15 +205,15 @@
   <header>
     <div class="wrap header-inner">
       <a class="brand" href="/"><img src="/favicon.svg" alt="Good Jobs" width="36" height="36">Good Jobs</a>
-      <a class="nav" href="/">Search jobs →</a>
+      <a class="nav" href="/">Tìm việc →</a>
     </div>
   </header>
   <main class="wrap" id="app">
-    <div class="loading">Loading job…</div>
+    <div class="loading">Đang tải việc làm…</div>
   </main>
   <footer>
     <div class="wrap">
-      <span>Good Jobs — job aggregation for Vietnam and beyond.</span>
+      <span>Good Jobs — tổng hợp việc làm tại Việt Nam và quốc tế.</span>
       <span><a href="/">goodjobs.io.vn</a></span>
     </div>
   </footer>
@@ -269,8 +269,8 @@
       }
 
       function notFound() {
-        app.innerHTML = '<div class="not-found"><h1>Job not found</h1><p>This job may have expired or the link is incorrect.</p><a class="btn btn-primary" href="/">Search jobs on Good Jobs</a></div>';
-        document.title = "Job not found — Good Jobs";
+        app.innerHTML = '<div class="not-found"><h1>Không tìm thấy việc làm</h1><p>Tin tuyển dụng có thể đã hết hạn hoặc đường dẫn không đúng.</p><a class="btn btn-primary" href="/">Tìm việc trên Good Jobs</a></div>';
+        document.title = "Không tìm thấy việc làm — Good Jobs";
       }
 
       function render(job) {
@@ -281,8 +281,8 @@
           : '<img class="job-logo" src="/favicon.svg" alt="Good Jobs">';
         const description = text
           ? esc(text)
-          : "No description is available for this listing yet. Open the original posting for full details.";
-        const metaDescription = text.slice(0, 158) || (job.title + " at " + (job.company || "a company") + " in " + (job.location || "Vietnam") + ".");
+          : "Chưa có mô tả cho tin tuyển dụng này. Hãy mở tin gốc để xem đầy đủ.";
+        const metaDescription = text.slice(0, 158) || (job.title + " tại " + (job.company || "một công ty") + " ở " + (job.location || "Việt Nam") + ".");
         const canonical = location.origin + "/jobs/" + job.slug;
 
         document.title = job.title + " — " + (job.company || "Good Jobs");
@@ -294,25 +294,25 @@
         if (canonicalEl) canonicalEl.setAttribute("href", canonical);
 
         app.innerHTML =
-          '<a class="back" href="/">← Back to Good Jobs</a>' +
+          '<a class="back" href="/">← Về Good Jobs</a>' +
           '<article class="job-card">' +
             '<div class="job-head">' + logo +
-              '<div><h1>' + esc(job.title) + '</h1><p class="company">' + esc(job.company || "Company not specified") + '</p></div>' +
+              '<div><h1>' + esc(job.title) + '</h1><p class="company">' + esc(job.company || "Chưa có tên công ty") + '</p></div>' +
             '</div>' +
             '<div class="meta">' +
-              '<span>📍 ' + esc(job.location || "Vietnam") + '</span>' +
-              '<span>🕒 ' + esc(job.posted || "Recently") + '</span>' +
+              '<span>📍 ' + esc(job.location || "Việt Nam") + '</span>' +
+              '<span>🕒 ' + esc(job.posted || "Gần đây") + '</span>' +
               '<span>🌐 ' + esc(job.source || "Good Jobs") + '</span>' +
             '</div>' +
             (skills.length ? '<div class="badges">' + skills.slice(0, 20).map(function (skill) {
               return '<span class="badge">' + esc(skill) + '</span>';
             }).join("") + '</div>' : "") +
             '<div class="actions">' +
-              '<a class="btn btn-primary" href="' + esc(job.link) + '" target="_blank" rel="noopener noreferrer">Apply now ↗</a>' +
-              '<a class="btn btn-ghost" href="/?kw=' + encodeURIComponent(job.title) + '">Search similar jobs</a>' +
+              '<a class="btn btn-primary" href="' + esc(job.link) + '" target="_blank" rel="noopener noreferrer">Ứng tuyển ngay ↗</a>' +
+              '<a class="btn btn-ghost" href="/?kw=' + encodeURIComponent(job.title) + '">Tìm việc tương tự</a>' +
             '</div>' +
             '<hr>' +
-            '<h2>Job description</h2>' +
+            '<h2>Mô tả công việc</h2>' +
             '<div class="description">' + description + '</div>' +
           '</article>';
       }

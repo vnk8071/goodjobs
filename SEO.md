@@ -24,7 +24,8 @@ Lighthouse Best Practices is capped by Google AdSense third-party cookies and th
 ## Vietnamese version (single page, client-side toggle)
 
 - **2026-11-05:** removed the entire `/jobs/` directory (static jobs directory page, per-category and per-location sub-pages, per-job detail pages) and the separate `/vi/` + `/vi/viec-lam/` Vietnamese pages. There is now exactly one indexable app page, `/`.
-- The header has an `EN`/`VI` toggle (`frontend/src/i18n.ts`) that swaps every static and dynamic UI string in place via `localStorage` — no navigation, no second URL, no `hreflang` pair to maintain.
+- **2026-11-12:** Vietnamese is now the **default** language for every public page (home, `/post-job/`, `/contact/`, `/privacy/`, `/terms/`, job pages rendered by the Worker, and the `/jobs/` fallback). `<html lang="vi">`, `<title>`, meta description, Open Graph/Twitter tags, `og:locale` (`vi_VN`) and JSON-LD `inLanguage` are all Vietnamese in the **static HTML**, so Google and other crawlers see Vietnamese without executing JavaScript.
+- The header `EN`/`VI` toggle (`frontend/src/i18n.ts`) still switches every static and dynamic UI string in place via `localStorage` — no navigation, no second URL, no `hreflang` pair to maintain. A stored preference (`goodjobs:lang`) wins over the Vietnamese default; the document title and meta description follow the toggle through `applyDocumentMeta()`.
 - Search keywords (suggestion chips, the keyword box) are intentionally never translated — English job titles return more/better matches regardless of UI language.
 - The consent banner is localised; GTM and AdSense only load after consent.
 
@@ -62,7 +63,7 @@ Lighthouse Best Practices is capped by Google AdSense third-party cookies and th
 1. **Submit the sitemap** in Google Search Console and Bing Webmaster Tools. This cannot be done from the repo.
 2. **Best Practices / consent:** AdSense sets third-party cookies before consent. If consent is required in your markets, add a CMP and gate the ad script; that should lift Best Practices toward 100 without changing the content.
 3. **Speed Index** varies 3.9–4.5 s because of GTM/AdSense; consider loading ads after the first interaction or below the fold. LCP is already 1.3–1.6 s.
-4. **Search Console monitoring:** track index coverage for `/`; queries around "jobs in Vietnam", "tìm việc làm ở Hồ Chí Minh", "remote jobs Vietnam"; compare with the pages that are actually indexed. Since the Vietnamese UI is now a client-side toggle on the same URL, Google will index the English-default render — there is no separate Vietnamese URL to rank for Vietnamese-language queries.
+4. **Search Console monitoring:** track index coverage for `/`; queries around "việc làm", "tìm việc làm ở Hồ Chí Minh", "remote jobs Vietnam"; compare with the pages that are actually indexed. The static HTML is now Vietnamese, so Google indexes the Vietnamese render; request re-indexing of `/` in Search Console so the old English snippet is replaced (recrawl usually takes days to a few weeks). The EN/VI toggle still serves English to visitors who choose it, on the same URL.
 
 ## Verification
 

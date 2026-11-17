@@ -1,6 +1,6 @@
 import { scrapeJobsStream, scrapeLinkedInFallback, classifyInput, fetchD1RecentJobs, fetchRecentJobsSnapshot, normalizeCity, streamRecentJobs } from "./api";
 import { setStatus, clearStatus, appendJobs, hideResults, showProgress, updateProgressCount, markSiteDone, hideProgress, showQueuedMessage, clearQueuedMessage, setLinkedInEnriching, setTopCVEnriching, setEnrichmentDone, setSearchContext, setScoreColumnVisible, setFromCache, openJobByLink, openSharedJob, hideSuggestionBanner, showIntentBox, hideIntentBox, setIntentAlternatives, replaceJobs, initApplyToast, applyTrackerHandleReturn, buildRow, refreshUILanguage, prefetchJobDetails, showResults } from "./ui";
-import { initLang, getLang, setLang, t, applyStaticTranslations } from "./i18n";
+import { initLang, getLang, setLang, t, applyStaticTranslations, applyDocumentMeta } from "./i18n";
 import { initChat, refreshChatLanguage } from "./chat";
 import { CATEGORY_IDS, jobMatchesCategory, type CategoryFilter } from "./categories";
 import type { Job } from "./types";
@@ -34,9 +34,11 @@ initApplyToast();
   elements.forEach((element) => observer.observe(element));
 })();
 
-// EN/VI toggle — same single page, no separate /vi/ URL.
+// EN/VI toggle — same single page, no separate /vi/ URL. Vietnamese is the
+// default; a stored preference (from the header toggle) wins.
 initLang();
 applyStaticTranslations();
+applyDocumentMeta();
 initChat();
 const langToggleBtn = document.getElementById("langToggle") as HTMLButtonElement | null;
 function syncLangToggleLabel(): void {
@@ -46,6 +48,7 @@ syncLangToggleLabel();
 langToggleBtn?.addEventListener("click", () => {
   setLang(getLang() === "en" ? "vi" : "en");
   applyStaticTranslations();
+  applyDocumentMeta();
   syncLangToggleLabel();
   refreshUILanguage();
   refreshChatLanguage();

@@ -413,9 +413,9 @@ export const STRINGS: Record<Lang, Dict> = {
   },
 };
 
-let _lang: Lang = "en";
+let _lang: Lang = "vi";
 
-/** Read the stored language preference (default "en") and apply `lang` to <html>. */
+/** Read the stored language preference (default "vi") and apply `lang` to <html>. */
 export function initLang(): Lang {
   try {
     const stored = localStorage.getItem(LANG_KEY);
@@ -423,6 +423,37 @@ export function initLang(): Lang {
   } catch { /* private browsing — fall back to default */ }
   document.documentElement.lang = _lang;
   return _lang;
+}
+
+/**
+ * Document-level metadata for the single-page app. Vietnamese is the default
+ * so crawlers and social previews see Vietnamese without running JavaScript.
+ */
+const DOC_META: Record<Lang, { title: string; description: string; locale: string }> = {
+  vi: {
+    title: "Good Jobs — Tìm việc làm tại Việt Nam và quốc tế",
+    description: "Tìm việc làm mới tại Việt Nam và quốc tế — tổng hợp từ LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, RemoteOK và nhiều nguồn khác, cập nhật hằng ngày.",
+    locale: "vi_VN",
+  },
+  en: {
+    title: "Good Jobs — Job Search in Vietnam & Beyond",
+    description: "Search recent jobs in Vietnam and beyond — aggregated from LinkedIn, ITviec, TopCV, VietnamWorks, CareerViet, RemoteOK and more, updated daily.",
+    locale: "en_US",
+  },
+};
+
+/** Keep <title>, description and social meta in sync with the active language. */
+export function applyDocumentMeta(): void {
+  const meta = DOC_META[_lang];
+  document.title = meta.title;
+  const setContent = (selector: string, value: string) =>
+    document.querySelector(selector)?.setAttribute("content", value);
+  setContent('meta[name="description"]', meta.description);
+  setContent('meta[property="og:title"]', meta.title);
+  setContent('meta[property="og:description"]', meta.description);
+  setContent('meta[property="og:locale"]', meta.locale);
+  setContent('meta[name="twitter:title"]', meta.title);
+  setContent('meta[name="twitter:description"]', meta.description);
 }
 
 export function getLang(): Lang {

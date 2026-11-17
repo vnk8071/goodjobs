@@ -20,6 +20,10 @@
 
 | Date | Feature |
 | ---- | ------- |
+| 2026-11-17 | **LinkedIn auto-posting** — each published news article is posted automatically to the [Good Jobs company page](https://www.linkedin.com/company/good-jobs-vietnam/) via the LinkedIn REST API (Community Management API, `w_organization_social`) |
+| 2026-11-07 | **All Jobs browser** — the homepage feed merges the live Redis cache with the durable Cloudflare D1 archive, so every job ever scraped stays browsable, not just what's in the current search cache |
+| 2026-11-06 | **News desk** — [`goodjobs.io.vn/news`](https://goodjobs.io.vn/news) publishes AI-generated Vietnamese articles twice a day (Workers AI + D1), with category filtering, RSS, and a news sitemap |
+| 2026-11-06 | **Homepage filters** — category, location, and source dropdowns plus a jobs-per-page selector for browsing the merged job feed |
 | 2026-10-03 | **MCP server** — `mcp/goodjobs_mcp.py` exposes search, recent jobs, semantic search, keyword classification, city normalization, and cache status as read-only tools for MCP clients such as Claude Desktop and Claude Code |
 | 2026-10-03 | **career-ops submodule** — career-ops (branch `feat/goodjobs-provider`) vendored at `thirdparty/career-ops` with the `goodjobs` provider tests |
 | 2026-08-30 | **career-ops integration** — [career-ops](https://github.com/career-ops-hq/career-ops) added Good Jobs as a `providers/goodjobs.mjs` source; ongoing collaboration on integration depth (`/recent-jobs`, `/search-semantic`) and a self-hosting guide in [career-ops-hq/career-ops#3521](https://github.com/career-ops-hq/career-ops/discussions/3521) |
@@ -79,6 +83,8 @@ Every posting keeps its original link — Good Jobs never republishes, it points
 | 🔁 **Self-warming cache** | ~30 keyword×location pairs re-scraped every 2 hours; new jobs merged by link dedup; jobs pruned after 14 days |
 | 🌐 **Free-text locations** | No dropdowns. "hcmc" → Ho Chi Minh City, typos corrected, country inferred from the city |
 | 🚦 **Fair concurrency** | A semaphore caps concurrent scrapes; user requests jump ahead of background warmups |
+| 🧮 **All Jobs filters** | Homepage feed merges the Redis cache with the D1 archive; filter by category, location, or source, with a jobs-per-page selector |
+| 📰 **News desk** | [`/news`](https://goodjobs.io.vn/news) — AI-generated Vietnamese labor-market articles, auto-published twice a day and cross-posted to [LinkedIn](https://www.linkedin.com/company/good-jobs-vietnam/) |
 
 ## 🚀 Quick Start
 
