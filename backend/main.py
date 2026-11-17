@@ -1826,8 +1826,19 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             _light_executor, timed_scrape, site, fn, scrape_kw, req.location
                         )
                     async with chromium_sem:
-                        return await loop.run_in_executor(
-                            _executor, timed_scrape, site, fn, scrape_kw, req.location
+                        # Hard timeout is required here, not just best-effort: a hung
+                        # Playwright call blocks loop.run_in_executor's future forever,
+                        # and once that thread has actually started running, cancelling
+                        # the outer task (e.g. the 120s stream deadline) can't interrupt
+                        # it — so without wait_for, a single stuck browser call leaks
+                        # this chromium_sem permit permanently, eventually starving out
+                        # every other caller (warmup included) with no recovery short of
+                        # a restart.
+                        return await asyncio.wait_for(
+                            loop.run_in_executor(
+                                _executor, timed_scrape, site, fn, scrape_kw, req.location
+                            ),
+                            timeout=45.0,
                         )
 
                 active_scrapers = (
@@ -1903,9 +1914,14 @@ async def scrape_stream(req: ScrapeRequest, request: Request):
                             else:
                                 # Chromium detail fetch — share the global browser gate
                                 # with listing scrapes so total live Chromium stays <= limit.
+                                # Same hard timeout as the listing path above — without it
+                                # a hung detail-page fetch leaks this permit forever.
                                 async with chromium_sem:
-                                    ok = await loop.run_in_executor(
-                                        _executor, detail_fn, job, 0.0
+                                    ok = await asyncio.wait_for(
+                                        loop.run_in_executor(
+                                            _executor, detail_fn, job, 0.0
+                                        ),
+                                        timeout=60.0,
                                     )
                         except Exception as e:
                             log_app(f"{site} detail error job {i}: {e}", "ERROR")
