@@ -21,11 +21,8 @@
 | Date | Feature |
 | ---- | ------- |
 | 2026-11-17 | **LinkedIn auto-posting** — each published news article is posted automatically to the [Good Jobs company page](https://www.linkedin.com/company/good-jobs-vietnam/) via the LinkedIn REST API (Community Management API, `w_organization_social`) |
-| 2026-11-07 | **All Jobs browser** — the homepage feed merges the live Redis cache with the durable Cloudflare D1 archive, so every job ever scraped stays browsable, not just what's in the current search cache |
-| 2026-11-06 | **News desk** — [`goodjobs.io.vn/news`](https://goodjobs.io.vn/news) publishes AI-generated Vietnamese articles twice a day (Workers AI + D1), with category filtering, RSS, and a news sitemap |
-| 2026-11-06 | **Homepage filters** — category, location, and source dropdowns plus a jobs-per-page selector for browsing the merged job feed |
-| 2026-10-03 | **MCP server** — `mcp/goodjobs_mcp.py` exposes search, recent jobs, semantic search, keyword classification, city normalization, and cache status as read-only tools for MCP clients such as Claude Desktop and Claude Code |
-| 2026-10-03 | **career-ops submodule** — career-ops (branch `feat/goodjobs-provider`) vendored at `thirdparty/career-ops` with the `goodjobs` provider tests |
+| 2026-11-07 | **News desk, homepage filters & All Jobs browser** — [`goodjobs.io.vn/news`](https://goodjobs.io.vn/news) publishes AI-generated Vietnamese articles twice a day (Workers AI + D1, RSS, news sitemap); the homepage feed merges the live Redis cache with the durable Cloudflare D1 archive so every job ever scraped stays browsable, with category/location/source filters and a jobs-per-page selector |
+| 2026-10-03 | **MCP server & career-ops submodule** — `mcp/goodjobs_mcp.py` exposes search, recent jobs, semantic search, keyword classification, city normalization, and cache status as read-only tools for MCP clients such as Claude Desktop and Claude Code; career-ops (branch `feat/goodjobs-provider`) vendored at `thirdparty/career-ops` with the `goodjobs` provider tests |
 | 2026-08-30 | **career-ops integration** — [career-ops](https://github.com/career-ops-hq/career-ops) added Good Jobs as a `providers/goodjobs.mjs` source; ongoing collaboration on integration depth (`/recent-jobs`, `/search-semantic`) and a self-hosting guide in [career-ops-hq/career-ops#3521](https://github.com/career-ops-hq/career-ops/discussions/3521) |
 | 2026-08-22 | **Global search** — opt-in coverage for the US, UK, and Singapore (LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice) alongside the Vietnam market |
 | 2026-04-11 | **CV / skill matching** — paste a CV or skill list and AI intent detection maps it to a canonical job keyword, with results scored against it |
