@@ -216,13 +216,21 @@ function buildLinkedInText(draft, url) {
     .slice(0, 5)
     .map((tag) => `#${normalizeTitle(tag).replace(/\s+/g, "")}`)
     .join(" ");
-  const base = draft.linkedinText
+  let base = draft.linkedinText
     .replace(/https?:\/\/\S+/g, " ")
     .replace(/#[^\s#]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const withCta = /Chi tiết:?\s*$/i.test(base) ? base : `${base}\n\nChi tiết:`;
-  return truncate(`${withCta}\n\n${url}${hashtags ? `\n\n${hashtags}` : ""}`, 2900);
+  // The model is asked to close with a bare "Chi tiết:" CTA and nothing
+  // after it, but sometimes appends stray/garbled text past it instead of
+  // stopping there. We always rebuild our own clean CTA + URL below, so
+  // cut everything from the first "Chi tiết:" onward rather than only
+  // checking whether it's already at the very end — otherwise a dangling
+  // "Chi tiết: <garbage>" is left in place and our own "Chi tiết:" line
+  // gets appended right after it, duplicating the CTA in the live post.
+  const ctaIdx = base.search(/Chi ti[ếe]t\s*:?/i);
+  if (ctaIdx >= 0) base = base.slice(0, ctaIdx).trim();
+  return truncate(`${base}\n\nChi tiết:\n\n${url}${hashtags ? `\n\n${hashtags}` : ""}`, 2900);
 }
 
 export async function publishToLinkedIn(env, article) {
@@ -399,7 +407,10 @@ async function generateForTopic(env, { topic, signals, existingTitles }) {
 
   const linkedin = await publishToLinkedIn(env, record);
   record.linkedinStatus = linkedin.status;
-  record.linkedinUrl = linkedin.postId ? `urn:li:share:${linkedin.postId}` : "";
+  // x-restli-id on LinkedIn's /rest/posts response is already the full
+  // post URN (e.g. "urn:li:share:7528...") — prefixing it again produced
+  // "urn:li:share:urn:li:share:7528..." in linkedin_url.
+  record.linkedinUrl = linkedin.postId || "";
 
   await insertArticle(env, record);
   await markSeen(env, candidates, sources);
