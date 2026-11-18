@@ -170,7 +170,7 @@ function gateArticle(draft, signals, candidates, sources, existingTitles) {
 async function loadExistingTitles(env) {
   try {
     const result = await env.DB.prepare(
-      "SELECT title FROM news_articles ORDER BY published_at DESC LIMIT 80",
+      "SELECT title FROM news_articles WHERE status = 'published' ORDER BY published_at DESC LIMIT 80",
     ).all();
     return (result.results || []).map((r) => String(r.title || ""));
   } catch {
