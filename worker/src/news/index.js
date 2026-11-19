@@ -250,8 +250,10 @@ export async function handleNewsApi(request, env, url) {
       const article = await env.DB.prepare("SELECT * FROM news_articles WHERE slug = ?").bind(slug).first();
       if (!article) return json({ error: "article not found" }, 404);
       const result = await publishToLinkedIn(env, article);
+      // result.postId is already the full URN (from the x-restli-id response
+      // header) — do not re-wrap it in "urn:li:share:" again.
       await env.DB.prepare("UPDATE news_articles SET linkedin_status = ?, linkedin_url = ?, updated_at = ? WHERE slug = ?")
-        .bind(result.status, result.postId ? `urn:li:share:${result.postId}` : "", new Date().toISOString(), slug)
+        .bind(result.status, result.postId || "", new Date().toISOString(), slug)
         .run();
       return json({ ok: result.status === "posted", ...result });
     } catch (error) {
