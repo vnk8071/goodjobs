@@ -150,6 +150,7 @@ async def _scrape_keyword(
     loc: str,
     loop,
     executor,
+    light_executor,
     scrapers: dict,
     last_fetched_ts: float = 0.0,
     blocked_sites: set | None = None,
@@ -212,7 +213,7 @@ async def _scrape_keyword(
         try:
             if site in LIGHT_LISTING_SITES:
                 result = await asyncio.wait_for(
-                    loop.run_in_executor(executor, _timed, site, fn, kw, loc),
+                    loop.run_in_executor(light_executor, _timed, site, fn, kw, loc),
                     timeout=45.0,
                 )
             else:
@@ -360,7 +361,7 @@ async def _scrape_keyword(
             try:
                 if is_light:
                     ok = await asyncio.wait_for(
-                        loop.run_in_executor(executor, detail_fn, job, cooldown),
+                        loop.run_in_executor(light_executor, detail_fn, job, cooldown),
                         timeout=60.0,
                     )
                 else:
@@ -598,7 +599,7 @@ async def _cleanup_old_jobs() -> None:
     log_app(f"[warmup] daily cleanup done — {cleaned} old job(s) removed")
 
 
-async def _enrich_cycle(executor, loop) -> None:
+async def _enrich_cycle(executor, light_executor, loop) -> None:
     """For every cached warmup job missing a description, fetch it, then summarize and embed."""
     import json
 
@@ -645,7 +646,7 @@ async def _enrich_cycle(executor, loop) -> None:
                 try:
                     if is_light:
                         await asyncio.wait_for(
-                            loop.run_in_executor(executor, fn, job, cooldown),
+                            loop.run_in_executor(light_executor, fn, job, cooldown),
                             timeout=60.0,
                         )
                     else:
@@ -681,7 +682,7 @@ async def _enrich_cycle(executor, loop) -> None:
 
 
 async def _run_scrape_cycle(
-    executor, scrapers: dict, loop, last_fetched_ts: float = 0.0
+    executor, light_executor, scrapers: dict, loop, last_fetched_ts: float = 0.0
 ) -> None:
     """Scrape all warmup keyword×location pairs, then summarize and embed."""
     warmup_kws = await get_warmup_keywords()
@@ -692,7 +693,7 @@ async def _run_scrape_cycle(
         try:
             log_app(f"[warmup] scraping {kw!r}/{loc!r}...")
             await _scrape_keyword(
-                kw, loc, loop, executor, scrapers, last_fetched_ts=last_fetched_ts
+                kw, loc, loop, executor, light_executor, scrapers, last_fetched_ts=last_fetched_ts
             )
         except Exception as e:
             log_app(f"[warmup] error for {kw!r}/{loc!r}: {e}")
@@ -756,7 +757,7 @@ async def _summarize_and_embed_loop(executor) -> None:
         await asyncio.sleep(_SUMMARIZE_INTERVAL)
 
 
-async def warmup(executor, scrapers: dict) -> None:
+async def warmup(executor, light_executor, scrapers: dict) -> None:
     """Background loop that scrapes all warmup keys at 10:00 and 17:00 ICT.
 
     On startup, scrapes any keyword×location pairs with no cache at all.
@@ -817,7 +818,7 @@ async def warmup(executor, scrapers: dict) -> None:
         for i, (kw, loc, last_fetched_ts) in enumerate(needs_scrape):
             try:
                 await _scrape_keyword(
-                    kw, loc, loop, executor, scrapers, last_fetched_ts=last_fetched_ts
+                    kw, loc, loop, executor, light_executor, scrapers, last_fetched_ts=last_fetched_ts
                 )
             except Exception as e:
                 log_app(f"[warmup] startup error for {kw!r}/{loc!r}: {e}")
@@ -874,7 +875,7 @@ async def warmup(executor, scrapers: dict) -> None:
                     except Exception:
                         pass  # already logged by _on_enrich_done
                 await _run_scrape_cycle(
-                    executor, scrapers, loop, last_fetched_ts=time.time() - 86400
+                    executor, light_executor, scrapers, loop, last_fetched_ts=time.time() - 86400
                 )
             elif enrich_task is not None and not enrich_task.done():
                 # Cloudflare's batch inference queue, not our code, decides how long this
@@ -883,7 +884,7 @@ async def warmup(executor, scrapers: dict) -> None:
                 # overlap guard instead of a second concurrent summarizer run.
                 log_app("[warmup] previous enrich cycle still running — skipping this trigger")
             else:
-                enrich_task = asyncio.create_task(_enrich_cycle(executor, loop))
+                enrich_task = asyncio.create_task(_enrich_cycle(executor, light_executor, loop))
                 enrich_task.add_done_callback(_on_enrich_done)
 
             if time.time() - _last_cleanup_ts >= _CLEANUP_INTERVAL:

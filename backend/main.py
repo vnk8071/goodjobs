@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI):
     """Start the background warmup task on application startup."""
     log_app("Application starting...")
     try:
-        asyncio.create_task(warmup(_executor, _SCRAPERS))
+        asyncio.create_task(warmup(_executor, _light_executor, _SCRAPERS))
         log_app("Warmup task scheduled")
     except Exception as e:
         log_app(f"Failed to start warmup task: {e}")
@@ -375,6 +375,7 @@ async def _background_rescrape(
                 location,
                 loop,
                 _executor,
+                _light_executor,
                 _SCRAPERS,
                 last_fetched_ts=last_fetched_ts,
                 enrich_limit=NON_WARMUP_ENRICH_LIMIT,
@@ -1168,7 +1169,7 @@ async def cache_scrape(
             fetched_ts = existing[1] if existing else 0.0
             try:
                 await _scrape_keyword(
-                    kw, loc, loop, _executor, _SCRAPERS, last_fetched_ts=fetched_ts
+                    kw, loc, loop, _executor, _light_executor, _SCRAPERS, last_fetched_ts=fetched_ts
                 )
             except Exception as e:
                 log_app(f"[cache/scrape] error for {kw!r}/{loc!r}: {e}", "ERROR")
