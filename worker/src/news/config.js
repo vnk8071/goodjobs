@@ -103,7 +103,7 @@ export const BING_NEWS_URL = "https://www.bing.com/news/search?format=RSS&setmkt
 
 export const DEFAULT_MODELS = [
   "@cf/meta/llama-4-scout-17b-16e-instruct",
-  "@cf/meta/llama-3.1-8b-instruct-fp8",
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 ];
 
 /** Pick `count` topics, rotating by day so the desk covers every angle. */
