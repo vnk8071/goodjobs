@@ -222,6 +222,8 @@ export async function handleNewsApi(request, env, url) {
         force: body.force === true || url.searchParams.get("force") === "1",
         perRun: body.perRun,
         topicSlug: body.topic || url.searchParams.get("topic") || "",
+        share: body.share !== false,
+        shareOnly: body.shareOnly === true,
       });
       return json({ ok: true, ...result });
     } catch (error) {

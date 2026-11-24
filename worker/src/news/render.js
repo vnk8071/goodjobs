@@ -1,5 +1,6 @@
 /** Server-rendered HTML for /news, article pages, RSS and the news sitemap. */
 
+import { SHARE_CATEGORY } from "./config.js";
 import {
   SITE_URL,
   esc,
@@ -358,6 +359,21 @@ export function renderArticlePage(article, related, allSources) {
   const signals = parseObject(article.signals);
   const tags = parseArray(article.tags);
   const minutes = readingMinutes(article.body_text);
+  const isShare = article.category === SHARE_CATEGORY;
+  const sourcesHeading = isShare ? "Bài gốc" : "Nguồn tham khảo";
+  const sourcesList = sources
+    .map((s) => {
+      const safe = /^https?:\/\//i.test(String(s.url || ""));
+      const label = safe
+        ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(s.title)}</a>`
+        : esc(s.title);
+      return `<li>${label}${s.publisher ? ` — ${esc(s.publisher)}` : ""}</li>`;
+    })
+    .join("");
+  const methodText = isShare
+    ? `Điểm tin là góc nhìn của Ban Biên Tập Good Jobs về một bài báo công khai. Nội dung bài gốc thuộc về ${esc(sources[0]?.publisher || "nhà xuất bản gốc")}; vui lòng đọc bài gốc để có thông tin đầy đủ. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.`
+    : `Bài viết do Ban Biên Tập Good Jobs tổng hợp từ nguồn công khai và phân tích dữ liệu việc làm của Good Jobs. Số liệu có thể thay đổi theo thời điểm; nội dung không phải lời khuyên đầu tư hay bảo đảm việc làm. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.`;
+  const tagsChips = tags.length ? ` Thẻ: ${tags.map((t) => `<span class="chip">${esc(t)}</span>`).join(" ")}` : "";
 
   const body = `
     <div class="wrap">
@@ -384,9 +400,9 @@ export function renderArticlePage(article, related, allSources) {
           <a class="btn" href="/?kw=${encodeURIComponent(article.search_keyword || article.category)}">Xem việc làm →</a>
         </div>
 
-        ${sources.length ? `<section class="sources"><h2>Nguồn tham khảo</h2><ol>${sources.map((s) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow">${esc(s.title)}</a>${s.publisher ? ` — ${esc(s.publisher)}` : ""}</li>`).join("")}</ol></section>` : ""}
+        ${sources.length ? `<section class="sources"><h2>${sourcesHeading}</h2><ol>${sourcesList}</ol></section>` : ""}
 
-        <p class="method">Bài viết do Ban Biên Tập Good Jobs tổng hợp từ nguồn công khai và phân tích dữ liệu việc làm của Good Jobs. Số liệu có thể thay đổi theo thời điểm; nội dung không phải lời khuyên đầu tư hay bảo đảm việc làm. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.${tags.length ? ` Thẻ: ${tags.map((t) => `<span class="chip">${esc(t)}</span>`).join(" ")}` : ""}</p>
+        <p class="method">${methodText}${tagsChips}</p>
       </article>
 
       ${related.length ? `<section class="related"><h2>Bài viết liên quan</h2><div class="related-list">${related.map((r) => `<div class="related-item"><a href="/news/${esc(r.slug)}">${esc(r.title)}</a><span>${esc(r.category)} · ${esc(formatViDate(r.published_at))}</span></div>`).join("")}</div></section>` : ""}
@@ -486,15 +502,16 @@ export function renderNewsIndex({ articles, page, totalPages, categories, active
 }
 
 export function renderRss(articles) {
+  const cdata = (value) => String(value ?? "").replace(/]]>/g, "]]]]><![CDATA[>");
   const items = articles
     .map(
       (a) => `<item>
-        <title><![CDATA[${a.title}]]></title>
+        <title><![CDATA[${cdata(a.title)}]]></title>
         <link>${SITE_URL}/news/${a.slug}</link>
         <guid isPermaLink="true">${SITE_URL}/news/${a.slug}</guid>
         <pubDate>${new Date(a.published_at).toUTCString()}</pubDate>
-        <description><![CDATA[${a.dek}]]></description>
-        <category><![CDATA[${a.category}]]></category>
+        <description><![CDATA[${cdata(a.dek)}]]></description>
+        <category><![CDATA[${cdata(a.category)}]]></category>
       </item>`,
     )
     .join("\n");

@@ -4,6 +4,23 @@ export const NEWS_AUTHOR = "Ban Biên Tập Good Jobs";
 export const DEFAULT_ARTICLES_PER_RUN = 2;
 export const MAX_ARTICLES_PER_RUN = 3;
 
+/** Category for "share the original article" posts (Điểm tin). */
+export const SHARE_CATEGORY = "Điểm tin";
+
+/** Established Vietnamese outlets allowed as the source of a share post (host → display name). */
+export const SHARE_PUBLISHERS = {
+  "vnexpress.net": "VnExpress", "tuoitre.vn": "Tuổi Trẻ", "thanhnien.vn": "Thanh Niên",
+  "dantri.com.vn": "Dân trí", "vietnamnet.vn": "VietNamNet", "laodong.vn": "Lao Động",
+  "nld.com.vn": "Người Lao Động", "vneconomy.vn": "VnEconomy", "cafef.vn": "CafeF",
+  "cafebiz.vn": "CafeBiz", "znews.vn": "Znews", "vtv.vn": "VTV", "vov.vn": "VOV",
+  "htv.vn": "HTV", "tienphong.vn": "Tiền Phong", "plo.vn": "Pháp Luật TP.HCM",
+  "baochinhphu.vn": "Báo Chính phủ", "nhandan.vn": "Nhân Dân", "vietnamplus.vn": "VietnamPlus",
+  "sggp.org.vn": "Sài Gòn Giải Phóng", "kinhtedothi.vn": "Kinh tế & Đô thị", "genk.vn": "GenK",
+  "doanhnhansaigon.vn": "Doanh Nhân Sài Gòn",
+  "tinnhanhchungkhoan.vn": "Đầu tư Chứng khoán", "baodautu.vn": "Báo Đầu tư",
+  "vnbusiness.vn": "VnBusiness", "ictnews.vn": "ICTnews", "kenh14.vn": "Kenh14",
+};
+
 /**
  * Each topic is a recurring editorial angle. `query` is used with Google News
  * RSS (last 7 days); `searchKeyword` powers the "related jobs" CTA.
@@ -100,6 +117,17 @@ export const CURATED_FEEDS = [
 
 /** Bing News RSS is a search fallback when Google News rate-limits Workers. */
 export const BING_NEWS_URL = "https://www.bing.com/news/search?format=RSS&setmkt=vi-VN&q=";
+
+/** Every candidate must mention the job market (accent-insensitive match on title + summary). */
+export const JOB_MARKET_TERMS = [
+  "việc làm", "tuyển dụng", "lao động", "nhân sự", "nhân lực", "tiền lương", "mức lương",
+  "tăng lương", "lương tối thiểu", "lương thưởng", "bảng lương", "trả lương",
+  "thu nhập", "phúc lợi", "nghề nghiệp", "ứng viên", "thất nghiệp", "tìm việc",
+  "tuyển người", "sa thải", "cắt giảm nhân sự", "kỹ năng nghề", "thị trường lao động",
+];
+
+/** Hosts that publish listings/spam rather than news. */
+export const BLOCKED_HOSTS = ["quasa.io"];
 
 export const DEFAULT_MODELS = [
   "@cf/meta/llama-4-scout-17b-16e-instruct",

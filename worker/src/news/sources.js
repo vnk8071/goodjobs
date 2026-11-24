@@ -1,6 +1,6 @@
 /** News discovery: Google News RSS + curated Vietnamese RSS feeds. */
 
-import { BING_NEWS_URL, CURATED_FEEDS } from "./config.js";
+import { BING_NEWS_URL, BLOCKED_HOSTS, CURATED_FEEDS, JOB_MARKET_TERMS } from "./config.js";
 import { decodeEntities, normalizeTitle, sha256Hex, stripHtml } from "./util.js";
 
 const USER_AGENT = "GoodJobsNewsBot/1.0 (+https://goodjobs.io.vn/news)";
@@ -55,7 +55,7 @@ function tagAttr(block, tag, attr) {
   return match ? decodeEntities(match[1]).trim() : "";
 }
 
-function parseRss(xml) {
+export function parseRss(xml) {
   const items = [];
   const re = /<item\b[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
@@ -64,12 +64,67 @@ function parseRss(xml) {
     const title = tagValue(block, "title");
     const link = tagValue(block, "link") || tagAttr(block, "link", "href");
     if (!title || !link) continue;
-    const publisher = tagValue(block, "source");
+    // Bing News labels the outlet in <News:Source>; Google News uses <source>.
+    const publisher = tagValue(block, "source") || tagValue(block, "News:Source");
     const pubDate = tagValue(block, "pubDate") || tagValue(block, "published");
     const summary = stripHtml(tagValue(block, "description") || tagValue(block, "summary")).slice(0, 320);
     items.push({ title, link, publisher, pubDate, summary });
   }
   return items;
+}
+
+/** Hostname of a link without the `www.` prefix, e.g. "https://www.htv.vn/x" -> "htv.vn". */
+export function hostOf(link) {
+  try {
+    return new URL(link).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+const SEARCH_FEEDS = new Set(["Google News", "Bing News"]);
+
+/** Only http(s) links with a real host may become an article source. */
+export function isSafeArticleLink(link) {
+  const value = String(link ?? "");
+  // Whitespace/control characters survive URL parsing (it strips them), so a
+  // link like "https://x.vn/a\n\nClick: https://evil" would otherwise pass.
+  if (!value || value.length > 500) return false;
+  if (/[\s\u0000-\u001f\u007f]/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+    return Boolean(hostOf(value));
+  } catch {
+    return false;
+  }
+}
+
+/** True when the host is (or is a subdomain of) a blocked listings/spam host. */
+export function isBlockedHost(host) {
+  const value = String(host || "").toLowerCase();
+  if (!value) return false;
+  return BLOCKED_HOSTS.some((blocked) => value === blocked || value.endsWith(`.${blocked}`));
+}
+
+/** Publisher label for an item: raw tag, else the outlet host for search feeds. */
+export function publisherFor(rawPublisher, feedName, link) {
+  const raw = String(rawPublisher || "").trim();
+  if (raw) return raw;
+  if (SEARCH_FEEDS.has(feedName)) {
+    const host = hostOf(link);
+    if (host) return host;
+  }
+  return feedName || "Nguồn";
+}
+
+const JOB_MARKET_TERMS_NORMALIZED = JOB_MARKET_TERMS.map((term) => normalizeTitle(term)).filter(Boolean);
+
+/** True when the item mentions the job market anywhere in its title or summary. */
+export function isJobMarketRelevant(item) {
+  const haystack = ` ${normalizeTitle(`${item.title || ""} ${item.summary || ""}`)} `;
+  if (!haystack.trim()) return false;
+  return JOB_MARKET_TERMS_NORMALIZED.some((term) => haystack.includes(` ${term} `));
 }
 
 function cleanTitle(title, publisher) {
@@ -186,11 +241,16 @@ export async function discoverCandidates(topic, limit = 8) {
   for (const result of settled) {
     if (result.status !== "fulfilled") continue;
     for (const raw of result.value) {
+      const link = cleanLink(raw.link);
+      if (!isSafeArticleLink(link)) continue;
+      const host = hostOf(link);
+      if (isBlockedHost(host)) continue;
+
       const published = publishedDate(raw);
       if (published && published.getTime() < cutoff) continue;
 
-      const searchFeed = raw.feedName === "Google News" || raw.feedName === "Bing News";
-      let publisher = raw.publisher || raw.feedName || "Nguồn";
+      const searchFeed = SEARCH_FEEDS.has(raw.feedName);
+      let publisher = raw.publisher || "";
       let title = cleanTitle(raw.title, raw.publisher || "");
       if (!raw.publisher && raw.feedName === "Bing News" && title.includes(" - ")) {
         const cut = title.lastIndexOf(" - ");
@@ -198,6 +258,9 @@ export async function discoverCandidates(topic, limit = 8) {
         title = title.slice(0, cut).trim();
       }
       if (title.length < 20) continue;
+
+      const summary = raw.summary || "";
+      if (!isJobMarketRelevant({ title, summary })) continue;
 
       const key = normalizeTitle(title);
       if (seen.has(key)) continue;
@@ -209,9 +272,9 @@ export async function discoverCandidates(topic, limit = 8) {
 
       collected.push({
         title,
-        link: cleanLink(raw.link),
-        publisher,
-        summary: raw.summary,
+        link,
+        publisher: publisherFor(publisher, raw.feedName, link),
+        summary,
         searchFeed,
         score,
         publishedAt: (published || new Date()).toISOString(),

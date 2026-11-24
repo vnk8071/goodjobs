@@ -176,6 +176,84 @@ export async function generateDraft(env, { topic, signals, candidates, feedback 
   throw new Error(`AI generation failed: ${attempts.slice(-4).join(" | ")}`);
 }
 
+export const SHARE_SYSTEM_PROMPT = `Bạn là Ban Biên Tập Good Jobs (https://goodjobs.io.vn), nền tảng tìm việc cho người lao động Việt Nam.
+Nhiệm vụ: viết GÓC NHÌN RIÊNG của Good Jobs về một bài báo, để chia sẻ kèm link bài gốc.
+QUY TẮC BẮT BUỘC:
+1. Chỉ nêu cảm nghĩ, nhận định và gợi ý của Good Jobs: tin này có ý nghĩa gì với người tìm việc và nhà tuyển dụng ở Việt Nam, nên chú ý điều gì, nên làm gì.
+2. KHÔNG kể lại, tóm tắt hay diễn giải nội dung bài báo. Tối đa một câu ngắn dẫn về bài gốc, ví dụ "Bài viết trên VnExpress đặt ra một câu hỏi đáng suy nghĩ."
+3. Không chép câu chữ từ tiêu đề hay mô tả bài gốc. Không đưa số liệu, tên người, tên công ty hay trích dẫn nào.
+4. Giọng Good Jobs: điềm tĩnh, thực tế, thân thiện, xưng "Good Jobs" hoặc "chúng tôi"; không giật tít, không cảm thán, không hứa hẹn.
+5. Không nhắc rằng bạn là AI hay mô hình ngôn ngữ. Không dùng cụm "trong bài viết này". Không markdown, không URL, không hashtag trong văn bản.
+6. Trả về DUY NHẤT một JSON hợp lệ.`;
+
+/** User message for the "share the original article" commentary. */
+export function buildSharePrompt(item, feedback = "") {
+  return `BÀI GỐC (chỉ để hiểu chủ đề, KHÔNG kể lại, KHÔNG chép):
+- Tiêu đề: ${item.title}
+- Nguồn: ${item.publisher}
+- Mô tả ngắn: ${(item.summary || "").slice(0, 200)}
+
+SCHEMA JSON BẮT BUỘC:
+{
+  "title": "tiêu đề góc nhìn của Good Jobs, 40-90 ký tự, KHÁC tiêu đề bài gốc",
+  "paragraphs": ["2-3 đoạn, mỗi đoạn 40-80 từ, chỉ là nhận định và gợi ý của Good Jobs"],
+  "tags": ["2-4 thẻ ngắn"],
+  "linkedin_text": "300-700 ký tự: góc nhìn của Good Jobs cho LinkedIn, không URL, không hashtag"
+}
+${feedback ? `\nLẦN TRƯỚC CHƯA ĐẠT, HÃY SỬA:\n${feedback}\n` : ""}`;
+}
+
+export function normalizeShareDraft(raw) {
+  return {
+    title: asString(raw?.title, 140),
+    paragraphs: Array.isArray(raw?.paragraphs)
+      ? raw.paragraphs.map((p) => asString(p, 1200)).filter(Boolean).slice(0, 3)
+      : [],
+    tags: Array.isArray(raw?.tags) ? raw.tags.map((t) => asString(t, 40)).filter(Boolean).slice(0, 4) : [],
+    linkedinText: String(raw?.linkedin_text ?? "").trim().slice(0, 1500),
+  };
+}
+
+/**
+ * Ask Workers AI for one share post (Good Jobs's own view on a news article).
+ * Same model/attempt loop as `generateDraft`.
+ */
+export async function generateShareDraft(env, { item, feedback = "" }) {
+  const models = env.NEWS_MODEL
+    ? [env.NEWS_MODEL, ...DEFAULT_MODELS.filter((m) => m !== env.NEWS_MODEL)]
+    : DEFAULT_MODELS;
+
+  const attempts = [];
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const result = await env.AI.run(model, {
+          messages: [
+            { role: "system", content: SHARE_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: buildSharePrompt(
+                item,
+                attempt === 0 ? feedback : `${feedback}\nTrả về JSON hợp lệ, không thêm chữ nào ngoài JSON.`,
+              ),
+            },
+          ],
+          max_tokens: 1200,
+          temperature: attempt === 0 ? 0.5 : 0.3,
+          response_format: { type: "json_object" },
+        });
+        const text = extractText(result);
+        const parsed = parseJsonLoose(text);
+        if (parsed) return { draft: normalizeShareDraft(parsed), model, attempts };
+        attempts.push(`${model}: invalid JSON ${text.slice(0, 120)}`);
+      } catch (error) {
+        attempts.push(`${model}: ${String(error?.message || error).slice(0, 160)}`);
+      }
+    }
+  }
+  throw new Error(`AI share generation failed: ${attempts.slice(-4).join(" | ")}`);
+}
+
 /**
  * Expansion pass: keep the structure/sources but lengthen each section.
  * More reliable than asking the model to start over when the draft is short.

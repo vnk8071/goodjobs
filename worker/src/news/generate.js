@@ -1,15 +1,17 @@
 /** News generation pipeline: signals → RSS → Workers AI → quality gate → D1. */
 
-import { expandDraft, generateDraft } from "./ai.js";
+import { expandDraft, generateDraft, generateShareDraft } from "./ai.js";
 import {
   DEFAULT_ARTICLES_PER_RUN,
   MAX_ARTICLES_PER_RUN,
   NEWS_AUTHOR,
+  SHARE_CATEGORY,
+  SHARE_PUBLISHERS,
   pickTopics,
   topicBySlug,
 } from "./config.js";
 import { collectSignals, numberVariants, signalNumbers } from "./signals.js";
-import { discoverCandidates } from "./sources.js";
+import { discoverCandidates, hostOf, isJobMarketRelevant, isSafeArticleLink } from "./sources.js";
 import {
   ictDateKey,
   ictIso,
@@ -233,6 +235,153 @@ function buildLinkedInText(draft, url) {
   return truncate(`${base}\n\nChi tiết:\n\n${url}${hashtags ? `\n\n${hashtags}` : ""}`, 2900);
 }
 
+/** LinkedIn "little text" escaping: our own prose only, never URLs or hashtags. */
+export function escapeLittleText(text) {
+  return String(text ?? "").replace(/[\\|{}@[\]()<>*_~]/g, (char) => `\\${char}`);
+}
+
+/** Display name for a trusted outlet host, or "" when the host is not allow-listed. */
+function sharePublisherFor(host) {
+  if (!host) return "";
+  if (SHARE_PUBLISHERS[host]) return SHARE_PUBLISHERS[host];
+  const key = Object.keys(SHARE_PUBLISHERS).find((allowed) => host.endsWith(`.${allowed}`));
+  return key ? SHARE_PUBLISHERS[key] : "";
+}
+
+/**
+ * Rank pool candidates for a "share the original article" post (pure, no I/O).
+ * Only links on allow-listed Vietnamese outlets qualify; the publisher label
+ * comes from the host, never from the feed (which can be spoofed).
+ */
+export function pickShareCandidate(pool, existingTitles = []) {
+  const stamp = (value) => {
+    const d = value ? new Date(value) : null;
+    return d && !Number.isNaN(d.getTime()) ? d.getTime() : 0;
+  };
+  const ordered = [...(pool || [])].sort((a, b) => stamp(b?.publishedAt) - stamp(a?.publishedAt));
+  const seen = new Set();
+  const picked = [];
+  for (const item of ordered) {
+    if (!item) continue;
+    if (item.sourceKey) {
+      if (seen.has(item.sourceKey)) continue;
+      seen.add(item.sourceKey);
+    }
+
+    if (!isSafeArticleLink(item.link)) continue;
+    // A share is about one article, so its headline itself must be about jobs.
+    if (!isJobMarketRelevant({ title: item.title, summary: "" })) continue;
+    let link;
+    try {
+      link = new URL(item.link).toString();
+    } catch {
+      continue;
+    }
+    const publisher = sharePublisherFor(hostOf(link));
+    if (!publisher) continue;
+
+    if ((existingTitles || []).some((title) => title && titleSimilarity(item.title, title) >= MAX_TITLE_SIMILARITY)) {
+      continue;
+    }
+
+    picked.push({ ...item, link, publisher });
+    if (picked.length >= 2) break;
+  }
+  return picked;
+}
+
+/** Article body for a share post: original link first, then our own view. */
+export function buildShareBodyHtml(item, paragraphs) {
+  const source = `<p class="share-source"><strong>Bài gốc:</strong> <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(item.title)}</a> — ${escapeHtml(item.publisher)}</p>`;
+  const body = (paragraphs || []).map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+  return `${source}<h2>Góc nhìn Good Jobs</h2>${body}`;
+}
+
+function eightWordRunCopied(item, ours) {
+  const sourceWords = normalizeTitle(`${item.title || ""} ${item.summary || ""}`).split(" ").filter(Boolean);
+  const haystack = ` ${normalizeTitle(ours)} `;
+  for (let i = 0; i + 8 <= sourceWords.length; i += 1) {
+    if (haystack.includes(` ${sourceWords.slice(i, i + 8).join(" ")} `)) return true;
+  }
+  return false;
+}
+
+/** Quality gate for a share post: short, our own voice, no retelling. */
+export function gateShare(draft, item, existingTitles = []) {
+  const errors = [];
+  const title = String(draft?.title || "");
+  const paragraphs = Array.isArray(draft?.paragraphs) ? draft.paragraphs : [];
+  const linkedinText = String(draft?.linkedinText || "");
+  const bodyText = paragraphs.join(" ");
+
+  if (title.length < 20 || title.length > 120) errors.push("tiêu đề phải dài 20-120 ký tự");
+  if (paragraphs.length < 2) errors.push("cần ít nhất 2 đoạn");
+  if (bodyText.length < 300 || bodyText.length > 1600) {
+    errors.push(`phần bình luận phải dài 300-1600 ký tự (hiện ${bodyText.length})`);
+  }
+  if (titleSimilarity(title, item?.title || "") >= MAX_TITLE_SIMILARITY) errors.push("tiêu đề trùng tiêu đề bài gốc");
+  for (const existing of existingTitles || []) {
+    if (existing && titleSimilarity(title, existing) >= MAX_TITLE_SIMILARITY) {
+      errors.push("tiêu đề trùng với bài đã đăng gần đây");
+      break;
+    }
+  }
+
+  if (eightWordRunCopied(item || {}, `${bodyText} ${linkedinText}`)) {
+    errors.push("không được kể lại hay chép nội dung bài gốc");
+  }
+
+  // A company post must not carry third-party links or handles from the model.
+  if (/https?:\/\/|www\.|@/i.test(`${bodyText} ${linkedinText}`)) {
+    errors.push("không được chèn liên kết hoặc tài khoản");
+  }
+  if (!isJobMarketRelevant({ title: "", summary: bodyText })) {
+    errors.push("bình luận phải nói về việc làm");
+  }
+
+  const normalized = normalizeTitle(`${bodyText} ${linkedinText}`);
+  const selfRefs = ["mo hinh ngon ngu", "toi la ai", "toi la mot ai", "la mot mo hinh", "trong bai viet nay"];
+  if (selfRefs.some((phrase) => normalized.includes(phrase))) {
+    errors.push("không được tự nhận là AI hoặc nhắc tới bài viết");
+  }
+
+  if (linkedinText.length < 150) errors.push("linkedin_text phải dài ít nhất 150 ký tự");
+
+  return { ok: errors.length === 0, errors };
+}
+
+/** LinkedIn commentary for a share post: original article link first. */
+export function buildShareLinkedInText(draft, item, pageUrl) {
+  const LIMIT = 2900;
+  const hashtags = [];
+  for (const tag of (draft?.tags || []).slice(0, 5)) {
+    const handle = `#${normalizeTitle(tag).replace(/\s+/g, "")}`;
+    if (handle.length > 1 && !hashtags.includes(handle)) hashtags.push(handle);
+  }
+  if (!hashtags.includes("#goodjobs")) hashtags.push("#goodjobs");
+  const tagLine = hashtags.join(" ");
+
+  const first = `Đọc bài gốc trên ${escapeLittleText(item.publisher)}: ${item.link}`;
+  const last = `Góc nhìn đầy đủ của Good Jobs: ${pageUrl}`;
+  const base = escapeLittleText(
+    String(draft?.linkedinText || "")
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/#[^\s#]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+
+  const compose = (text, tags = tagLine) => [first, text, last, tags].filter(Boolean).join("\n\n");
+
+  const full = compose(base);
+  if (full.length <= LIMIT) return full;
+
+  // Too long: shorten only our own commentary, never the two URLs.
+  const fixed = compose("").length;
+  const budget = Math.max(0, LIMIT - fixed - 3);
+  return compose(truncate(base, budget).trim());
+}
+
 export async function publishToLinkedIn(env, article) {
   if (!env.LINKEDIN_ACCESS_TOKEN || !env.LINKEDIN_ORG_ID) {
     return { status: "draft", reason: "linkedin-not-configured" };
@@ -259,9 +408,9 @@ export async function publishToLinkedIn(env, article) {
         },
         content: {
           article: {
-            source: url,
-            title: article.title,
-            description: article.dek,
+            source: article.previewUrl || url,
+            title: article.previewTitle || article.title,
+            description: article.previewDescription ?? article.dek,
           },
         },
         lifecycleState: "PUBLISHED",
@@ -315,13 +464,21 @@ async function insertArticle(env, record) {
     .run();
 }
 
-async function generateForTopic(env, { topic, signals, existingTitles }) {
+async function generateForTopic(env, { topic, signals, existingTitles, pool }) {
   const discovered = await discoverCandidates(topic, 10);
+  let candidates = [];
+  // Fill the share pool before any early return: a topic with a single unseen
+  // candidate cannot produce an article but is still a valid share source.
+  if (discovered.length > 0) {
+    const unseen = await filterUnseen(env, discovered);
+    if (Array.isArray(pool)) {
+      pool.push(...unseen.map((c) => ({ ...c, topicSlug: topic.slug, searchKeyword: topic.searchKeyword })));
+    }
+    candidates = unseen.slice(0, 8);
+  }
   if (discovered.length < 2) {
     return { topic: topic.slug, status: "skipped", reason: "not-enough-sources", discovered: discovered.length };
   }
-
-  const candidates = (await filterUnseen(env, discovered)).slice(0, 8);
   if (candidates.length < 2) {
     return { topic: topic.slug, status: "skipped", reason: "all-sources-seen", discovered: discovered.length };
   }
@@ -429,6 +586,110 @@ async function generateForTopic(env, { topic, signals, existingTitles }) {
   };
 }
 
+/**
+ * Fallback: publish at most one short "Điểm tin" post sharing a recent news
+ * article, with Good Jobs's own commentary and the original link first.
+ */
+export async function shareOriginal(env, { pool, existingTitles }) {
+  const candidates = pickShareCandidate(pool || [], existingTitles || []);
+  if (candidates.length === 0) return { status: "share-skipped", reason: "no-candidate" };
+
+  let lastReason = "no-candidate";
+  for (const item of candidates) {
+    let feedback = "";
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let generated;
+      try {
+        generated = await generateShareDraft(env, { item, feedback });
+      } catch (error) {
+        lastReason = String(error?.message || error).slice(0, 240);
+        break;
+      }
+
+      const draft = generated.draft;
+      const gate = gateShare(draft, item, existingTitles || []);
+      if (!gate.ok) {
+        feedback = `- ${gate.errors.join("\n- ")}`;
+        lastReason = gate.errors.join("; ");
+        continue;
+      }
+
+      const paragraphs = draft.paragraphs;
+      const bodyText = paragraphs.join("\n\n");
+      const hash = (await sha256Hex(`${draft.title}|${bodyText}`)).slice(0, 10);
+      const slug = `${slugify(draft.title) || "diem-tin"}-${hash.slice(0, 6)}`;
+      const publishedAt = ictIso();
+      const url = `${env.SITE_URL || "https://goodjobs.io.vn"}/news/${slug}`;
+      const dek = truncate(`Góc nhìn của Good Jobs về bài "${item.title}" trên ${item.publisher}.`, 220);
+      const contentHash = (await sha256Hex(JSON.stringify({ title: draft.title, dek, bodyText }))).slice(0, 32);
+      const sources = [{ title: item.title, url: item.link, publisher: item.publisher }];
+
+      const record = {
+        id: crypto.randomUUID(),
+        slug,
+        title: draft.title,
+        dek,
+        metaDescription: truncate(dek, 158),
+        bodyHtml: buildShareBodyHtml(item, paragraphs),
+        bodyText,
+        category: SHARE_CATEGORY,
+        tags: draft.tags,
+        sources,
+        signals: {},
+        takeaways: [],
+        searchKeyword: item.searchKeyword || "việc làm",
+        linkedinText: buildShareLinkedInText(draft, item, url),
+        linkedinStatus: "draft",
+        linkedinUrl: "",
+        status: "published",
+        contentHash,
+        publishedAt,
+        url,
+      };
+
+      const linkedin = await publishToLinkedIn(env, {
+        ...record,
+        previewUrl: item.link,
+        previewTitle: item.title,
+        previewDescription: item.publisher,
+      });
+      record.linkedinStatus = linkedin.status;
+      record.linkedinUrl = linkedin.postId || "";
+
+      await insertArticle(env, record);
+      await markSeen(env, [item], record.sources);
+
+      return {
+        topic: item.topicSlug,
+        status: "shared",
+        slug,
+        title: record.title,
+        url,
+        source: item.link,
+        publisher: item.publisher,
+        model: generated.model,
+        linkedin: linkedin.status,
+      };
+    }
+  }
+
+  return { status: "share-skipped", reason: lastReason || "no-candidate" };
+}
+
+/** Fill `pool` with unseen candidates per topic without generating articles. */
+async function collectSharePool(env, topics, pool) {
+  for (const topic of topics) {
+    try {
+      const discovered = await discoverCandidates(topic, 10);
+      if (discovered.length === 0) continue;
+      const unseen = await filterUnseen(env, discovered);
+      pool.push(...unseen.map((c) => ({ ...c, topicSlug: topic.slug, searchKeyword: topic.searchKeyword })));
+    } catch (error) {
+      console.warn("share pool collection failed", topic.slug, String(error).slice(0, 160));
+    }
+  }
+}
+
 function runSummaryId(runDate) {
   return `run-${runDate}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -474,18 +735,33 @@ export async function runNewsJob(env, options = {}) {
     ? [topicBySlug(options.topicSlug)].filter(Boolean)
     : pickTopics(runDate, perRun);
   const results = [];
+  const pool = [];
 
-  for (const topic of topics) {
-    try {
-      const result = await generateForTopic(env, { topic, signals, existingTitles });
-      results.push(result);
-      if (result.status === "published" && result.title) existingTitles.push(result.title);
-    } catch (error) {
-      results.push({ topic: topic.slug, status: "failed", reason: String(error).slice(0, 300) });
+  if (options.shareOnly) {
+    await collectSharePool(env, topics, pool);
+  } else {
+    for (const topic of topics) {
+      try {
+        const result = await generateForTopic(env, { topic, signals, existingTitles, pool });
+        results.push(result);
+        if (result.status === "published" && result.title) existingTitles.push(result.title);
+      } catch (error) {
+        results.push({ topic: topic.slug, status: "failed", reason: String(error).slice(0, 300) });
+      }
     }
   }
 
-  const published = results.filter((r) => r.status === "published").length;
+  const publishedTopics = results.filter((r) => r.status === "published").length;
+  if (publishedTopics === 0 && options.share !== false) {
+    try {
+      results.push(await shareOriginal(env, { pool, existingTitles }));
+    } catch (error) {
+      results.push({ status: "share-skipped", reason: String(error).slice(0, 300) });
+    }
+  }
+
+  const published = results.filter((r) => r.status === "published" || r.status === "shared").length;
+  const shared = results.filter((r) => r.status === "shared").length;
   const skipped = results.filter((r) => r.status === "skipped").length;
   const finishedAt = ictIso();
   const notes = JSON.stringify(results).slice(0, 4000);
@@ -505,6 +781,7 @@ export async function runNewsJob(env, options = {}) {
     runId,
     runDate,
     published,
+    shared,
     skipped,
     results,
     signals: {
