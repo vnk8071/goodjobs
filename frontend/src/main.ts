@@ -893,7 +893,9 @@ showIntentBox(extractedKeyword, inputType, reasoning);
 // by runSearch(). Use the "Share results" button to get a shareable link.
 (() => {
   const url = new URL(window.location.href);
-  const kw = (url.searchParams.get("kw") ?? "").trim();
+  const rawKw = (url.searchParams.get("kw") ?? "").trim();
+  // Crawlers sometimes open the SearchAction URL template literally: /?kw={search_term_string}
+  const kw = /^\{[^{}]*\}$/.test(rawKw) ? "" : rawKw;
   const loc = (url.searchParams.get("loc") ?? "").trim();
   const job = (url.searchParams.get("job") ?? "").trim() || null;
   _pendingSharedJobLink = job;

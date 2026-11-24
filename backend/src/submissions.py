@@ -8,6 +8,7 @@ see docs/superpowers/specs/2026-09-05-job-submissions-design.md.
 
 import html
 import json
+import re
 import time
 import unicodedata
 import uuid
@@ -48,6 +49,8 @@ def _validate(data: dict) -> None:
     apply_link = str(data.get("apply_link", "")).strip()
     if apply_link and not (apply_link.startswith("http://") or apply_link.startswith("https://")):
         raise ValueError("apply_link must start with http:// or https://")
+    if apply_link and (len(apply_link) > 2048 or re.search(r"[\s\"'<>`]", apply_link)):
+        raise ValueError("apply_link must be a valid URL")
     if not apply_link and not str(data.get("contact_email", "")).strip():
         raise ValueError("apply_link or contact_email is required")
 

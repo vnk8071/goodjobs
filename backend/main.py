@@ -1,4 +1,5 @@
 import asyncio
+import hmac
 import json
 import os
 import re
@@ -8,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -469,11 +470,19 @@ async def cache_status():
     return await _cache_status_data()
 
 
-@app.get("/cache/overview")
-async def cache_overview(secret: str = ""):
-    """Dashboard data: all cached keys with job counts + total embedded vector count."""
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
+def require_admin(response: Response, x_admin_secret: str = Header(default="")) -> None:
+    """Admin gate: secret in the X-Admin-Secret header only, never in the URL (URLs get logged)."""
+    if not ADMIN_SECRET:
+        raise HTTPException(status_code=503, detail="Admin API disabled: ADMIN_SECRET is not set")
+    if not hmac.compare_digest(x_admin_secret.encode(), ADMIN_SECRET.encode()):
         raise HTTPException(status_code=403, detail="Forbidden")
+    # Auth is header-only, so the URL alone must never serve a cached admin response.
+    response.headers["Cache-Control"] = "no-store, private"
+
+
+@app.get("/cache/overview", dependencies=[Depends(require_admin)])
+async def cache_overview():
+    """Dashboard data: all cached keys with job counts + total embedded vector count."""
     now = time.time()
     STALE_THRESHOLD = 7200
     age_cutoff = now - RECENT_DAYS * 86400
@@ -573,11 +582,9 @@ async def cache_overview(secret: str = ""):
     }
 
 
-@app.get("/admin/embedded-jobs")
-async def admin_embedded_jobs(secret: str = ""):
+@app.get("/admin/embedded-jobs", dependencies=[Depends(require_admin)])
+async def admin_embedded_jobs():
     """List all cached jobs with their embedding status."""
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
 
     redis = get_redis()
     jobs_out: list[dict] = []
@@ -626,15 +633,13 @@ async def admin_embedded_jobs(secret: str = ""):
     return {"count": len(jobs_out), "jobs": jobs_out}
 
 
-@app.post("/admin/embed-test")
-async def admin_embed_test(secret: str = "", n: int = 3):
+@app.post("/admin/embed-test", dependencies=[Depends(require_admin)])
+async def admin_embed_test(n: int = 3):
     """Embed a small sample of cached jobs to verify the Cloudflare Vectorize pipeline.
 
     Picks up to `n` unembedded jobs from the cache, embeds them, upserts to Vectorize,
     and marks them in Redis. Returns per-job results so you can see exactly what happened.
     """
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
     n = max(1, min(n, 20))  # clamp 1–20
 
     # Find up to n unembedded fresh jobs from the cache
@@ -701,16 +706,13 @@ async def admin_embed_test(secret: str = "", n: int = 3):
     }
 
 
-@app.get("/admin/analytics")
-async def admin_analytics(secret: str = "", days: int = 30):
+@app.get("/admin/analytics", dependencies=[Depends(require_admin)])
+async def admin_analytics(days: int = 30):
     """User-traffic analytics over search.log, plus per-day scrape-cycle health.
 
     Warmup scrapes are excluded from user counts and reported under `scrape_*`
     and `daily[].morning/evening`. See src/analytics.py.
     """
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
     days = max(1, min(days, 90))
     log_dir = os.getenv("LOG_DIR", os.path.join(os.path.dirname(__file__), "logs"))
     backup_path = os.path.join(log_dir, "analytics.json")
@@ -736,11 +738,9 @@ async def admin_analytics(secret: str = "", days: int = 30):
     return result
 
 
-@app.get("/admin/analytics/day")
-async def admin_analytics_day(date: str, secret: str = ""):
+@app.get("/admin/analytics/day", dependencies=[Depends(require_admin)])
+async def admin_analytics_day(date: str):
     """User searches and scrape-cycle health for a single day (YYYY-MM-DD, ICT)."""
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
     try:
         day = datetime.strptime(date, "%Y-%m-%d").date()
     except ValueError:
@@ -1125,9 +1125,8 @@ async def stats():
     return {"jobs_this_week": count}
 
 
-@app.get("/cache/scrape")
+@app.get("/cache/scrape", dependencies=[Depends(require_admin)])
 async def cache_scrape(
-    secret: str = "",
     keyword: str | None = None,
     location: str | None = None,
     warmup_only: bool = False,
@@ -1140,9 +1139,6 @@ async def cache_scrape(
       /cache/scrape?keyword=AI Engineer&location=Ho Chi Minh City
       /cache/scrape?warmup_only=true
     """
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
     loop = asyncio.get_event_loop()
     status = await _cache_status_data()
 
@@ -1210,26 +1206,20 @@ async def submit_job(body: SubmissionRequest, request: Request):
     return {"ok": True, "message": "Submitted for review"}
 
 
-@app.get("/admin/submissions/pending")
-async def admin_submissions_pending(secret: str = ""):
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
+@app.get("/admin/submissions/pending", dependencies=[Depends(require_admin)])
+async def admin_submissions_pending():
     return await list_pending()
 
 
-@app.post("/admin/submissions/{sub_id}/approve")
-async def admin_submissions_approve(sub_id: str, secret: str = ""):
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
+@app.post("/admin/submissions/{sub_id}/approve", dependencies=[Depends(require_admin)])
+async def admin_submissions_approve(sub_id: str):
     if not await approve(sub_id):
         raise HTTPException(status_code=404, detail="Submission not found")
     return {"ok": True}
 
 
-@app.post("/admin/submissions/{sub_id}/reject")
-async def admin_submissions_reject(sub_id: str, secret: str = ""):
-    if ADMIN_SECRET and secret != ADMIN_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
+@app.post("/admin/submissions/{sub_id}/reject", dependencies=[Depends(require_admin)])
+async def admin_submissions_reject(sub_id: str):
     if not await reject(sub_id):
         raise HTTPException(status_code=404, detail="Submission not found")
     return {"ok": True}

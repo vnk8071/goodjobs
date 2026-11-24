@@ -758,6 +758,12 @@
       return s;
     }
 
+    // The admin secret goes in a header, never the URL: URLs end up in server logs.
+    function adminFetch(url, secret, options = {}) {
+      const headers = { ...(options.headers || {}), "X-Admin-Secret": secret };
+      return fetch(url, { ...options, headers });
+    }
+
     async function authenticate() {
       let secret = getSecret();
       while (true) {
@@ -766,7 +772,7 @@
           document.body.style.display = "";
           return;
         }
-        const res = await fetch(`${API_BASE}/admin/analytics?secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/admin/analytics`, secret);
         if (res.ok) {
           document.body.style.display = "";
           return;
@@ -799,7 +805,7 @@
       btn.disabled = true;
       btn.textContent = "Loading…";
       try {
-        const res = await fetch(`${API_BASE}/cache/overview?secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/cache/overview`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           document.getElementById("keysBody").innerHTML =
@@ -913,16 +919,28 @@
         ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
 
+    // For a value placed in a single-quoted JS string inside a double-quoted HTML
+    // attribute, e.g. onclick="f('…')": escape for JS first, then for HTML.
     function escAttr(s) {
-      // Escape for single-quoted HTML attributes.
-      return String(s).replace(/[\\']/g, c => (c === "\\" ? "\\\\" : "\\'"));
+      const js = String(s).replace(/[\\'\n\r\u2028\u2029]/g, c => ({
+        "\\": "\\\\", "'": "\\'", "\n": "\\n", "\r": "\\r", "\u2028": "\\u2028", "\u2029": "\\u2029",
+      }[c]));
+      return escHtml(js);
+    }
+
+    // External link, or plain text when the URL is not http(s) (blocks javascript:/data: hrefs).
+    function extLink(url, text) {
+      const u = String(url || "");
+      return /^https?:\/\//i.test(u)
+        ? `<a href="${escHtml(u)}" target="_blank" rel="noopener noreferrer">${escHtml(text)}</a>`
+        : escHtml(text);
     }
 
     async function scrapeKey(keyword, location) {
       const secret = getSecret();
       if (!secret) return;
       try {
-        const res = await fetch(`${API_BASE}/cache/scrape?secret=${encodeURIComponent(secret)}&keyword=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}`);
+        const res = await adminFetch(`${API_BASE}/cache/scrape?keyword=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           alert("Invalid secret key.");
@@ -944,7 +962,7 @@
       btn.disabled = true;
       btn.textContent = "Warming…";
       try {
-        const res = await fetch(`${API_BASE}/cache/scrape?secret=${encodeURIComponent(secret)}&warmup_only=true`);
+        const res = await adminFetch(`${API_BASE}/cache/scrape?warmup_only=true`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           alert("Invalid secret key.");
@@ -972,7 +990,7 @@
       const btn = document.getElementById("analyticsRefreshBtn");
       if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
       try {
-        const res = await fetch(`${API_BASE}/admin/analytics?secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/admin/analytics`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           _analyticsLoaded = true;
@@ -1191,7 +1209,7 @@
       if (!secret) return;
       document.getElementById("dayBody").innerHTML = `<tr><td colspan="5" class="loading">Loading…</td></tr>`;
       try {
-        const res = await fetch(`${API_BASE}/admin/analytics/day?date=${encodeURIComponent(day)}&secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/admin/analytics/day?date=${encodeURIComponent(day)}`, secret);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         renderDay(await res.json());
       } catch (e) {
@@ -1231,7 +1249,7 @@
       btn.textContent = "Loading…";
       tbody.innerHTML = `<tr><td colspan="5" class="loading">Fetching embedded jobs…</td></tr>`;
       try {
-        const res = await fetch(`${API_BASE}/admin/embedded-jobs?secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/admin/embedded-jobs`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Invalid secret key.</td></tr>`;
@@ -1309,7 +1327,7 @@
               <td style="width:28px;">
                 ${hasDesc ? `<button class="expand-btn" onclick="toggleDesc('${descId}')" title="Toggle description">▶</button>` : ""}
               </td>
-              <td class="mono"><a href="${escHtml(j.link)}" target="_blank" rel="noopener">${escHtml(j.title)}</a></td>
+              <td class="mono">${extLink(j.link, j.title)}</td>
               <td class="text-muted">${escHtml(j.company || "—")}</td>
               <td class="text-muted">${escHtml(j.location || "—")}</td>
               <td><span class="badge badge-nonwarmup">${escHtml(j.source || "—")}</span></td>
@@ -1357,7 +1375,7 @@
       if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
       tbody.innerHTML = `<tr><td colspan="7" class="loading">Loading…</td></tr>`;
       try {
-        const res = await fetch(`${API_BASE}/admin/submissions/pending?secret=${encodeURIComponent(secret)}`);
+        const res = await adminFetch(`${API_BASE}/admin/submissions/pending`, secret);
         if (res.status === 403) {
           sessionStorage.removeItem("admin_secret");
           tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
@@ -1381,14 +1399,12 @@
         ? `<tr><td colspan="7" class="loading text-muted">No pending submissions.</td></tr>`
         : items.map(s => {
           const applyText = s.apply_link || s.contact_email || "—";
-          const applyHtml = s.apply_link
-            ? `<a href="${escAttr(s.apply_link)}" target="_blank" rel="noopener">${escHtml(applyText)}</a>`
-            : escHtml(applyText);
+          const applyHtml = extLink(s.apply_link, applyText);
           const submitted = s.submitted_ts ? new Date(s.submitted_ts * 1000).toLocaleString() : "—";
           const desc = s.description || "";
           const descShort = desc.length > 160 ? `${desc.slice(0, 160)}…` : desc;
           return `
-              <tr id="sub-row-${escAttr(s.id)}">
+              <tr id="sub-row-${escHtml(s.id)}">
                 <td class="text-muted" style="white-space:nowrap;">${submitted}</td>
                 <td><strong>${escHtml(s.title)}</strong></td>
                 <td>${escHtml(s.company)}</td>
@@ -1410,8 +1426,9 @@
       const buttons = row ? row.querySelectorAll("button") : [];
       buttons.forEach(b => b.disabled = true);
       try {
-        const res = await fetch(
-          `${API_BASE}/admin/submissions/${encodeURIComponent(id)}/${action}?secret=${encodeURIComponent(secret)}`,
+        const res = await adminFetch(
+          `${API_BASE}/admin/submissions/${encodeURIComponent(id)}/${action}`,
+          secret,
           { method: "POST" }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -37,8 +37,8 @@ Warmup runs every 2h (`SCRAPE_INTERVAL=7200`), check cycle 10 min; a scrape fire
 ## Force actions
 
 ```bash
-# Trigger a live scrape into cache for one keyword/location
-curl -s "localhost:8000/cache/scrape?keyword=python&location=Ho+Chi+Minh+City"
+# Trigger a live scrape into cache for one keyword/location (admin: needs ADMIN_SECRET set)
+curl -s -H "X-Admin-Secret: $ADMIN_SECRET" "localhost:8000/cache/scrape?keyword=python&location=Ho+Chi+Minh+City"
 
 # Add a permanent warmup pair
 curl -s -X POST localhost:8000/warmup/keywords \
