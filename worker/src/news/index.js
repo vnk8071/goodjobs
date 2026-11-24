@@ -7,16 +7,12 @@ import { topicBySlug } from "./config.js";
 export { runNewsJob };
 import { renderArticlePage, renderNewsIndex, renderNewsNotFound, renderNewsSitemap, renderRss } from "./render.js";
 import { html, json, xml } from "./util.js";
+import { hasBearer } from "../auth.js";
 
 const PAGE_SIZE = 10;
 
-function authorized(request, url, env) {
-  const secret = env.NEWS_SECRET || env.SYNC_SECRET || "";
-  if (!secret) return false;
-  const header = request.headers.get("Authorization") || "";
-  const bearer = header.startsWith("Bearer ") ? header.slice(7) : "";
-  const query = url.searchParams.get("secret") || "";
-  return bearer === secret || query === secret;
+function authorized(request, env) {
+  return hasBearer(request, env.NEWS_SECRET || env.SYNC_SECRET || "");
 }
 
 async function getPublished(env, limit, offset = 0, category = "") {
@@ -162,7 +158,7 @@ export async function handleNewsApi(request, env, url) {
   if (path === "/api/news/list") {
     const limit = Math.max(1, Math.min(50, Number(url.searchParams.get("limit")) || 20));
     const status = (url.searchParams.get("status") || "published").trim();
-    const isAuthed = authorized(request, url, env);
+    const isAuthed = await authorized(request, env);
     if (status !== "published" && !isAuthed) {
       return json({ error: "unauthorized" }, 401);
     }
@@ -178,7 +174,7 @@ export async function handleNewsApi(request, env, url) {
   }
 
   if (path === "/api/news/debug-sources") {
-    if (!authorized(request, url, env)) return json({ error: "unauthorized" }, 401);
+    if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     const topic = topicBySlug(url.searchParams.get("topic") || "");
     if (!topic) return json({ error: "unknown topic" }, 400);
     try {
@@ -189,7 +185,7 @@ export async function handleNewsApi(request, env, url) {
   }
 
   if (path === "/api/news/debug-feed") {
-    if (!authorized(request, url, env)) return json({ error: "unauthorized" }, 401);
+    if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     const target = url.searchParams.get("url") || "";
     try {
       return json({ ok: true, ...(await debugFeed(target)) });
@@ -199,7 +195,7 @@ export async function handleNewsApi(request, env, url) {
   }
 
   if (path === "/api/news/linkedin-drafts") {
-    if (!authorized(request, url, env)) return json({ error: "unauthorized" }, 401);
+    if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     const limit = Math.max(1, Math.min(50, Number(url.searchParams.get("limit")) || 10));
     try {
       const result = await env.DB.prepare(
@@ -214,7 +210,7 @@ export async function handleNewsApi(request, env, url) {
   }
 
   if (path === "/api/news/generate" && request.method === "POST") {
-    if (!authorized(request, url, env)) return json({ error: "unauthorized" }, 401);
+    if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     let body = {};
     try {
       body = await request.json();
@@ -234,7 +230,7 @@ export async function handleNewsApi(request, env, url) {
   }
 
   if (path === "/api/news/linkedin-post" && request.method === "POST") {
-    if (!authorized(request, url, env)) return json({ error: "unauthorized" }, 401);
+    if (!(await authorized(request, env))) return json({ error: "unauthorized" }, 401);
     let body = {};
     try {
       body = await request.json();

@@ -7,6 +7,7 @@
  */
 
 import { handleNewsApi, handleNewsRequest, runNewsJob } from "./news/index.js";
+import { hasBearer } from "./auth.js";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -508,8 +509,7 @@ async function handleEnsure(url, env) {
 }
 
 async function handleSync(request, env) {
-  const auth = request.headers.get("Authorization") || "";
-  if (!env.SYNC_SECRET || auth !== `Bearer ${env.SYNC_SECRET}`) {
+  if (!(await hasBearer(request, env.SYNC_SECRET))) {
     return json({ error: "unauthorized" }, 401, env);
   }
 
