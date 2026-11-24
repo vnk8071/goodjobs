@@ -65,7 +65,8 @@ mcp/goodjobs_mcp.py          # read-only MCP server over the public API
 
 ## Deployment
 
-- Backend: push to `main` triggers `Backend CI/CD`, but **cancel that run** — it deploys to a different `SERVER_HOST`. Deploy manually to the QCS6490 host: `git pull --ff-only`, `docker build -t goodjobs-backend:latest ./backend`, `docker compose -f docker-compose.server.yml up -d --force-recreate backend`.
+- Backend: `Backend CI/CD` only builds and pushes an amd64 image; its deploy job is commented out (it targeted an old VPS). Deploy manually to the QCS6490 host (arm64, reachable over Tailscale only): `git pull --ff-only`, `docker build -t goodjobs-backend:latest ./backend`, `docker compose -f docker-compose.server.yml up -d --force-recreate backend`.
+- Only one machine may run the goodjobs `cloudflared` tunnel: a second connector with the same token silently takes the traffic.
 - Frontend: GitHub Pages via `frontend.yml` on push to `main`.
 - Worker: `cd worker && CLOUDFLARE_ACCOUNT_ID=2ea08cf1cba04b632d819356c96d24fd npx wrangler deploy` (not automated).
 
