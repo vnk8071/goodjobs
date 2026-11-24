@@ -102,16 +102,58 @@ That's it — type a job title (or paste your CV) and a city, and watch results 
 | Endpoint | Method | Description |
 | -------- | ------ | ----------- |
 | `/scrape-stream` | POST | Main SSE endpoint — streams `cached`, `data`, `vector-results`, and enrichment events |
-| `/scrape` | POST | Blocking scrape (returns full job list) |
+| `/recent-jobs`, `/stats` | GET | VN-facing views over the cache |
 | `/classify-input` | POST | LLM intent detection: free text → canonical keyword |
 | `/normalize-city` | POST | Typo correction / abbreviation expansion for cities |
 | `/suggest-query` | POST | Query suggestions |
-| `/search-semantic` | GET | Vector search across cached jobs |
-| `/recent-jobs`, `/stats` | GET | VN-facing views over the cache |
-| `/cache/status`, `/cache/overview` | GET | Cache keys with `fetched_ago` and `job_count` |
-| `/cache/scrape` | GET | Trigger a scrape for a specific key |
-| `/warmup/keywords` | GET / POST | Inspect / extend warmup keyword pairs |
+| `/scrape` | POST | Blocking scrape — **agents only, API key** |
+| `/v1/jobs/search` | GET | Agent search — cache-first, `live=true` scrapes on a miss (API key) |
+| `/v1/jobs/recent` | GET | Agent view of the latest cached jobs (API key) |
+| `/v1/jobs/semantic` | GET | Vector search over cached jobs, `top_k` ≤ 50 (API key) |
+| `/v1/classify`, `/v1/normalize-city` | POST | Classifier and city normalization for agents (API key) |
+| `/mcp` | GET / POST / DELETE | Remote MCP server, streamable HTTP (API key) |
+| `/graphql` | GET / POST | GraphQL endpoint (API key) |
+| `/search-semantic` | GET | Vector search across cached jobs — **admin only** |
+| `/cache/status` | GET | Cache keys with `fetched_ago` and `job_count` |
+| `/cache/overview`, `/cache/scrape` | GET | Cache dashboard and manual scrape — **admin only** |
+| `/admin/*` | GET / POST | Admin dashboard data — **admin session or `X-Admin-Secret`** |
+| `/warmup/keywords` | GET | Inspect warmup keyword pairs |
 | `/health` | GET | Health probe |
+
+## 🔑 API keys
+
+Agents call the API with a key; browser routes (`/scrape-stream`, `/recent-jobs*`, `/jobs-details`,
+`/classify-input`, `/normalize-city`, `/suggest-query`, `/chat`) stay open.
+
+**Request a key** — email [khoivn@goodjobs.io.vn](mailto:khoivn@goodjobs.io.vn) or open a
+[GitHub issue](https://github.com/vnk8071/goodjobs/issues) with your name, contact and intended use.
+You get a token like `gj_…`; it is shown once.
+
+**Send it** as `X-API-Key: gj_…` or `Authorization: Bearer gj_…` (never in the URL). Missing or
+revoked keys get `401`, exhausted quotas `429`.
+
+**Daily quotas** (reset at midnight ICT): 500 API calls and 30 live scrapes per key. A search costs
+one call; it also costs one live scrape only when `live=true` *and* nothing is cached.
+
+| Endpoint | What it does |
+| -------- | ------------ |
+| `GET /v1/jobs/search?keyword=&location=&country=&limit=&live=` | Cache-first job search; `source` says `cache`, `live` or `miss` |
+| `GET /v1/jobs/recent?n=&source=` | Latest cached jobs across all searches |
+| `GET /v1/jobs/semantic?q=&top_k=` | Match by meaning (CV summary, skill list); `top_k` ≤ 50 |
+| `POST /v1/classify` `{"text": …}` | Free text → canonical job keyword |
+| `POST /v1/normalize-city` `{"text": …}` | City typos/abbreviations → canonical city |
+
+```bash
+curl -s "https://api.goodjobs.io.vn/v1/jobs/search?keyword=backend%20engineer&location=hcmc&limit=10" \
+  -H "X-API-Key: gj_your_key_here"
+```
+
+## 🛠️ Admin dashboard
+
+The admin page (`/admin/`) logs in with a username and password: set `ADMIN_USERNAME` and
+`ADMIN_PASSWORD_HASH` (generate the hash with `cd backend && python -m src.admin_auth hash`). Agent
+API keys are created, listed and revoked in its **API Keys** tab. `X-Admin-Secret` (`ADMIN_SECRET`)
+still works for curl and break-glass access. Both are sent as headers, never in the URL.
 
 ## 🏗️ Architecture
 
@@ -143,7 +185,7 @@ Phase 2 ── Per-site description enrichment — VN sources (LinkedIn, TopCV,
 ### Caching & warmup
 
 - Results are cached permanently in Redis by `(keyword, location)`; individual jobs are pruned after **14 days** (`RECENT_DAYS`). Global entries are namespaced (`jobs:{country}:…`) and excluded from VN-facing views and warmup.
-- 📝 **Direct submissions**: Headhunters can submit a job via `POST /submissions`; after admin review (`/admin/submissions/*`, gated by `ADMIN_SECRET`) it's merged into search results as source `"Direct"`. Stored in Redis under `submissions:{pending,approved,rejected}`, never written into the keyword/location cache.
+- 📝 **Direct submissions**: Headhunters can submit a job via `POST /submissions`; after admin review (`/admin/submissions/*`, gated by the admin login or `ADMIN_SECRET`) it's merged into search results as source `"Direct"`. Stored in Redis under `submissions:{pending,approved,rejected}`, never written into the keyword/location cache.
 - **Background warmup**: ~30 VN keyword×location pairs every **2 hours**, checked every 10 minutes. LinkedIn uses `f_TPR=r7200` for incremental 2-hour windows; other scrapers refetch the full window. New jobs merge into existing caches, deduplicated by link.
 
 ### Project structure
@@ -218,7 +260,11 @@ This repo ships [agent skills](.claude/skills/) so coding agents (Claude Code, o
 
 ## 🧩 Third-party: career-ops
 
-[career-ops](https://github.com/vnk8071/career-ops/tree/feat/goodjobs-provider) is vendored as a git submodule at `thirdparty/career-ops` (branch `feat/goodjobs-provider`). It consumes Good Jobs as a source via `providers/goodjobs.mjs`, a thin client that calls the public `POST /scrape` endpoint and normalizes the results.
+[career-ops](https://github.com/vnk8071/career-ops/tree/feat/goodjobs-provider) is vendored as a git submodule at `thirdparty/career-ops` (branch `feat/goodjobs-provider`). It consumes Good Jobs as a source via `providers/goodjobs.mjs`, a thin client that calls the agent `POST /scrape` endpoint and normalizes the results.
+
+Since `/scrape` now requires authentication, career-ops needs an [API key](#-api-keys): set
+`GOODJOBS_API_KEY` (or the provider's equivalent setting) to a `gj_…` token, and the provider must
+send it as the `X-API-Key` header. Without it every request fails with `401`.
 
 ```bash
 # Clone with the submodule
@@ -245,23 +291,24 @@ git submodule update --remote thirdparty/career-ops
 
 ## 🔌 MCP Server
 
-`mcp/goodjobs_mcp.py` exposes Good Jobs to MCP clients (Claude Code, Claude Desktop, …) as read-only tools over stdio. It calls the public backend by default, so no local stack is needed.
+Good Jobs speaks MCP two ways; both need an [API key](#-api-keys).
 
-| Tool | Wraps | Purpose |
-| ---- | ----- | ------- |
-| `search_jobs` | `POST /scrape` | Live search by keyword and location; newest first |
-| `recent_jobs` | `GET /recent-jobs` | Latest postings across cached searches, optionally one board |
-| `semantic_search` | `GET /search-semantic` | Match by meaning, e.g. a pasted CV summary |
-| `classify_keyword` | `POST /classify-input` | Turn free text or a CV into a canonical job title |
-| `normalize_city` | `POST /normalize-city` | Fix city typos and abbreviations ("hcmc" → Ho Chi Minh City) |
-| `cache_status` | `GET /cache/status` | Cache freshness and job counts per keyword and location |
+**Remote (recommended — nothing to install):**
 
-Admin and submission routes are deliberately not exposed.
+```bash
+claude mcp add --transport http goodjobs https://api.goodjobs.io.vn/mcp --header "X-API-Key: gj_your_key_here"
+```
+
+The endpoint is `/mcp` (streamable HTTP, stateless). Each tool call is verified against the key's
+daily quotas before it runs.
+
+**Local stdio** (`mcp/goodjobs_mcp.py`) — for clients without HTTP transport support:
 
 ```bash
 cd mcp
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
+export GOODJOBS_API_KEY=gj_your_key_here
 python -m pytest -q test_goodjobs_mcp.py   # unit tests, no network
 ```
 
@@ -271,7 +318,18 @@ Register it with Claude Code:
 claude mcp add goodjobs -- /absolute/path/to/goodjobs/mcp/.venv/bin/python /absolute/path/to/goodjobs/mcp/goodjobs_mcp.py
 ```
 
-Set `GOODJOBS_API_URL` to point at another deployment. Use `http://localhost:8000` for a local `docker compose up`. The first `search_jobs` call on an uncached keyword can take a minute, because it runs a full multi-board scrape.
+| Tool | Calls | Purpose |
+| ---- | ----- | ------- |
+| `search_jobs` | `GET /v1/jobs/search` | Cache-first search by keyword and location; `live=true` scrapes on a cache miss and spends one daily live unit |
+| `recent_jobs` | `GET /v1/jobs/recent` | Latest postings across cached searches, optionally one board |
+| `semantic_search` | `GET /v1/jobs/semantic` | Match by meaning, e.g. a pasted CV summary |
+| `classify_keyword` | `POST /v1/classify` | Turn free text or a CV into a canonical job title |
+| `normalize_city` | `POST /v1/normalize-city` | Fix city typos and abbreviations ("hcmc" → Ho Chi Minh City) |
+
+Admin and submission routes are deliberately not exposed. Set `GOODJOBS_API_URL` to point the stdio
+server at another deployment (`http://localhost:8000` for a local `docker compose up`). The first
+`search_jobs` call with `live=true` on an uncached keyword can take a minute, because it runs a full
+multi-board scrape.
 
 ## 🤝 Contributing
 

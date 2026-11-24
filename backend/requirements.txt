@@ -8,3 +8,4 @@ playwright>=1.40.0
 playwright-stealth>=2.0.0
 redis[asyncio]>=5.0.0
 strawberry-graphql>=0.200.0
+mcp>=1.25,<2

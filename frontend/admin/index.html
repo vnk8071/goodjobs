@@ -422,11 +422,78 @@
         font-size: 1.5rem;
       }
     }
+
+    /* ── Login view ────────────────────────────────── */
+    .login-view {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem 1rem;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .login-card h1 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .login-card label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .login-card input {
+      width: 100%;
+      padding: 0.5rem 0.7rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.9rem;
+      color: var(--text);
+      outline: none;
+    }
+
+    .login-card input:focus {
+      border-color: var(--primary);
+    }
+
+    .login-card .error-msg {
+      padding: 0;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 
 <body style="display:none">
-  <div class="container">
+  <div id="loginView" class="login-view" style="display:none">
+    <form id="loginForm" class="login-card" method="post" action="#" autocomplete="on">
+      <h1>Good Jobs — Admin</h1>
+      <label>Username <input id="loginUsername" name="username" autocomplete="username" required maxlength="100"></label>
+      <label>Password <input id="loginPassword" name="password" type="password" autocomplete="current-password" required maxlength="200"></label>
+      <p id="loginError" class="error-msg" style="display:none"></p>
+      <button id="loginBtn" type="submit" class="refresh-btn">Log in</button>
+    </form>
+    <noscript><p class="error-msg">The admin page needs JavaScript.</p></noscript>
+  </div>
+
+  <div class="container" style="display:none">
     <header>
       <div class="header-left">
         <a href="/" class="logo" aria-label="Good Jobs home">
@@ -454,6 +521,7 @@
         <button id="warmupAllBtn" class="refresh-btn" onclick="warmupAll()" style="background:#0f172a;">
           Warmup All
         </button>
+        <button id="logoutBtn" class="refresh-btn" onclick="logout()">Log out</button>
       </div>
     </header>
 
@@ -494,6 +562,7 @@
       <button class="tab-btn" onclick="switchTab('cache')">Cache Keys</button>
       <button class="tab-btn" onclick="switchTab('embedded')">Embedded Jobs</button>
       <button class="tab-btn" onclick="switchTab('submissions')">Submissions</button>
+      <button class="tab-btn" onclick="switchTab('apikeys')">API Keys</button>
     </div>
 
     <!-- Tab: Cache Keys -->
@@ -590,6 +659,59 @@
             <tbody id="submissionsBody">
               <tr>
                 <td colspan="7" class="loading">Click Submissions tab to load…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: API Keys -->
+    <div id="tab-apikeys" class="tab-panel">
+      <div class="table-card" style="margin-bottom:1.25rem">
+        <div class="table-card-header">
+          <h2>Create API key</h2>
+        </div>
+        <div style="padding:1rem 1.25rem;display:flex;flex-wrap:wrap;gap:0.65rem;align-items:center">
+          <input id="apiKeyName" class="filter-input" type="text" maxlength="80" placeholder="name (e.g. career-ops)" required />
+          <input id="apiKeyContact" class="filter-input" type="text" maxlength="200" placeholder="email or GitHub handle" />
+          <input id="apiKeyCalls" class="filter-input" type="number" min="1" placeholder="500" style="width:110px" />
+          <input id="apiKeyLive" class="filter-input" type="number" min="0" placeholder="30" style="width:110px" />
+          <button id="apiKeyCreateBtn" class="approve-btn" onclick="createApiKey()">Create key</button>
+        </div>
+        <div id="newApiKeyBox" style="display:none;padding:0 1.25rem 1rem">
+          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-bottom:0.4rem">
+            <code id="newApiKey" style="padding:0.35rem 0.6rem;background:#f1f5f9;border:1px solid var(--border);border-radius:6px;font-size:0.82rem;word-break:break-all"></code>
+            <button id="apiKeyCopyBtn" class="refresh-btn" onclick="copyNewApiKey()">Copy</button>
+            <button class="reject-btn" onclick="hideNewApiKey()">Hide</button>
+          </div>
+          <div class="text-muted" style="font-size:0.8rem">Shown once. Copy it now and send it to the requester; it cannot be shown again.</div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-card-header">
+          <h2>Agent API Keys <span id="apiKeysCount"
+              style="font-weight:400;color:var(--muted);font-size:0.82rem;"></span></h2>
+          <button id="apiKeysLoadBtn" class="refresh-btn" onclick="loadApiKeys()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Created</th>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>ID</th>
+                <th>Quota/day</th>
+                <th>Used today</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="apiKeysBody">
+              <tr>
+                <td colspan="8" class="loading">Click API Keys tab to load…</td>
               </tr>
             </tbody>
           </table>
@@ -748,40 +870,110 @@
       ? "http://localhost:8000"
       : (import.meta.env.VITE_API_URL ?? "https://api.goodjobs.io.vn");
 
+    const SESSION_KEY = "admin_session";
+
     function getSecret() {
-      let s = sessionStorage.getItem("admin_secret");
-      if (!s) {
-        s = prompt("Enter admin secret key:");
-        if (!s) return null;
-        sessionStorage.setItem("admin_secret", s);
+      const token = sessionStorage.getItem(SESSION_KEY);
+      if (!token) {
+        showLogin();
+        return null;
       }
-      return s;
+      return token;
     }
 
-    // The admin secret goes in a header, never the URL: URLs end up in server logs.
-    function adminFetch(url, secret, options = {}) {
-      const headers = { ...(options.headers || {}), "X-Admin-Secret": secret };
+    // The session token goes in a header, never the URL: URLs end up in server logs.
+    function adminFetch(url, token, options = {}) {
+      const headers = { ...(options.headers || {}), "Authorization": `Bearer ${token}` };
       return fetch(url, { ...options, headers });
     }
 
+    function showLogin(message = "") {
+      sessionStorage.removeItem(SESSION_KEY);
+      const container = document.querySelector(".container");
+      if (container) container.style.display = "none";
+      const view = document.getElementById("loginView");
+      if (view) view.style.display = "flex";
+      const err = document.getElementById("loginError");
+      if (err) {
+        err.textContent = message;
+        err.style.display = message ? "block" : "none";
+      }
+      document.body.style.display = "";
+      const user = document.getElementById("loginUsername");
+      if (user) user.focus();
+    }
+
+    function showApp() {
+      const view = document.getElementById("loginView");
+      if (view) view.style.display = "none";
+      const container = document.querySelector(".container");
+      if (container) container.style.display = "";
+      document.body.style.display = "";
+    }
+
     async function authenticate() {
-      let secret = getSecret();
-      while (true) {
-        if (!secret) {
-          document.body.innerHTML = "<p style='font-family:system-ui;text-align:center;margin-top:20vh;color:#dc2626'>Access denied.</p>";
-          document.body.style.display = "";
-          return;
-        }
-        const res = await adminFetch(`${API_BASE}/admin/analytics`, secret);
+      const token = sessionStorage.getItem(SESSION_KEY);
+      if (!token) {
+        showLogin();
+        return;
+      }
+      try {
+        const res = await adminFetch(`${API_BASE}/admin/me`, token);
         if (res.ok) {
-          document.body.style.display = "";
+          showApp();
           return;
         }
-        sessionStorage.removeItem("admin_secret");
-        secret = prompt("Invalid secret. Enter admin secret key:");
-        if (secret) sessionStorage.setItem("admin_secret", secret);
+      } catch (e) {
+        // Network trouble: fall through to the login form.
+      }
+      showLogin("Session expired. Please log in again.");
+    }
+
+    async function submitLogin(event) {
+      event.preventDefault();
+      const btn = document.getElementById("loginBtn");
+      const username = document.getElementById("loginUsername").value.trim();
+      const passwordInput = document.getElementById("loginPassword");
+      if (btn) { btn.disabled = true; btn.textContent = "Logging in…"; }
+      try {
+        const res = await fetch(`${API_BASE}/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password: passwordInput.value }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sessionStorage.setItem(SESSION_KEY, data.token);
+          passwordInput.value = "";
+          location.reload();
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        const fallback = res.status === 429
+          ? "Too many failed logins. Try again later."
+          : "Invalid username or password";
+        showLogin(data.detail || fallback);
+      } catch (e) {
+        showLogin("Could not reach the server.");
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "Log in"; }
       }
     }
+
+    async function logout() {
+      const token = sessionStorage.getItem(SESSION_KEY);
+      if (token) {
+        try {
+          await adminFetch(`${API_BASE}/admin/logout`, token, { method: "POST" });
+        } catch (e) {
+          // Best effort: the local session is dropped either way.
+        }
+      }
+      sessionStorage.removeItem(SESSION_KEY);
+      location.reload();
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", submitLogin);
 
     authenticate();
 
@@ -790,8 +982,10 @@
       document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
       document.querySelector(`.tab-btn[onclick="switchTab('${name}')"]`).classList.add("active");
       document.getElementById(`tab-${name}`).classList.add("active");
+      if (name !== "apikeys") hideNewApiKey();
       if (name === "analytics" && !_analyticsLoaded) loadAnalytics();
       if (name === "submissions" && !_submissionsLoaded) loadSubmissions();
+      if (name === "apikeys" && !_apiKeysLoaded) loadApiKeys();
     }
 
     let _allKeys = [];
@@ -807,9 +1001,9 @@
       try {
         const res = await adminFetch(`${API_BASE}/cache/overview`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
+          showLogin("Session expired. Please log in again.");
           document.getElementById("keysBody").innerHTML =
-            `<tr><td colspan="7" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
+            `<tr><td colspan="7" class="error-msg">Session expired. Log in again.</td></tr>`;
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -821,7 +1015,7 @@
           "Updated " + new Date().toLocaleTimeString();
       } catch (e) {
         document.getElementById("keysBody").innerHTML =
-          `<tr><td colspan="7" class="error-msg">Failed to load: ${e.message}</td></tr>`;
+          `<tr><td colspan="7" class="error-msg">Failed to load: ${escHtml(e.message)}</td></tr>`;
       } finally {
         btn.disabled = false;
         btn.innerHTML = `
@@ -942,8 +1136,7 @@
       try {
         const res = await adminFetch(`${API_BASE}/cache/scrape?keyword=${encodeURIComponent(keyword)}&location=${encodeURIComponent(location)}`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
-          alert("Invalid secret key.");
+          showLogin("Session expired. Please log in again.");
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -964,8 +1157,7 @@
       try {
         const res = await adminFetch(`${API_BASE}/cache/scrape?warmup_only=true`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
-          alert("Invalid secret key.");
+          showLogin("Session expired. Please log in again.");
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -983,6 +1175,7 @@
     let _intentChart = null;
     let _analyticsLoaded = false;
     let _submissionsLoaded = false;
+    let _apiKeysLoaded = false;
 
     async function loadAnalytics() {
       const secret = getSecret();
@@ -992,10 +1185,10 @@
       try {
         const res = await adminFetch(`${API_BASE}/admin/analytics`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
+          showLogin("Session expired. Please log in again.");
           _analyticsLoaded = true;
           document.getElementById("analyticsBody").innerHTML =
-            `<tr><td colspan="5" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
+            `<tr><td colspan="5" class="error-msg">Session expired. Log in again.</td></tr>`;
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1004,7 +1197,7 @@
         _analyticsLoaded = true;
       } catch (e) {
         document.getElementById("analyticsBody").innerHTML =
-          `<tr><td colspan="5" class="error-msg">Failed to load: ${e.message}</td></tr>`;
+          `<tr><td colspan="5" class="error-msg">Failed to load: ${escHtml(e.message)}</td></tr>`;
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = "Refresh"; }
       }
@@ -1210,6 +1403,10 @@
       document.getElementById("dayBody").innerHTML = `<tr><td colspan="5" class="loading">Loading…</td></tr>`;
       try {
         const res = await adminFetch(`${API_BASE}/admin/analytics/day?date=${encodeURIComponent(day)}`, secret);
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         renderDay(await res.json());
       } catch (e) {
@@ -1251,8 +1448,8 @@
       try {
         const res = await adminFetch(`${API_BASE}/admin/embedded-jobs`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
-          tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Invalid secret key.</td></tr>`;
+          showLogin("Session expired. Please log in again.");
+          tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Session expired. Log in again.</td></tr>`;
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1282,8 +1479,14 @@
       }
 
       tbody.innerHTML = `<tr><td colspan="7" class="loading">Searching embeddings…</td></tr>`;
+      const token = getSecret();
+      if (!token) return;
       try {
-        const res = await fetch(`${API_BASE}/search-semantic?q=${encodeURIComponent(q)}&top_k=50`);
+        const res = await adminFetch(`${API_BASE}/search-semantic?q=${encodeURIComponent(q)}&top_k=50`, token);
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const results = (data.results || []).map(r => ({
@@ -1377,8 +1580,8 @@
       try {
         const res = await adminFetch(`${API_BASE}/admin/submissions/pending`, secret);
         if (res.status === 403) {
-          sessionStorage.removeItem("admin_secret");
-          tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Invalid secret key. Reload to try again.</td></tr>`;
+          showLogin("Session expired. Please log in again.");
+          tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Session expired. Log in again.</td></tr>`;
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1386,7 +1589,7 @@
         renderSubmissions(data);
         _submissionsLoaded = true;
       } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Failed to load: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Failed to load: ${escHtml(e.message)}</td></tr>`;
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = "Refresh"; }
       }
@@ -1431,6 +1634,10 @@
           secret,
           { method: "POST" }
         );
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         if (row) row.remove();
         const remaining = document.querySelectorAll("#submissionsBody tr[id^='sub-row-']").length;
@@ -1442,6 +1649,145 @@
       } catch (e) {
         alert(`Failed to ${action}: ${e.message}`);
         buttons.forEach(b => b.disabled = false);
+      }
+    }
+
+    async function loadApiKeys() {
+      const secret = getSecret();
+      if (!secret) return;
+      const btn = document.getElementById("apiKeysLoadBtn");
+      const tbody = document.getElementById("apiKeysBody");
+      if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+      tbody.innerHTML = `<tr><td colspan="8" class="loading">Loading…</td></tr>`;
+      try {
+        const res = await adminFetch(`${API_BASE}/admin/api-keys`, secret);
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          tbody.innerHTML = `<tr><td colspan="8" class="error-msg">Session expired. Log in again.</td></tr>`;
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderApiKeys(data.keys || []);
+        _apiKeysLoaded = true;
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="8" class="error-msg">Failed to load: ${escHtml(e.message)}</td></tr>`;
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = "Refresh"; }
+      }
+    }
+
+    function renderApiKeys(keys) {
+      document.getElementById("apiKeysCount").textContent =
+        keys.length ? `— ${keys.length} keys` : "";
+      const tbody = document.getElementById("apiKeysBody");
+      tbody.innerHTML = keys.length === 0
+        ? `<tr><td colspan="8" class="loading text-muted">No API keys yet.</td></tr>`
+        : keys.map(k => {
+          const created = k.created_ts ? new Date(k.created_ts * 1000).toLocaleString() : "—";
+          const usage = k.usage_today || {};
+          const status = k.revoked
+            ? `<span class="badge badge-stale">revoked</span>`
+            : `<span class="badge badge-fresh">active</span>`;
+          const action = k.revoked
+            ? `<span class="text-muted">—</span>`
+            : `<button class="reject-btn" onclick="revokeApiKey('${escAttr(k.id)}')">Revoke</button>`;
+          return `
+              <tr>
+                <td class="text-muted" style="white-space:nowrap;">${escHtml(created)}</td>
+                <td><strong>${escHtml(k.name)}</strong></td>
+                <td>${escHtml(k.contact || "—")}</td>
+                <td class="text-muted" style="font-family:monospace;">${escHtml(k.id)}</td>
+                <td>${escHtml(k.calls_per_day)} calls · ${escHtml(k.live_per_day)} live</td>
+                <td>${escHtml(usage.calls ?? 0)} calls · ${escHtml(usage.live ?? 0)} live</td>
+                <td>${status}</td>
+                <td style="white-space:nowrap;">${action}</td>
+              </tr>`;
+        }).join("");
+    }
+
+    async function createApiKey() {
+      const secret = getSecret();
+      if (!secret) return;
+      const nameInput = document.getElementById("apiKeyName");
+      const contactInput = document.getElementById("apiKeyContact");
+      const callsInput = document.getElementById("apiKeyCalls");
+      const liveInput = document.getElementById("apiKeyLive");
+      const name = nameInput.value.trim();
+      if (!name) { alert("A name is required."); return; }
+      const body = { name };
+      const contact = contactInput.value.trim();
+      if (contact) body.contact = contact;
+      if (callsInput.value.trim() !== "") body.calls_per_day = parseInt(callsInput.value, 10);
+      if (liveInput.value.trim() !== "") body.live_per_day = parseInt(liveInput.value, 10);
+      const btn = document.getElementById("apiKeyCreateBtn");
+      if (btn) btn.disabled = true;
+      try {
+        const res = await adminFetch(`${API_BASE}/admin/api-keys`, secret, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          return;
+        }
+        if (res.status === 400) {
+          const data = await res.json().catch(() => ({}));
+          alert(`Invalid input: ${data.detail || "check the form"}`);
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        // Raw key is shown exactly once, via textContent — never innerHTML.
+        document.getElementById("newApiKey").textContent = data.key;
+        document.getElementById("newApiKeyBox").style.display = "block";
+        nameInput.value = "";
+        contactInput.value = "";
+        callsInput.value = "";
+        liveInput.value = "";
+        await loadApiKeys();
+      } catch (e) {
+        alert(`Create failed: ${e.message}`);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function hideNewApiKey() {
+      document.getElementById("newApiKey").textContent = "";
+      document.getElementById("newApiKeyBox").style.display = "none";
+    }
+
+    function copyNewApiKey() {
+      const btn = document.getElementById("apiKeyCopyBtn");
+      const key = document.getElementById("newApiKey").textContent;
+      if (!key) return;
+      navigator.clipboard.writeText(key).then(() => {
+        if (!btn) return;
+        btn.textContent = "Copied";
+        setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+      }).catch(() => alert("Copy failed — select the key and copy it manually."));
+    }
+
+    async function revokeApiKey(id) {
+      const secret = getSecret();
+      if (!secret) return;
+      if (!confirm("Revoke this key? Agents using it will get 401 immediately.")) return;
+      try {
+        const res = await adminFetch(
+          `${API_BASE}/admin/api-keys/${encodeURIComponent(id)}/revoke`,
+          secret,
+          { method: "POST" }
+        );
+        if (res.status === 403) {
+          showLogin("Session expired. Please log in again.");
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await loadApiKeys();
+      } catch (e) {
+        alert(`Revoke failed: ${e.message}`);
       }
     }
 
@@ -1460,10 +1806,18 @@
     window.loadDay = loadDay;
     window.loadSubmissions = loadSubmissions;
     window.reviewSubmission = reviewSubmission;
+    window.loadApiKeys = loadApiKeys;
+    window.createApiKey = createApiKey;
+    window.revokeApiKey = revokeApiKey;
+    window.copyNewApiKey = copyNewApiKey;
+    window.hideNewApiKey = hideNewApiKey;
+    window.logout = logout;
 
     loadAnalytics();
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+    integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+    crossorigin="anonymous" defer></script>
 </body>
 
 </html>

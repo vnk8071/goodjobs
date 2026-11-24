@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Optional
 
 import strawberry
+from strawberry.extensions import MaxAliasesLimiter, QueryDepthLimiter
 
 from src.cache import cache_get, cache_fuzzy_get
 from src.matching import title_matches, extract_skills, posted_ts
@@ -40,6 +41,11 @@ class Query:
     @strawberry.field
     async def jobs(self, keyword: str, location: str, limit: int = 50) -> List[Job]:
         """Search for jobs by keyword and location from cache."""
+        # Same input bounds as /v1/jobs/search: never let this endpoint return an
+        # unbounded number of full cached jobs.
+        if len(keyword) > 120 or len(location) > 80:
+            return []
+        limit = max(1, min(limit, 100))
         result = await cache_get(keyword, location)
         if not result:
             result = await cache_fuzzy_get(keyword, location)
@@ -59,4 +65,7 @@ class Query:
         return "good jobs service is running"
 
 
-schema = strawberry.Schema(query=Query)
+schema = strawberry.Schema(
+    query=Query,
+    extensions=[MaxAliasesLimiter(max_alias_count=3), QueryDepthLimiter(max_depth=4)],
+)

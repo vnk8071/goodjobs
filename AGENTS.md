@@ -60,7 +60,8 @@ mcp/goodjobs_mcp.py          # read-only MCP server over the public API
 - **Add a skill keyword**: `_SKILL_PATTERNS` in `backend/src/constants.py`.
 - **Add a warmup keyword**: edit `_WARMUP_KEYWORDS` in `backend/src/warmup.py` (or the `WARMUP_KEYWORDS` env var).
 - **Check cache state**: `GET /cache/status`.
-- **Admin endpoints** (`/admin/*`, `/cache/overview`, `/cache/scrape`): guarded by `require_admin` in `backend/main.py`. Send the secret in the `X-Admin-Secret` header, never in the URL. If `ADMIN_SECRET` is unset they return 503.
+- **Admin endpoints** (`/admin/*`, `/cache/overview`, `/cache/scrape`): guarded by `require_admin` in `backend/main.py`. Authenticate with an admin login session (`Authorization: Bearer gjs_…` from `POST /admin/login`, username/password from `ADMIN_USERNAME` + `ADMIN_PASSWORD_HASH`) or the break-glass `X-Admin-Secret` header; never put credentials in the URL. If neither an admin account nor `ADMIN_SECRET` is configured they return 503.
+- **Agent routes** (`/scrape`, `/v1/*`, `/mcp`, `/graphql`): require an API key via `require_api_key` and spend the key's daily quotas (`backend/src/apikeys.py`: `calls` and `live`, reset at midnight ICT). Keys are minted/revoked in the admin page's API Keys tab; missing/invalid → 401, quota exhausted → 429.
 - **Admin page rendering** (`frontend/admin/index.html`): `escHtml` for text and plain attributes, `escAttr` only for JS strings inside `onclick="…"`, `extLink()` for any external URL (http/https only).
 
 ## Deployment

@@ -17,3 +17,8 @@ LinkedIn, Indeed, RemoteOK, We Work Remotely, Glassdoor, USAJOBS, Dice.
 
 ## Liên hệ
 khoivn@goodjobs.io.vn · https://www.linkedin.com/company/good-jobs-vietnam/
+
+## API cho agent
+Agent cần API key (`X-API-Key: gj_…`) để dùng `/v1/jobs/search`, `/v1/jobs/recent`,
+`/v1/jobs/semantic`, `/v1/classify`, `/v1/normalize-city` và MCP server tại
+https://api.goodjobs.io.vn/mcp. Cách yêu cầu key và hạn mức: https://github.com/vnk8071/goodjobs#-api-keys

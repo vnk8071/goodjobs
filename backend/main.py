@@ -9,13 +9,16 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from starlette.routing import Route, WebSocketRoute
+from pydantic import BaseModel, Field
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from src.graphql_schema import schema
+from mcp_app import ApiKeyGuard, build_mcp
 
 from src.cache import (
     cache_get,
@@ -39,6 +42,8 @@ from src.concurrency import (
     LIGHT_DETAIL_SITES as _LIGHT_DETAIL,
 )
 from src.logger import log_search, log_app
+from src import apikeys
+from src import admin_auth
 from src.analytics import TZ_ICT, read_search_entries, summarize, day_detail
 from src.utils import timed_scrape, _strip_html
 from src.matching import (
@@ -93,23 +98,22 @@ from src.warmup import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Start the background warmup task on application startup."""
-    log_app("Application starting...")
-    try:
-        asyncio.create_task(warmup(_executor, _light_executor, _SCRAPERS))
-        log_app("Warmup task scheduled")
-    except Exception as e:
-        log_app(f"Failed to start warmup task: {e}")
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, ensure_index)
-    yield
+    # The remote MCP server's session manager must be running for /mcp to serve
+    # requests; it is closed on shutdown, together with the tasks below.
+    async with _mcp.session_manager.run():
+        log_app("Application starting...")
+        try:
+            asyncio.create_task(warmup(_executor, _light_executor, _SCRAPERS))
+            log_app("Warmup task scheduled")
+        except Exception as e:
+            log_app(f"Failed to start warmup task: {e}")
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, ensure_index)
+        yield
     log_app("Application shutting down")
 
 
 app = FastAPI(title="Job Scraper API", lifespan=lifespan, docs_url=None, redoc_url=None)
-
-# Add GraphQL endpoint
-graphql_app = GraphQLRouter(schema)
-app.include_router(graphql_app, prefix="/graphql")
 
 _ALLOWED_ORIGINS = [
     "http://localhost",
@@ -133,6 +137,11 @@ _executor = ThreadPoolExecutor(max_workers=6)
 # (e.g. ViecOi) paint in 1-3s instead of ~14s. Also carries LinkedIn's detail pass,
 # which holds a thread for its per-job cooldowns, hence a few more workers.
 _light_executor = ThreadPoolExecutor(max_workers=4)
+# Embedding (vector) calls get their own small lane: a semantic search can hold a
+# worker for many seconds, and the light lane is needed by LinkedIn/ViecOi
+# listings and LinkedIn's detail pass. A wait_for timeout frees the coroutine,
+# not the thread, so sharing would let a burst starve the scrapers.
+_semantic_executor = ThreadPoolExecutor(max_workers=2)
 # Chromium concurrency gate and the light-lane site sets now live in
 # src/concurrency.py, shared with warmup.py — see that module for why.
 
@@ -149,6 +158,31 @@ def _get_sem() -> asyncio.Semaphore:
     if _scrape_sem is None:
         _scrape_sem = asyncio.Semaphore(_MAX_CONCURRENT)
     return _scrape_sem
+
+
+# Agent search (/scrape): per-site and detail-pass hard timeouts, mirroring the
+# /scrape-stream pattern so a hung browser call can't leak a chromium permit.
+_AGENT_SITE_TIMEOUT = 45.0
+_AGENT_DETAIL_TIMEOUT = 90.0
+# Cap on LinkedIn detail-page fetches per agent search: the detail pass costs
+# ~5s + ~2s per job, so this must fit inside _AGENT_DETAIL_TIMEOUT (a timed-out
+# pass keeps its light-lane thread working) — 8 jobs ≈ 21s + fetches.
+_AGENT_DETAIL_MAX_JOBS = 8
+_AGENT_COUNTRIES = {"VN", "US", "UK", "SG"}
+# Caps concurrent agent live scrapes so a burst of unique agent keywords can never
+# hold every global scrape slot and starve /scrape-stream (the web UI).
+_AGENT_LIVE_CONCURRENCY = int(os.getenv("AGENT_LIVE_CONCURRENCY", "2"))
+_agent_live_sem: asyncio.Semaphore | None = None
+# Single-flight: concurrent identical live scrapes share one detached task.
+_agent_inflight: dict[tuple[str, str, str], asyncio.Task] = {}
+
+
+def _get_agent_live_sem() -> asyncio.Semaphore:
+    """Cap concurrent agent live scrapes so they can never take every global scrape slot."""
+    global _agent_live_sem
+    if _agent_live_sem is None:
+        _agent_live_sem = asyncio.Semaphore(max(1, _AGENT_LIVE_CONCURRENCY))
+    return _agent_live_sem
 
 
 def _get_warmup_sem() -> asyncio.Semaphore:
@@ -185,7 +219,13 @@ async def _fetch_vector_supplement(
     """
     loop = asyncio.get_event_loop()
     try:
-        matches = await loop.run_in_executor(_executor, vector_search, query, top_k)
+        matches = await asyncio.wait_for(
+            loop.run_in_executor(_semantic_executor, vector_search, query, top_k),
+            timeout=30,
+        )
+    except asyncio.TimeoutError:
+        log_app("[vector] supplement search timed out", "WARNING")
+        return []
     except Exception as e:
         log_app(f"[vector] supplement search error: {e}", "ERROR")
         return []
@@ -336,6 +376,192 @@ def _resolve_country(location: str) -> str:
     return _GLOBAL_CITY_COUNTRY.get(key, "VN")
 
 
+async def _agent_live_scrape(
+    keyword: str, cache_keyword: str, location: str, country: str
+) -> list[dict]:
+    """Run every scraper for one agent search behind the shared Chromium gate.
+
+    Same protections as /scrape-stream: light sites on the light executor,
+    Chromium sites behind the chromium semaphore with a hard per-site timeout.
+    Returns the filtered, enriched job list (not yet cached-time refreshed).
+    """
+    loop = asyncio.get_running_loop()
+    chromium_sem = _get_chromium_sem()
+    registry = _SCRAPERS if country == "VN" else _global_scraper_registry(country)
+
+    async def _run_site(site: str, fn) -> list[dict]:
+        try:
+            if site in _LIGHT_LISTING:
+                return await asyncio.wait_for(
+                    loop.run_in_executor(
+                        _light_executor, timed_scrape, site, fn, cache_keyword, location
+                    ),
+                    timeout=_AGENT_SITE_TIMEOUT,
+                )
+            async with chromium_sem:
+                return await asyncio.wait_for(
+                    loop.run_in_executor(
+                        _executor, timed_scrape, site, fn, cache_keyword, location
+                    ),
+                    timeout=_AGENT_SITE_TIMEOUT,
+                )
+        except asyncio.TimeoutError:
+            log_app(f"[agent-search] {site} timed out", "WARNING")
+            return []
+        except Exception as e:
+            log_app(f"[agent-search] {site} error: {e!r}", "ERROR")
+            return []
+
+    results = list(
+        await asyncio.gather(*(_run_site(s, f) for s, f in registry.items()))
+    )
+    if country == "VN":
+        results.append(await search_submissions(cache_keyword, location))
+
+    jobs: list[dict] = []
+    linkedin_jobs: list[dict] = []
+    for result in results:
+        if not isinstance(result, list):
+            continue
+        for j in result:
+            if title_matches(j.get("title", ""), keyword):
+                j["posted_ts"] = posted_ts(j)
+                jobs.append(j)
+                if j.get("source") == "LinkedIn":
+                    linkedin_jobs.append(j)
+
+    if linkedin_jobs:
+        # scrape_linkedin_details mutates the job dicts in place; on timeout keep
+        # the listing data we already have rather than dropping the jobs. Only a
+        # bounded batch goes to the detail pass: the light lane also serves the
+        # LinkedIn/ViecOi listings, and a timed-out call keeps its thread working.
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(
+                    _light_executor,
+                    scrape_linkedin_details,
+                    linkedin_jobs[:_AGENT_DETAIL_MAX_JOBS],
+                ),
+                timeout=_AGENT_DETAIL_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            log_app("[agent-search] linkedin details timed out", "WARNING")
+
+    for j in jobs:
+        j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
+
+    await cache_preserve_posted_dates(cache_keyword, location, jobs, country=country)
+    await cache_set(
+        cache_keyword,
+        location,
+        [j for j in jobs if j.get("source") != "Direct"],
+        time.time(),
+        country=country,
+    )
+    return jobs
+
+
+async def _agent_search(
+    keyword: str, location: str, country: str = "VN", allow_live: bool = True
+) -> tuple[list[dict], str]:
+    """Cache-first search for agent callers; returns (jobs, source) with source in {"cache", "live", "miss"}."""
+    keyword = keyword.strip()
+    if not keyword:
+        raise ValueError("keyword is required")
+
+    location = canonical_location(location)
+    country = (country or "VN").strip().upper()
+    if country not in _AGENT_COUNTRIES:
+        raise ValueError("country must be one of VN, US, UK, SG")
+    if country == "VN":
+        country = _resolve_country(location)
+
+    # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
+    keyword_normalized = " ".join(
+        re.sub(r"\d+", " ", normalize_keyword(keyword)).split()
+    )
+    cache_keyword = strip_level(keyword_normalized)
+
+    kw_words_lower = set(keyword_normalized.lower().split())
+    requested_levels = kw_words_lower & _LEVEL_WORDS
+    has_level = bool(requested_levels)
+    match_keyword = cache_keyword if has_level else keyword
+    match_fn = title_matches if has_level else title_matches_loose
+
+    all_cached_jobs: list[dict] = []
+    related_keywords = _get_related_keywords(cache_keyword)
+    for related_kw in related_keywords:
+        cached = await cache_get(related_kw, location, country=country)
+        if cached:
+            all_cached_jobs.extend(cached[0])
+
+    if all_cached_jobs:
+        log_app(
+            f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords (/scrape)"
+        )
+        cached_by_link = {j.get("link"): j for j in all_cached_jobs}
+        unique_jobs = [
+            j
+            for j in cached_by_link.values()
+            if match_fn(j.get("title", ""), match_keyword)
+        ]
+        for j in unique_jobs:
+            if has_level:
+                title_lower = j.get("title", "").lower()
+                j["level_match"] = any(lvl in title_lower for lvl in requested_levels)
+        log_app(
+            f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering"
+        )
+        _refresh_posted_times(unique_jobs)
+        return unique_jobs, "cache"
+
+    if not allow_live:
+        return [], "miss"
+
+    key = (cache_keyword.lower(), location.lower(), country)
+    task = _agent_inflight.get(key)
+    if task is None:
+        # One detached task per key, awaited by every caller through shield(), so
+        # no caller's cancellation (e.g. a client disconnect) can cancel the
+        # shared scrape for the others; its result still populates the cache.
+        async def _run() -> list[dict]:
+            # Agent cap outside, global slot inside: an agent waiting for its own
+            # cap must never be holding a global scrape slot the UI needs.
+            async with _get_agent_live_sem():
+                async with _get_sem():
+                    return await _agent_live_scrape(
+                        keyword, cache_keyword, location, country
+                    )
+
+        task = asyncio.create_task(_run())
+        _agent_inflight[key] = task
+
+        def _done(t: asyncio.Task) -> None:
+            _agent_inflight.pop(key, None)
+            if not t.cancelled():
+                t.exception()  # mark retrieved; callers re-raise it themselves
+
+        task.add_done_callback(_done)
+
+    shared = await asyncio.shield(task)
+
+    # The shared scrape was filtered with the starter's keyword (and cached that
+    # way), so re-apply this caller's own matcher — same rule as the cache path.
+    # De-duplicate by link across sources (first wins), also like the cache path.
+    # Copy the dicts: level_match/posted are per-caller and the shared list is
+    # also the cache payload handed to any concurrent joiner.
+    unique = list({j.get("link"): j for j in shared}.values())
+    jobs = [
+        dict(j) for j in unique if match_fn(j.get("title", ""), match_keyword)
+    ]
+    for j in jobs:
+        if has_level:
+            title_lower = j.get("title", "").lower()
+            j["level_match"] = any(lvl in title_lower for lvl in requested_levels)
+    _refresh_posted_times(jobs)
+    return jobs, "live"
+
+
 NON_WARMUP_ENRICH_LIMIT = 10
 # Max seconds the post-listing drain waits for a site's next enriched job before
 # abandoning that site's enrichment (covers LinkedIn's 429 back-off of up to ~90s).
@@ -470,14 +696,146 @@ async def cache_status():
     return await _cache_status_data()
 
 
-def require_admin(response: Response, x_admin_secret: str = Header(default="")) -> None:
-    """Admin gate: secret in the X-Admin-Secret header only, never in the URL (URLs get logged)."""
-    if not ADMIN_SECRET:
-        raise HTTPException(status_code=503, detail="Admin API disabled: ADMIN_SECRET is not set")
-    if not hmac.compare_digest(x_admin_secret.encode(), ADMIN_SECRET.encode()):
+class ApiKeyCreate(BaseModel):
+    name: str
+    contact: str = ""
+    calls_per_day: int | None = None
+    live_per_day: int | None = None
+
+
+class AdminLogin(BaseModel):
+    username: str = Field(max_length=100)
+    password: str = Field(max_length=200)
+
+
+class AgentText(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
+class AgentCity(BaseModel):
+    text: str = Field(min_length=1, max_length=120)
+
+
+async def require_admin(
+    response: Response,
+    authorization: str = Header(default=""),
+    x_admin_secret: str = Header(default=""),
+) -> None:
+    """Admin gate: a login session (Bearer gjs_…) or the X-Admin-Secret header; never the URL."""
+    if not ADMIN_SECRET and not admin_auth.accounts_configured():
+        raise HTTPException(status_code=503, detail="Admin API disabled: no admin account or ADMIN_SECRET configured")
+    ok = False
+    if authorization.startswith("Bearer " + admin_auth.SESSION_PREFIX):
+        ok = await admin_auth.get_session(authorization[7:].strip()) is not None
+    elif x_admin_secret and ADMIN_SECRET:
+        ok = hmac.compare_digest(x_admin_secret.encode(), ADMIN_SECRET.encode())
+    if not ok:
         raise HTTPException(status_code=403, detail="Forbidden")
     # Auth is header-only, so the URL alone must never serve a cached admin response.
     response.headers["Cache-Control"] = "no-store, private"
+
+
+async def require_api_key(
+    x_api_key: str = Header(default=""), authorization: str = Header(default="")
+) -> dict:
+    """Agent API gate: key in X-API-Key or Authorization: Bearer, never in the URL."""
+    raw = x_api_key.strip() or (authorization[7:].strip() if authorization.startswith("Bearer ") else "")
+    record = await apikeys.verify_key(raw)
+    if record is None:
+        raise HTTPException(status_code=401, detail="A valid API key is required. See README: Request an API key.")
+    return record
+
+
+# Trimmed job shape for agent responses: just what an agent can act on (no
+# description, no internal fields), which keeps /v1 payloads small.
+_AGENT_JOB_FIELDS = ("title", "company", "location", "source", "posted", "posted_date", "link", "skills", "salary")
+
+
+def _agent_job(j: dict) -> dict:
+    return {k: j.get(k) for k in _AGENT_JOB_FIELDS}
+
+
+def _validate_agent_query(keyword: str, country: str) -> None:
+    """Reject an agent query before any quota is spent on it."""
+    if not keyword.strip():
+        raise HTTPException(status_code=400, detail="keyword is required")
+    if (country or "VN").strip().upper() not in _AGENT_COUNTRIES:
+        raise HTTPException(status_code=400, detail="country must be one of VN, US, UK, SG")
+
+
+async def _charge(record: dict, kind: str) -> None:
+    """Spend one unit of an API key's daily quota, or 429."""
+    allowed, used, limit = await apikeys.consume(record, kind)
+    if not allowed:
+        raise HTTPException(status_code=429, detail=f"Daily {kind} quota reached ({limit}/day). It resets at midnight ICT.")
+
+
+# GraphQL returns the same cached jobs as /v1/jobs/search (descriptions included),
+# so it sits behind the same API-key gate and spends one call per request (the
+# schema also limits aliases/depth so one request can't fan out). No GraphiQL page.
+async def _graphql_call(record: dict = Depends(require_api_key)) -> None:
+    await _charge(record, "calls")
+
+
+graphql_app = GraphQLRouter(schema, graphql_ide=None, subscription_protocols=())
+# Strawberry registers a /graphql WebSocket route unconditionally (this version has
+# no subscriptions), and the API-key/quota dependency would only run once per
+# connection — a client could then run unlimited operations over that socket. Drop
+# the route so GraphQL is HTTP-only.
+graphql_app.routes = [r for r in graphql_app.routes if not isinstance(r, WebSocketRoute)]
+app.include_router(graphql_app, prefix="/graphql", dependencies=[Depends(_graphql_call)])
+
+
+@app.post("/admin/login")
+async def admin_login(body: AdminLogin, request: Request, response: Response):
+    """Admin login: username + password → short-lived session token."""
+    ip = (
+        request.headers.get("CF-Connecting-IP")
+        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
+    if not admin_auth.accounts_configured():
+        raise HTTPException(status_code=503, detail="Admin login disabled: no admin account configured")
+    # Reserve before hashing: the attempt is counted whether or not it succeeds,
+    # so parallel guesses cannot all slip past a pre-check.
+    if not await admin_auth.reserve_attempt(ip):
+        log_app(f"[admin-login] blocked login from {ip[:64]!r}", "WARNING")
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed logins. Try again later.",
+            headers={"Cache-Control": "no-store, private"},
+        )
+    # scrypt is CPU/RAM-bound; check_credentials_async runs it off the event loop,
+    # capped at LOGIN_SCRYPT_CONCURRENCY concurrent hashes.
+    ok = await admin_auth.check_credentials_async(body.username, body.password)
+    if not ok:
+        log_app(f"[admin-login] failed login from {ip[:64]!r}", "WARNING")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid username or password",
+            headers={"Cache-Control": "no-store, private"},
+        )
+    await admin_auth.clear_failures(ip)
+    token = await admin_auth.create_session(admin_auth.ADMIN_USERNAME)
+    response.headers["Cache-Control"] = "no-store, private"
+    return {
+        "token": token,
+        "expires_in": admin_auth.SESSION_TTL,
+        "username": admin_auth.ADMIN_USERNAME,
+    }
+
+
+@app.post("/admin/logout", dependencies=[Depends(require_admin)])
+async def admin_logout(authorization: str = Header(default="")):
+    """Drop the caller's session token (a break-glass secret has nothing to drop)."""
+    if authorization.startswith("Bearer " + admin_auth.SESSION_PREFIX):
+        await admin_auth.delete_session(authorization[7:].strip())
+    return {"ok": True}
+
+
+@app.get("/admin/me", dependencies=[Depends(require_admin)])
+async def admin_me():
+    return {"ok": True}
 
 
 @app.get("/cache/overview", dependencies=[Depends(require_admin)])
@@ -1225,6 +1583,30 @@ async def admin_submissions_reject(sub_id: str):
     return {"ok": True}
 
 
+@app.post("/admin/api-keys", dependencies=[Depends(require_admin)])
+async def admin_api_keys_create(body: ApiKeyCreate):
+    """Mint an agent API key. The raw key is returned once and never stored."""
+    try:
+        raw, record = await apikeys.create_key(
+            body.name, body.contact, body.calls_per_day, body.live_per_day
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"key": raw, **record}
+
+
+@app.get("/admin/api-keys", dependencies=[Depends(require_admin)])
+async def admin_api_keys_list():
+    return {"keys": await apikeys.list_keys()}
+
+
+@app.post("/admin/api-keys/{key_id}/revoke", dependencies=[Depends(require_admin)])
+async def admin_api_keys_revoke(key_id: str):
+    if not await apikeys.revoke_key(key_id):
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"ok": True}
+
+
 @app.get("/warmup/keywords")
 async def list_warmup_keywords():
     """List all current warmup keywords."""
@@ -1315,102 +1697,176 @@ async def normalize_city_endpoint(req: ScrapeRequest):
 
 
 @app.post("/scrape", response_model=list[Job])
-async def scrape(req: ScrapeRequest, request: Request):
-    """Scrape jobs for a keyword and location, returning all results as a JSON array."""
+async def scrape(req: ScrapeRequest, request: Request, record: dict = Depends(require_api_key)):
+    """Scrape jobs for a keyword and location, returning all results as a JSON array.
+
+    Agent-only (API key). Cache-first: a live scrape spends one `live` quota unit.
+    """
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="keyword is required")
+    if len(keyword) > 120:
+        raise HTTPException(status_code=400, detail="keyword must be at most 120 characters")
     # "Hồ Chí Minh" / "HCM" → "Ho Chi Minh City", so the exact-match cache key
     # (and the scrapers) use the same location the warmup job wrote.
     req.location = canonical_location(req.location)
+    if len(req.location) > 80:
+        raise HTTPException(status_code=400, detail="location must be at most 80 characters")
+    _validate_agent_query(keyword, req.country)
     log_search(request, keyword, req.location, req.intent or ("cv_or_skills" if req.raw_input else "job_title"))
 
-    # Rely on AI suggestion flow for typo handling; avoid hardcoded corrections.
-    keyword_normalized = " ".join(
-        re.sub(r"\d+", " ", normalize_keyword(keyword)).split()
-    )
-    cache_keyword = strip_level(keyword_normalized)
-
-    kw_words_lower_s = set(keyword_normalized.lower().split())
-    requested_levels_s = kw_words_lower_s & _LEVEL_WORDS
-    has_level_s = bool(requested_levels_s)
-    match_keyword_s = cache_keyword if has_level_s else keyword
-    match_fn_s = title_matches if has_level_s else title_matches_loose
-
-    all_cached_jobs: list[dict] = []
-    related_keywords = _get_related_keywords(cache_keyword)
-    for related_kw in related_keywords:
-        cached = await cache_get(related_kw, req.location)
-        if cached:
-            cached_jobs, _ = cached
-            all_cached_jobs.extend(cached_jobs)
-
-    if all_cached_jobs:
-        log_app(
-            f"cache hit — {len(all_cached_jobs)} jobs from {len(related_keywords)} related keywords (/scrape)"
-        )
-        all_cached_jobs_by_link = {j.get("link"): j for j in all_cached_jobs}
-        unique_jobs = list(all_cached_jobs_by_link.values())
-        unique_jobs = [
-            j for j in unique_jobs if match_fn_s(j.get("title", ""), match_keyword_s)
-        ]
-        for j in unique_jobs:
-            if has_level_s:
-                title_lower = j.get("title", "").lower()
-                j["level_match"] = any(lvl in title_lower for lvl in requested_levels_s)
-        log_app(
-            f"level filter: {keyword!r} → {cache_keyword!r}, {len(unique_jobs)} jobs after filtering"
-        )
-        _refresh_posted_times(unique_jobs)
-        return unique_jobs
-
-    loop = asyncio.get_event_loop()
-
-    tasks = [
-        loop.run_in_executor(
-            _executor, timed_scrape, site, fn, cache_keyword, req.location
-        )
-        for site, fn in _SCRAPERS.items()
-    ]
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    results = list(results) + [await search_submissions(cache_keyword, req.location)]
-
-    jobs: list[dict] = []
-    linkedin_jobs: list[dict] = []
-    for result in results:
-        if isinstance(result, Exception):
-            log_app(f"Scraper error: {result}", "ERROR")
-        elif isinstance(result, list):
-            for j in result:
-                if title_matches(j.get("title", ""), keyword):
-                    j["posted_ts"] = posted_ts(j)
-                    jobs.append(j)
-                    if j.get("source") == "LinkedIn":
-                        linkedin_jobs.append(j)
-
-    if linkedin_jobs:
-        await loop.run_in_executor(_executor, scrape_linkedin_details, linkedin_jobs)
-
-    for j in jobs:
-        j["skills"] = extract_skills(j.get("title", ""), j.get("description", ""))
-
-    await cache_preserve_posted_dates(cache_keyword, req.location, jobs)
-    await cache_set(cache_keyword, req.location, [j for j in jobs if j.get("source") != "Direct"], time.time())
-    _refresh_posted_times(jobs)
+    # Only requests that pass auth + validation are ever charged.
+    await _charge(record, "calls")
+    try:
+        jobs, source = await _agent_search(keyword, req.location, req.country, allow_live=False)
+        if source == "miss":
+            await _charge(record, "live")
+            jobs, _ = await _agent_search(keyword, req.location, req.country, allow_live=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return jobs
 
 
-@app.get("/search-semantic")
-async def search_semantic(q: str, top_k: int = 20):
+@app.get("/v1/jobs/search")
+async def v1_jobs_search(
+    keyword: str = Query(min_length=1, max_length=120),
+    location: str = Query("Ho Chi Minh City", max_length=80),
+    country: str = Query("VN", max_length=2),
+    limit: int = Query(20, ge=1, le=100),
+    live: bool = False,
+    record: dict = Depends(require_api_key),
+):
+    """Cache-first agent search. Set `live=true` to scrape when nothing is cached."""
+    _validate_agent_query(keyword, country)
+    await _charge(record, "calls")
+    try:
+        jobs, source = await _agent_search(keyword, location, country, allow_live=False)
+        if source == "miss" and live:
+            await _charge(record, "live")
+            jobs, source = await _agent_search(keyword, location, country, allow_live=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    jobs = sorted(jobs, key=lambda j: j.get("posted_ts") or 0.0, reverse=True)
+    return {
+        "keyword": keyword,
+        "location": location,
+        "country": country,
+        "source": source,
+        "total": len(jobs),
+        "jobs": [_agent_job(j) for j in jobs][:limit],
+    }
+
+
+@app.get("/v1/jobs/recent")
+async def v1_jobs_recent(
+    n: int = Query(20, ge=1, le=100),
+    source: str = Query("", max_length=40),
+    record: dict = Depends(require_api_key),
+):
+    """The N most recently posted cached jobs (compact rows, no full descriptions)."""
+    await _charge(record, "calls")
+    jobs = await recent_jobs(n=n, source=source, compact=True)
+    return {"count": len(jobs), "jobs": [_agent_job(j) for j in jobs]}
+
+
+@app.get("/v1/jobs/semantic")
+async def v1_jobs_semantic(
+    q: str = Query(min_length=1, max_length=2000),
+    top_k: int = Query(20, ge=1, le=50),
+    record: dict = Depends(require_api_key),
+):
+    """Semantic job search over the embedded cache (capped top_k, hard timeout)."""
+    query = q.strip()
+    if not query:
+        # Reject before charging: an empty query isn't a search.
+        raise HTTPException(status_code=400, detail="q is required")
+    await _charge(record, "calls")
+    loop = asyncio.get_running_loop()
+    try:
+        results = await asyncio.wait_for(
+            loop.run_in_executor(_semantic_executor, vector_search, query, top_k), timeout=30
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Semantic search timed out")
+    return {"query": query, "count": len(results), "results": results}
+
+
+@app.post("/v1/classify")
+async def v1_classify(body: AgentText, record: dict = Depends(require_api_key)):
+    """Classify free text as a job title or CV/skills and extract a clean keyword."""
+    await _charge(record, "calls")
+    return await classify_and_extract(body.text.strip())
+
+
+@app.post("/v1/normalize-city")
+async def v1_normalize_city(body: AgentCity, record: dict = Depends(require_api_key)):
+    """Normalize free-text city input (typo correction, abbreviation expansion)."""
+    await _charge(record, "calls")
+    return await run_in_threadpool(normalize_city, body.text.strip())
+
+
+class _MCPAgentServices:
+    """Adapts the /v1 route handlers for the remote MCP tools.
+
+    Every MCP tool call therefore goes through the same API-key check and daily
+    quotas as the HTTP API — these functions are only called with a verified record.
+    """
+
+    verify_key = staticmethod(apikeys.verify_key)
+
+    async def search(self, record, keyword, location, country, limit, live):
+        return await v1_jobs_search(
+            keyword=keyword,
+            location=location,
+            country=country,
+            limit=limit,
+            live=live,
+            record=record,
+        )
+
+    async def recent(self, record, n, source):
+        return await v1_jobs_recent(n=n, source=source, record=record)
+
+    async def semantic(self, record, q, top_k):
+        return await v1_jobs_semantic(q=q, top_k=top_k, record=record)
+
+    async def classify(self, record, text):
+        return await v1_classify(body=AgentText(text=text), record=record)
+
+    async def normalize_city(self, record, text):
+        return await v1_normalize_city(body=AgentCity(text=text), record=record)
+
+
+# Remote MCP endpoint: agents add https://api.goodjobs.io.vn/mcp with an X-API-Key.
+# streamable_http_app() owns the session manager, so it is built exactly once here;
+# lifespan runs that manager.
+_mcp = build_mcp(_MCPAgentServices())
+_mcp_http = _mcp.streamable_http_app()
+app.router.routes.append(
+    Route(
+        "/mcp",
+        endpoint=ApiKeyGuard(_mcp_http.routes[0].endpoint, apikeys.verify_key),
+        methods=["GET", "POST", "DELETE"],
+    )
+)
+
+
+@app.get("/search-semantic", dependencies=[Depends(require_admin)])
+async def search_semantic(q: str, top_k: int = Query(20, ge=1, le=50)):
     """Semantic job search using Cloudflare Vectorize + embeddinggemma-300m embeddings.
 
     Embeds the query string and returns the top-k most similar indexed jobs by cosine similarity.
+    Admin-only: this is the costly embedding path; agents use the quota'd /v1/jobs/semantic.
     """
     if not q.strip():
         raise HTTPException(status_code=400, detail="q is required")
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(_executor, vector_search, q.strip(), top_k)
+    loop = asyncio.get_running_loop()
+    try:
+        results = await asyncio.wait_for(
+            loop.run_in_executor(_semantic_executor, vector_search, q.strip(), top_k), timeout=30
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Semantic search timed out")
     return {"query": q.strip(), "count": len(results), "results": results}
 
 
