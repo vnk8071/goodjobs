@@ -372,7 +372,7 @@ export function renderArticlePage(article, related, allSources) {
     .join("");
   const methodText = isShare
     ? `Điểm tin là góc nhìn của Ban Biên Tập Good Jobs về một bài báo công khai. Nội dung bài gốc thuộc về ${esc(sources[0]?.publisher || "nhà xuất bản gốc")}; vui lòng đọc bài gốc để có thông tin đầy đủ. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.`
-    : `Bài viết do Ban Biên Tập Good Jobs tổng hợp từ nguồn công khai và phân tích dữ liệu việc làm của Good Jobs. Số liệu có thể thay đổi theo thời điểm; nội dung không phải lời khuyên đầu tư hay bảo đảm việc làm. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.`;
+    : `Bài viết do Ban Biên Tập Good Jobs tổng hợp từ các báo chính thống (ghi nguồn trong bài) kèm góc nhìn của Good Jobs; nội dung không phải lời khuyên đầu tư hay bảo đảm việc làm. Xem <a href="/news#phuong-phap">phương pháp và tiêu chí biên tập</a>.`;
   const tagsChips = tags.length ? ` Thẻ: ${tags.map((t) => `<span class="chip">${esc(t)}</span>`).join(" ")}` : "";
 
   const body = `
@@ -453,7 +453,7 @@ export function renderNewsIndex({ articles, page, totalPages, categories, active
         "@id": `${SITE_URL}/news#webpage`,
         url: `${SITE_URL}/news`,
         name: "Tin tức & phân tích thị trường việc làm — Good Jobs",
-        description: "Tin tức, dữ liệu và phân tích thị trường tuyển dụng Việt Nam từ Good Jobs.",
+        description: "Tin tức thị trường lao động Việt Nam, tổng hợp từ các báo chính thống kèm góc nhìn của Ban Biên Tập Good Jobs.",
         inLanguage: "vi",
         isPartOf: { "@type": "WebSite", "@id": `${SITE_URL}/#website` },
       },
@@ -480,21 +480,21 @@ export function renderNewsIndex({ articles, page, totalPages, categories, active
     <div class="wrap">
       <section class="news-hero">
         <h1>Tin tức & phân tích thị trường việc làm</h1>
-        <p>Dữ liệu tuyển dụng từ Good Jobs, đặt trong bối cảnh tin tức công nghệ, kinh doanh và thị trường lao động Việt Nam.</p>
+        <p>Tổng hợp tin thị trường lao động từ các báo chính thống, kèm góc nhìn của Ban Biên Tập Good Jobs.</p>
         <div class="news-filters">${filters}</div>
       </section>
       <div class="card-list">${cards}</div>
       ${totalPages > 1 ? `<nav class="pager">${pager.join("")}</nav>` : ""}
       <section class="method-section" id="phuong-phap">
         <h2>Phương pháp và tiêu chí biên tập</h2>
-        <p>Mỗi bài viết được tổng hợp từ các nguồn tin công khai (RSS, Google News) và phân tích dựa trên dữ liệu việc làm do Good Jobs thu thập từ các trang tuyển dụng. Chúng tôi không sao chép toàn văn nguồn; số liệu thị trường chỉ lấy từ kho dữ liệu của Good Jobs và được ghi rõ trong bài. Bài viết qua kiểm tra chất lượng tự động (độ dài, số nguồn, số liệu, trùng lặp) trước khi xuất bản.</p>
+        <p>Mỗi bài viết tổng hợp tin từ các báo chính thống Việt Nam (qua RSS và Bing News), ghi rõ nguồn, kèm nhận định của Ban Biên Tập Good Jobs. Chúng tôi không sao chép toàn văn; mọi số liệu đều lấy từ tin báo chí được dẫn. Bài viết qua kiểm tra chất lượng tự động (độ dài, số nguồn, ghi nguồn, số liệu, trùng lặp) trước khi xuất bản.</p>
         <p>Phát hiện sai sót hoặc muốn góp ý? Liên hệ <a href="/contact/">Ban Biên Tập Good Jobs</a>.</p>
       </section>
     </div>`;
 
   return layout({
     title: "Tin tức & phân tích thị trường việc làm — Good Jobs",
-    description: "Tin tức, dữ liệu và phân tích thị trường tuyển dụng Việt Nam: kỹ năng, lương, AI và xu hướng nghề nghiệp.",
+    description: "Tin tức và góc nhìn về thị trường việc làm Việt Nam: lương, chính sách lao động, kỹ năng và xu hướng nghề nghiệp.",
     canonical: `${SITE_URL}/news`,
     bodyHtml: body,
     jsonLd,

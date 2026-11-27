@@ -7,8 +7,8 @@ export const MAX_ARTICLES_PER_RUN = 3;
 /** Category for "share the original article" posts (Điểm tin). */
 export const SHARE_CATEGORY = "Điểm tin";
 
-/** Established Vietnamese outlets allowed as the source of a share post (host → display name). */
-export const SHARE_PUBLISHERS = {
+/** Established Vietnamese outlets we accept as news sources (host → display name). */
+export const MAINSTREAM_PUBLISHERS = {
   "vnexpress.net": "VnExpress", "tuoitre.vn": "Tuổi Trẻ", "thanhnien.vn": "Thanh Niên",
   "dantri.com.vn": "Dân trí", "vietnamnet.vn": "VietNamNet", "laodong.vn": "Lao Động",
   "nld.com.vn": "Người Lao Động", "vneconomy.vn": "VnEconomy", "cafef.vn": "CafeF",
@@ -19,6 +19,8 @@ export const SHARE_PUBLISHERS = {
   "doanhnhansaigon.vn": "Doanh Nhân Sài Gòn",
   "tinnhanhchungkhoan.vn": "Đầu tư Chứng khoán", "baodautu.vn": "Báo Đầu tư",
   "vnbusiness.vn": "VnBusiness", "ictnews.vn": "ICTnews", "kenh14.vn": "Kenh14",
+  "congthuong.vn": "Báo Công Thương", "baotintuc.vn": "Báo Tin tức",
+  "suckhoedoisong.vn": "Sức khỏe & Đời sống", "baophapluat.vn": "Báo Pháp luật Việt Nam",
 };
 
 /**
@@ -35,12 +37,20 @@ export const TOPICS = [
     keywords: ["tuyển dụng", "việc làm", "lao động", "nhân sự", "thất nghiệp"],
   },
   {
-    slug: "ai-va-nghe-nghiep",
-    bingQuery: "AI việc làm",
-    name: "AI & nghề nghiệp",
-    query: '"trí tuệ nhân tạo" OR "AI" "việc làm"',
-    searchKeyword: "AI Engineer",
-    keywords: ["ai", "trí tuệ nhân tạo", "tự động hóa", "machine learning", "llm"],
+    slug: "luong-phuc-loi",
+    bingQuery: "lương thưởng phúc lợi",
+    name: "Lương & phúc lợi",
+    query: '"lương" OR "thưởng Tết" OR "phúc lợi"',
+    searchKeyword: "lương",
+    keywords: ["lương", "thưởng", "phúc lợi", "đãi ngộ", "thu nhập"],
+  },
+  {
+    slug: "chinh-sach-lao-dong",
+    bingQuery: "chính sách lao động bảo hiểm xã hội",
+    name: "Chính sách lao động",
+    query: '"luật lao động" OR "bảo hiểm xã hội" OR "bảo hiểm thất nghiệp"',
+    searchKeyword: "nhân sự",
+    keywords: ["luật lao động", "bảo hiểm xã hội", "bảo hiểm thất nghiệp", "hợp đồng lao động", "nghị định", "chính sách"],
   },
   {
     slug: "ky-nang-nghe-nghiep",
@@ -51,28 +61,20 @@ export const TOPICS = [
     keywords: ["kỹ năng", "nghề nghiệp", "sự nghiệp", "học tập", "đào tạo"],
   },
   {
-    slug: "luong-phuc-loi",
-    bingQuery: "lương thưởng phúc lợi",
-    name: "Lương & phúc lợi",
-    query: '"lương" OR "thưởng Tết" OR "phúc lợi"',
-    searchKeyword: "lương",
-    keywords: ["lương", "thưởng", "phúc lợi", "đãi ngộ", "thu nhập"],
+    slug: "viec-lam-tre",
+    bingQuery: "sinh viên việc làm sau tốt nghiệp",
+    name: "Người trẻ & việc làm",
+    query: '"sinh viên" OR "tốt nghiệp" OR "người trẻ" "việc làm"',
+    searchKeyword: "thực tập sinh",
+    keywords: ["sinh viên", "tốt nghiệp", "người trẻ", "thực tập", "gen z", "lao động trẻ"],
   },
   {
-    slug: "cong-nghe-tuyen-dung",
-    bingQuery: "tuyển dụng nhân sự công nghệ",
-    name: "Công nghệ & tuyển dụng",
-    query: '"tuyển dụng" OR "nhân sự" OR "HR tech"',
-    searchKeyword: "tuyển dụng",
-    keywords: ["công nghệ", "tuyển dụng", "hr", "nhân sự", "ats"],
-  },
-  {
-    slug: "nghe-nghiep-cong-nghe",
-    bingQuery: "lập trình viên IT",
-    name: "Nghề nghiệp công nghệ",
-    query: '"lập trình viên" OR "phần mềm" OR "IT"',
-    searchKeyword: "Software Engineer",
-    keywords: ["it", "lập trình", "phần mềm", "công nghệ", "developer"],
+    slug: "ai-va-nghe-nghiep",
+    bingQuery: "AI việc làm",
+    name: "AI & nghề nghiệp",
+    query: '"trí tuệ nhân tạo" OR "AI" "việc làm"',
+    searchKeyword: "AI Engineer",
+    keywords: ["ai", "trí tuệ nhân tạo", "tự động hóa", "machine learning", "llm"],
   },
 ];
 
@@ -81,37 +83,37 @@ export const CURATED_FEEDS = [
   {
     name: "VietnamNet Công nghệ",
     url: "https://vietnamnet.vn/cong-nghe.rss",
-    topics: ["ai-va-nghe-nghiep", "cong-nghe-tuyen-dung", "nghe-nghiep-cong-nghe"],
+    topics: ["ai-va-nghe-nghiep"],
   },
   {
     name: "VietnamNet Kinh doanh",
     url: "https://vietnamnet.vn/kinh-doanh.rss",
-    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "ky-nang-nghe-nghiep"],
+    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "chinh-sach-lao-dong", "ky-nang-nghe-nghiep", "viec-lam-tre"],
   },
   {
     name: "Thanh Niên Kinh tế",
     url: "https://thanhnien.vn/rss/kinh-te.rss",
-    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "ky-nang-nghe-nghiep"],
+    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "chinh-sach-lao-dong", "ky-nang-nghe-nghiep", "viec-lam-tre"],
   },
   {
     name: "Thanh Niên Công nghệ",
     url: "https://thanhnien.vn/rss/cong-nghe.rss",
-    topics: ["ai-va-nghe-nghiep", "cong-nghe-tuyen-dung", "nghe-nghiep-cong-nghe"],
+    topics: ["ai-va-nghe-nghiep"],
   },
   {
     name: "Dân trí Kinh doanh",
     url: "https://dantri.com.vn/rss/kinh-doanh.rss",
-    topics: ["thi-truong-viec-lam", "luong-phuc-loi"],
+    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "chinh-sach-lao-dong", "ky-nang-nghe-nghiep", "viec-lam-tre"],
   },
   {
     name: "Tuổi Trẻ Kinh doanh",
     url: "https://tuoitre.vn/rss/kinh-doanh.rss",
-    topics: ["thi-truong-viec-lam", "luong-phuc-loi"],
+    topics: ["thi-truong-viec-lam", "luong-phuc-loi", "chinh-sach-lao-dong", "ky-nang-nghe-nghiep", "viec-lam-tre"],
   },
   {
     name: "Tuổi Trẻ Nhịp sống số",
     url: "https://tuoitre.vn/rss/nhip-song-so.rss",
-    topics: ["ai-va-nghe-nghiep", "cong-nghe-tuyen-dung", "nghe-nghiep-cong-nghe"],
+    topics: ["ai-va-nghe-nghiep"],
   },
 ];
 
@@ -124,6 +126,7 @@ export const JOB_MARKET_TERMS = [
   "tăng lương", "lương tối thiểu", "lương thưởng", "bảng lương", "trả lương",
   "thu nhập", "phúc lợi", "nghề nghiệp", "ứng viên", "thất nghiệp", "tìm việc",
   "tuyển người", "sa thải", "cắt giảm nhân sự", "kỹ năng nghề", "thị trường lao động",
+  "bảo hiểm xã hội", "bảo hiểm thất nghiệp", "hợp đồng lao động", "người lao động",
 ];
 
 /** Hosts that publish listings/spam rather than news. */

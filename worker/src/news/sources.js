@@ -1,6 +1,14 @@
-/** News discovery: Google News RSS + curated Vietnamese RSS feeds. */
+/**
+ * News discovery for the news desk.
+ *
+ * Google News is unreliable from Cloudflare Workers (frequent 503s) and its
+ * links are aggregator redirects on news.google.com, which the mainstream
+ * publisher allowlist drops. Candidates therefore come from Bing News plus
+ * the curated Vietnamese RSS feeds, and only links on allow-listed outlets
+ * survive.
+ */
 
-import { BING_NEWS_URL, BLOCKED_HOSTS, CURATED_FEEDS, JOB_MARKET_TERMS } from "./config.js";
+import { BING_NEWS_URL, BLOCKED_HOSTS, CURATED_FEEDS, JOB_MARKET_TERMS, MAINSTREAM_PUBLISHERS } from "./config.js";
 import { decodeEntities, normalizeTitle, sha256Hex, stripHtml } from "./util.js";
 
 const USER_AGENT = "GoodJobsNewsBot/1.0 (+https://goodjobs.io.vn/news)";
@@ -118,6 +126,15 @@ export function publisherFor(rawPublisher, feedName, link) {
   return feedName || "Nguồn";
 }
 
+/** Display name of a mainstream Vietnamese outlet for `link`, or "" when unknown. */
+export function mainstreamPublisher(link) {
+  const host = hostOf(link);
+  if (!host) return "";
+  if (MAINSTREAM_PUBLISHERS[host]) return MAINSTREAM_PUBLISHERS[host];
+  const key = Object.keys(MAINSTREAM_PUBLISHERS).find((allowed) => host.endsWith(`.${allowed}`));
+  return key ? MAINSTREAM_PUBLISHERS[key] : "";
+}
+
 const JOB_MARKET_TERMS_NORMALIZED = JOB_MARKET_TERMS.map((term) => normalizeTitle(term)).filter(Boolean);
 
 /** True when the item mentions the job market anywhere in its title or summary. */
@@ -140,7 +157,8 @@ function cleanTitle(title, publisher) {
 function cleanLink(link) {
   try {
     const u = new URL(link);
-    if (u.hostname.endsWith("bing.com") && u.pathname.includes("apiclick")) {
+    const host = u.hostname.toLowerCase();
+    if ((host === "bing.com" || host.endsWith(".bing.com")) && u.pathname.includes("apiclick")) {
       const target = u.searchParams.get("url");
       if (target) return decodeURIComponent(target);
     }
@@ -207,8 +225,7 @@ export async function debugSources(topic) {
 }
 
 /**
- * Discover recent, relevant articles for one topic.
- * Google News supplies breadth; curated feeds supply stable direct links.
+ * Keyword relevance of one item to a topic (used to rank candidates).
  */
 function relevanceScore(item, topic) {
   const haystack = normalizeTitle(`${item.title} ${item.summary || ""}`);
@@ -221,8 +238,10 @@ function relevanceScore(item, topic) {
 
 /**
  * Discover recent, relevant articles for one topic.
- * Google News supplies breadth (query already scopes the topic); curated feeds
- * supply stable direct links. Items are ranked by keyword relevance, then date.
+ * Google News results are dropped by the mainstream allowlist (aggregator
+ * redirects) and the endpoint 503s from Workers anyway, so the usable supply
+ * is Bing News plus the curated feeds. Items are ranked by keyword relevance,
+ * then date.
  */
 export async function discoverCandidates(topic, limit = 8) {
   const feeds = CURATED_FEEDS.filter((f) => f.topics.includes(topic.slug));
@@ -245,16 +264,17 @@ export async function discoverCandidates(topic, limit = 8) {
       if (!isSafeArticleLink(link)) continue;
       const host = hostOf(link);
       if (isBlockedHost(host)) continue;
+      // Only established Vietnamese outlets are acceptable sources.
+      const label = mainstreamPublisher(link);
+      if (!label) continue;
 
       const published = publishedDate(raw);
       if (published && published.getTime() < cutoff) continue;
 
       const searchFeed = SEARCH_FEEDS.has(raw.feedName);
-      let publisher = raw.publisher || "";
       let title = cleanTitle(raw.title, raw.publisher || "");
       if (!raw.publisher && raw.feedName === "Bing News" && title.includes(" - ")) {
         const cut = title.lastIndexOf(" - ");
-        publisher = title.slice(cut + 3).trim();
         title = title.slice(0, cut).trim();
       }
       if (title.length < 20) continue;
@@ -273,7 +293,7 @@ export async function discoverCandidates(topic, limit = 8) {
       collected.push({
         title,
         link,
-        publisher: publisherFor(publisher, raw.feedName, link),
+        publisher: label,
         summary,
         searchFeed,
         score,

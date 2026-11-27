@@ -1,4 +1,4 @@
-/** News generation pipeline: signals → RSS → Workers AI → quality gate → D1. */
+/** News generation pipeline: RSS → Workers AI → quality gate → D1. */
 
 import { expandDraft, generateDraft, generateShareDraft } from "./ai.js";
 import {
@@ -6,16 +6,13 @@ import {
   MAX_ARTICLES_PER_RUN,
   NEWS_AUTHOR,
   SHARE_CATEGORY,
-  SHARE_PUBLISHERS,
   pickTopics,
   topicBySlug,
 } from "./config.js";
-import { collectSignals, numberVariants, signalNumbers } from "./signals.js";
-import { discoverCandidates, hostOf, isJobMarketRelevant, isSafeArticleLink } from "./sources.js";
+import { discoverCandidates, isJobMarketRelevant, isSafeArticleLink, mainstreamPublisher } from "./sources.js";
 import {
   ictDateKey,
   ictIso,
-  formatNumber,
   normalizeTitle,
   readingMinutes,
   sha256Hex,
@@ -68,39 +65,10 @@ function sourceObjects(draft, candidates) {
   return picked;
 }
 
-function dataParagraph(signals) {
-  const parts = [
-    `Theo dữ liệu Good Jobs cập nhật hôm nay, hệ thống đang lưu ${formatNumber(signals.total)} việc làm, với ${formatNumber(signals.recent)} tin tuyển dụng mới trong 7 ngày qua`,
-  ];
-  if (typeof signals.deltaPct === "number") {
-    parts.push(`(${signals.deltaPct >= 0 ? "+" : ""}${signals.deltaPct}% so với tuần trước)`);
-  }
-  parts.push(".");
-  if (signals.topSkills?.length) {
-    parts.push(`Các kỹ năng được yêu cầu nhiều nhất gồm ${signals.topSkills.slice(0, 5).map((s) => s.skill).join(", ")}.`);
-  }
-  if (signals.categories?.length) {
-    parts.push(`Nhóm nghề nổi bật: ${signals.categories.slice(0, 4).map((c) => c.name).join(", ")}.`);
-  }
-  return parts.join(" ").replace(/\s+/g, " ").trim();
-}
-
-/** Repair a model draft before the quality gate (never publish a thin, data-less piece). */
-function enrichDraft(draft, signals) {
+/** Repair a model draft before the quality gate (never publish a thin piece). */
+export function enrichDraft(draft) {
   if (!draft || !Array.isArray(draft.sections) || draft.sections.length === 0) return draft;
-  if (draft.sections.length > 5) draft.sections = draft.sections.slice(0, 5);
-
-  const bodyText = draft.sections.flatMap((s) => s.paragraphs).join("\n\n");
-  const variants = signalNumbers(signals).flatMap(numberVariants);
-  const used = new Set(variants.filter((n) => bodyText.includes(n)));
-  if (signals.recent > 0 && used.size < 2) {
-    const paragraph = dataParagraph(signals);
-    if (draft.sections.length < 3) {
-      draft.sections.push({ heading: "Dữ liệu thị trường", paragraphs: [paragraph] });
-    } else {
-      draft.sections[0].paragraphs.unshift(paragraph);
-    }
-  }
+  if (draft.sections.length > 4) draft.sections = draft.sections.slice(0, 4);
 
   if (draft.takeaways.length < 3) {
     const sentences = draft.sections
@@ -123,7 +91,38 @@ function enrichDraft(draft, signals) {
   return draft;
 }
 
-function gateArticle(draft, signals, candidates, sources, existingTitles) {
+/** Vietnamese number formatting: "." groups thousands, "," is the decimal mark. */
+function numberValue(token) {
+  const value = Number(token.replace(/\./g, "").replace(/,/g, "."));
+  return Number.isFinite(value) ? value : NaN;
+}
+
+/** Numbers in the article must be quoted from the press (small counts and years are fine). */
+function pressNumberErrors(draft, candidates, bodyText) {
+  const pressTokens = new Set(
+    candidates.map((c) => `${c.title || ""} ${c.summary || ""}`).join(" ").match(/\d+(?:[.,]\d+)*/g) || [],
+  );
+  const scanned = [
+    draft.title,
+    draft.dek,
+    bodyText,
+    (draft.takeaways || []).join(" "),
+    draft.linkedinText || "",
+  ].join(" ");
+  const tokens = new Set(scanned.match(/\d+(?:[.,]\d+)*/g) || []);
+  const offending = [];
+  for (const token of tokens) {
+    const value = numberValue(token);
+    const isSmall = Number.isFinite(value) && value <= 10;
+    const isYear = /^\d{4}$/.test(token) && Number(token) >= 1990 && Number(token) <= 2099;
+    const quotedFromPress = pressTokens.has(token);
+    if (!isSmall && !isYear && !quotedFromPress) offending.push(token);
+    if (offending.length >= 3) break;
+  }
+  return offending.map((token) => `số liệu "${token}" không có trong tin báo chí`);
+}
+
+export function gateArticle(draft, candidates, sources, existingTitles) {
   const errors = [];
   const bodyText = draft.sections.flatMap((s) => s.paragraphs).join("\n\n");
 
@@ -132,7 +131,7 @@ function gateArticle(draft, signals, candidates, sources, existingTitles) {
   if (draft.metaDescription.length < 100 || draft.metaDescription.length > 180) {
     errors.push("meta description phải dài 100-180 ký tự");
   }
-  if (draft.sections.length < 3 || draft.sections.length > 5) errors.push("cần 3-5 mục H2");
+  if (draft.sections.length < 3 || draft.sections.length > 4) errors.push("cần 3-4 mục H2");
   if (bodyText.length < MIN_BODY_CHARS) errors.push(`thân bài quá ngắn (${bodyText.length} ký tự, cần ≥ ${MIN_BODY_CHARS})`);
   if (draft.takeaways.length < 3) errors.push("cần ít nhất 3 ý chính");
   if (draft.tags.length < 2) errors.push("cần ít nhất 2 thẻ");
@@ -144,13 +143,39 @@ function gateArticle(draft, signals, candidates, sources, existingTitles) {
   if (sources.length < MIN_SOURCES) errors.push(`cần ít nhất ${MIN_SOURCES} nguồn hợp lệ`);
   if (publishers.size < 2) errors.push("cần ít nhất 2 nhà xuất bản khác nhau");
 
-  const numbers = signalNumbers(signals).flatMap(numberVariants);
-  const used = new Set(numbers.filter((n) => bodyText.includes(n)));
-  if (signals.recent > 0 && used.size < 2) errors.push("bài phải trích ít nhất 2 số liệu cụ thể từ dữ liệu Good Jobs");
+  // Attribution: the body must name the papers it draws on.
+  const bodyNormalized = normalizeTitle(bodyText);
+  const namedPublishers = new Set(
+    [...publishers].filter((name) => bodyNormalized.includes(normalizeTitle(name))),
+  );
+  if (namedPublishers.size < Math.min(2, publishers.size)) {
+    errors.push("cần ghi tên ít nhất 2 báo trong bài");
+  }
+
+  errors.push(...pressNumberErrors(draft, candidates, bodyText));
+
+  // Model output must not smuggle links or handles into our own pages/posts.
+  const linkScan = `${bodyText} ${(draft.takeaways || []).join(" ")} ${draft.linkedinText || ""}`;
+  if (/https?:\/\/|www\.|@/i.test(linkScan)) {
+    errors.push("không được chèn liên kết hoặc tài khoản");
+  }
 
   if (/\b(tôi là (một )?(ai|trợ lý|mô hình)|as an ai language model|mô hình ngôn ngữ)\b/i.test(bodyText)) {
     errors.push("không được tự nhận là AI/mô hình ngôn ngữ");
   }
+
+  // No repeated paragraphs.
+  const paragraphs = draft.sections.flatMap((s) => s.paragraphs);
+  let repeated = false;
+  for (let i = 0; i < paragraphs.length && !repeated; i += 1) {
+    for (let j = i + 1; j < paragraphs.length; j += 1) {
+      if (titleSimilarity(paragraphs[i], paragraphs[j]) >= 0.6) {
+        repeated = true;
+        break;
+      }
+    }
+  }
+  if (repeated) errors.push("các đoạn đang lặp ý; viết lại cho khác nhau");
 
   for (const candidate of candidates) {
     if (titleSimilarity(draft.title, candidate.title) >= 0.8) {
@@ -232,20 +257,14 @@ function buildLinkedInText(draft, url) {
   // gets appended right after it, duplicating the CTA in the live post.
   const ctaIdx = base.search(/Chi ti[ếe]t\s*:?/i);
   if (ctaIdx >= 0) base = base.slice(0, ctaIdx).trim();
+  // LinkedIn "little text" needs our own prose escaped; the URL/hashtags below are ours.
+  base = escapeLittleText(base);
   return truncate(`${base}\n\nChi tiết:\n\n${url}${hashtags ? `\n\n${hashtags}` : ""}`, 2900);
 }
 
 /** LinkedIn "little text" escaping: our own prose only, never URLs or hashtags. */
 export function escapeLittleText(text) {
   return String(text ?? "").replace(/[\\|{}@[\]()<>*_~]/g, (char) => `\\${char}`);
-}
-
-/** Display name for a trusted outlet host, or "" when the host is not allow-listed. */
-function sharePublisherFor(host) {
-  if (!host) return "";
-  if (SHARE_PUBLISHERS[host]) return SHARE_PUBLISHERS[host];
-  const key = Object.keys(SHARE_PUBLISHERS).find((allowed) => host.endsWith(`.${allowed}`));
-  return key ? SHARE_PUBLISHERS[key] : "";
 }
 
 /**
@@ -277,7 +296,7 @@ export function pickShareCandidate(pool, existingTitles = []) {
     } catch {
       continue;
     }
-    const publisher = sharePublisherFor(hostOf(link));
+    const publisher = mainstreamPublisher(link);
     if (!publisher) continue;
 
     if ((existingTitles || []).some((title) => title && titleSimilarity(item.title, title) >= MAX_TITLE_SIMILARITY)) {
@@ -464,7 +483,7 @@ async function insertArticle(env, record) {
     .run();
 }
 
-async function generateForTopic(env, { topic, signals, existingTitles, pool }) {
+async function generateForTopic(env, { topic, existingTitles, pool }) {
   const discovered = await discoverCandidates(topic, 10);
   let candidates = [];
   // Fill the share pool before any early return: a topic with a single unseen
@@ -494,12 +513,12 @@ async function generateForTopic(env, { topic, signals, existingTitles, pool }) {
     const tooShort = attempt > 0 && gate?.errors.some((e) => e.includes("quá ngắn"));
     const generated = tooShort
       ? await expandDraft(env, { draft, feedback })
-      : await generateDraft(env, { topic, signals, candidates, feedback });
-    draft = enrichDraft(generated.draft, signals);
+      : await generateDraft(env, { topic, candidates, feedback });
+    draft = enrichDraft(generated.draft);
     model = generated.model;
     aiAttempts = [...(aiAttempts || []), ...(generated.attempts || [])];
     sources = sourceObjects(draft, candidates);
-    gate = gateArticle(draft, signals, candidates, sources, existingTitles);
+    gate = gateArticle(draft, candidates, sources, existingTitles);
     if (gate.ok) break;
     feedback = `- ${gate.errors.join("\n- ")}`;
     if (gate.errors.some((e) => e.includes("quá ngắn"))) {
@@ -533,16 +552,7 @@ async function generateForTopic(env, { topic, signals, existingTitles, pool }) {
     category: topic.name,
     tags: draft.tags,
     sources,
-    signals: {
-      total: signals.total,
-      recent: signals.recent,
-      previous: signals.previous,
-      deltaPct: signals.deltaPct,
-      topSkills: (signals.topSkills || []).slice(0, 6),
-      categories: (signals.categories || []).slice(0, 5),
-      topLocations: (signals.topLocations || []).slice(0, 4),
-      windowDays: signals.windowDays,
-    },
+    signals: {},
     takeaways: draft.takeaways,
     searchKeyword,
     linkedinText,
@@ -729,7 +739,6 @@ export async function runNewsJob(env, options = {}) {
     // non-fatal; the run still proceeds
   }
 
-  const signals = await collectSignals(env);
   const existingTitles = await loadExistingTitles(env);
   const topics = options.topicSlug
     ? [topicBySlug(options.topicSlug)].filter(Boolean)
@@ -742,7 +751,7 @@ export async function runNewsJob(env, options = {}) {
   } else {
     for (const topic of topics) {
       try {
-        const result = await generateForTopic(env, { topic, signals, existingTitles, pool });
+        const result = await generateForTopic(env, { topic, existingTitles, pool });
         results.push(result);
         if (result.status === "published" && result.title) existingTitles.push(result.title);
       } catch (error) {
@@ -784,12 +793,5 @@ export async function runNewsJob(env, options = {}) {
     shared,
     skipped,
     results,
-    signals: {
-      total: signals.total,
-      recent: signals.recent,
-      previous: signals.previous,
-      deltaPct: signals.deltaPct,
-      topSkills: signals.topSkills.slice(0, 5).map((s) => s.skill),
-    },
   };
 }
